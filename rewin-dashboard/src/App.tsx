@@ -3,6 +3,9 @@ import { signInWithEmailAndPassword, signOut, onAuthStateChanged, type User } fr
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { auth, firestore } from './firebase/config';
 import './App.css';
+import CampaignManager from './components/CampaignManager';
+
+import AdminDashboard from './components/AdminDashboard';
 
 // Modern SVG Icons as components
 const AnalyticsIcon = () => (
@@ -369,7 +372,7 @@ const LoginPage = ({ onLogin }: { onLogin: (email: string, password: string) => 
   );
 };
 
-// Dashboard Component - Full Website Layout
+// Dashboard Component - Full Website Layout  
 const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
   const [data, setData] = useState({
     customers: 0,
@@ -389,16 +392,50 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [previousPage, setPreviousPage] = useState<string>('customers');
+  const [showAdminDashboard, setShowAdminDashboard] = useState(false);
+  
+  // Time period filter states
+  const [timePeriod, setTimePeriod] = useState('today'); // 'today', 'yesterday', 'this_week', etc.
+  const [timeDropdownOpen, setTimeDropdownOpen] = useState(false);
+
+  // Admin functionality - only authorized emails
+  const adminEmails = ['alnuaimi.humam@gmail.com', 'admin@rewin.com', 'humamal@rewin.com'];
+  const isAuthorizedAdmin = adminEmails.includes(user?.email || '');
+
+  // Admin system ready - no additional setup needed
 
   // Navigation handler for dashboard cards
   const handleCardClick = (page: string) => {
     setCurrentPage(page);
+    setShowAdminDashboard(false); // Reset admin dashboard when navigating to other pages
     // Reset selected customer when navigating away from customer pages
     if (page !== 'customers') {
       setSelectedCustomer(null);
       setPreviousPage('customers'); // Reset to default when navigating away
     }
   };
+
+  // Simple admin button for authorized users
+  const headerButtons = (
+    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+      <button
+        onClick={onLogout}
+        style={{
+          padding: '0.75rem 1.5rem',
+          backgroundColor: 'rgba(255,255,255,0.2)',
+          color: 'white',
+          border: '1px solid rgba(255,255,255,0.3)',
+          borderRadius: '12px',
+          cursor: 'pointer',
+          fontWeight: '500',
+          transition: 'all 0.2s',
+          backdropFilter: 'blur(10px)'
+        }}
+      >
+        Sign Out
+      </button>
+    </div>
+  );
 
   // Add CSS animation for dropdown
   useEffect(() => {
@@ -421,12 +458,15 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     };
   }, []);
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
       if (dropdownOpen && !target.closest('[data-dropdown]')) {
         setDropdownOpen(false);
+      }
+      if (timeDropdownOpen && !target.closest('[data-time-dropdown="true"]')) {
+        setTimeDropdownOpen(false);
       }
     };
 
@@ -434,7 +474,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [dropdownOpen]);
+  }, [dropdownOpen, timeDropdownOpen]);
 
   useEffect(() => {
     // Listen to real Firebase Firestore changes
@@ -442,30 +482,110 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     console.log('Project ID:', 'rewin-f4ca1');
     console.log('User ID:', user.uid);
     console.log('Selected Outlet:', selectedOutlet);
+    console.log('Time Period:', timePeriod);
+    console.log('🚀 useEffect triggered - data will be fetched for:', timePeriod);
     
     let unsubscribes: (() => void)[] = [];
+
+    // Calculate date range based on timePeriod
+    const getDateRange = () => {
+      const now = new Date();
+      let startDate = new Date();
+      let endDate = new Date();
+
+      switch (timePeriod) {
+        case 'today':
+          startDate.setHours(0, 0, 0, 0);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'yesterday':
+          const yesterday = new Date(now);
+          yesterday.setDate(now.getDate() - 1);
+          startDate = new Date(yesterday);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(yesterday);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'this_week':
+          const thisWeekStart = new Date(now);
+          thisWeekStart.setDate(now.getDate() - now.getDay());
+          startDate = new Date(thisWeekStart);
+          startDate.setHours(0, 0, 0, 0);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'last_week':
+          const lastWeekStart = new Date(now);
+          lastWeekStart.setDate(now.getDate() - now.getDay() - 7);
+          const lastWeekEnd = new Date(lastWeekStart);
+          lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
+          startDate = new Date(lastWeekStart);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(lastWeekEnd);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'this_month':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          startDate.setHours(0, 0, 0, 0);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'last_month':
+          startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth(), 0);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        default:
+          startDate.setHours(0, 0, 0, 0);
+          endDate.setHours(23, 59, 59, 999);
+      }
+      
+      return { startDate, endDate };
+    };
+
+    const { startDate, endDate } = getDateRange();
+    console.log(`📅 Date range for ${timePeriod}:`, startDate, 'to', endDate);
 
     // Listen for customers collection under user's path
     const customersQuery = query(collection(firestore, `users/${user.uid}/web_customers`));
         
     const unsubscribeCustomers = onSnapshot(customersQuery, (snapshot) => {
-      let filteredCustomers = snapshot.docs;
+      // Create a Set to track unique phone numbers (deduplication)
+      const uniquePhoneNumbers = new Set<string>();
       
-      // Filter customers by outlet if specific outlet is selected
-      if (selectedOutlet !== 'all') {
-        filteredCustomers = snapshot.docs.filter(doc => {
-          const customer = doc.data();
-          // Support both old outletId and new visitedOutlets array
-          const hasVisitedOutlet = customer.visitedOutlets?.includes(selectedOutlet);
+      // Filter and deduplicate customers
+      snapshot.docs.forEach(doc => {
+        const customer = doc.data();
+        const phone = customer.phoneNumber || customer.phone;
+        
+        // Skip customers without phone numbers
+        if (!phone) return;
+        
+        // Check if customer matches the selected outlet
+        let matchesOutlet = false;
+        if (selectedOutlet === 'all') {
+          matchesOutlet = true; // Include all customers for "All outlets"
+        } else {
+          // Count customers ONLY where this is their LAST VISITED outlet
+          // This ensures each customer is counted in only ONE outlet
+          const lastVisitedOutlet = customer.lastVisitOutletId === selectedOutlet;
           const isCurrentOutlet = customer.outletId === selectedOutlet;
-          return hasVisitedOutlet || isCurrentOutlet;
-        });
-      }
+          
+          // If no lastVisitOutletId, fall back to outletId
+          matchesOutlet = lastVisitedOutlet || (isCurrentOutlet && !customer.lastVisitOutletId);
+        }
+        
+        // Add to unique set if matches outlet
+        if (matchesOutlet) {
+          uniquePhoneNumbers.add(phone);
+        }
+      });
       
-      const customerCount = filteredCustomers.length;
-      console.log(`✅ Customers data received (${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet}):`, customerCount, 'documents');
-      console.log('Total customers in DB:', snapshot.docs.length);
-      console.log('Filtered customers:', customerCount);
+      const customerCount = uniquePhoneNumbers.size;
+      console.log(`✅ Customers data received (${selectedOutlet === 'all' ? 'All Outlets' : 'HOME Outlet: ' + selectedOutlet}):`, customerCount, 'UNIQUE customers');
+      console.log('📍 Customer counting logic: HOME OUTLET ONLY (outletId field)');
+      console.log('Total customer documents in DB:', snapshot.docs.length);
+      console.log('Unique customers after deduplication:', customerCount);
+      console.log('📞 Unique phone numbers:', Array.from(uniquePhoneNumbers).slice(0, 5), '...');
       
       // Debug web_customers integration
       console.log('🔍 WEB_CUSTOMERS INTEGRATION:');
@@ -498,13 +618,13 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
           }
         });
         
-        console.log('📊 Customer distribution by outlet:', outletDistribution);
-        console.log('⚠️ Customers without outletId:', customersWithoutOutlet);
+        console.log('📊 Customer distribution by HOME outlet (outletId):', outletDistribution);
+        console.log('⚠️ Customers without outletId (no home outlet):', customersWithoutOutlet);
       }
       
       // Log some sample data
-      if (filteredCustomers.length > 0) {
-        console.log('Sample filtered customer:', filteredCustomers[0].data());
+      if (snapshot.docs.length > 0) {
+        console.log('Sample customer from collection:', snapshot.docs[0].data());
       }
       
       setData(prev => ({ ...prev, customers: customerCount }));
@@ -527,6 +647,10 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       if (snapshot.docs.length > 0) {
         console.log('Sample outlet:', snapshot.docs[0].data());
         console.log('All outlets:', outletList);
+        console.log('🔍 OUTLET ID MAPPING:');
+        outletList.forEach((outlet: any) => {
+          console.log(`  - ID: "${outlet.id}" → Name: "${outlet.name || outlet.outletName}"`);
+        });
       }
       
       setData(prev => ({ ...prev, outlets: outletCount }));
@@ -538,37 +662,38 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     });
     unsubscribes.push(unsubscribeOutlets);
 
-    // Calculate check-ins from customers who visited today (using web_visits collection for accuracy)
+    // Calculate check-ins from customers who visited in the selected time period (using web_visits collection for accuracy)
     const visitsQuery = query(collection(firestore, `users/${user.uid}/web_visits`));
     const unsubscribeCheckIns = onSnapshot(visitsQuery, (snapshot) => {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
       let checkInCount = 0;
-      const uniqueCustomersToday = new Set<string>();
       
       snapshot.docs.forEach(doc => {
         const visit = doc.data();
         const visitDate = visit.timestamp?.toDate();
         
-        if (visitDate && visitDate >= today) {
+        if (visitDate && visitDate >= startDate && visitDate <= endDate) {
           // Filter by outlet if specific outlet is selected
           if (selectedOutlet === 'all' || visit.outletId === selectedOutlet) {
-            // Count unique customers only (prevent double counting)
-            if (!uniqueCustomersToday.has(visit.customerId)) {
-              uniqueCustomersToday.add(visit.customerId);
-              checkInCount++;
-            }
+            // Count ALL visits, including multiple visits by same customer at different outlets
+            checkInCount++;
           }
         }
       });
       
-      console.log(`✅ Check-ins today calculated (${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet}):`, checkInCount, 'unique customers');
-      console.log('🔍 DEBUG: Total visits today:', snapshot.docs.filter(doc => {
+      const uniqueCustomersInPeriod = new Set<string>();
+      snapshot.docs.forEach(doc => {
         const visit = doc.data();
         const visitDate = visit.timestamp?.toDate();
-        return visitDate && visitDate >= today;
-      }).length);
+        
+        if (visitDate && visitDate >= startDate && visitDate <= endDate) {
+          if (selectedOutlet === 'all' || visit.outletId === selectedOutlet) {
+            uniqueCustomersInPeriod.add(visit.customerId);
+          }
+        }
+      });
+      
+      console.log(`✅ Check-ins for ${timePeriod} calculated (${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet}):`, checkInCount, 'total visits');
+      console.log('🔍 DEBUG: Unique customers in period:', uniqueCustomersInPeriod.size);
       
       setData(prev => ({ ...prev, checkIns: checkInCount }));
     }, (error) => {
@@ -577,45 +702,40 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       
       // Fallback: Use customers collection if web_visits doesn't exist yet
       const fallbackUnsubscribe = onSnapshot(customersQuery, (customerSnapshot) => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
         let fallbackCheckInCount = 0;
         customerSnapshot.docs.forEach(doc => {
           const customer = doc.data();
           
-          // Check if customer visited today and matches outlet filter
-          const visitedToday = customer.lastVisit && customer.lastVisit.toDate() >= today;
+          // Check if customer visited in the selected time period and matches outlet filter
+          const visitDate = customer.lastVisit?.toDate();
+          const visitedInPeriod = visitDate && visitDate >= startDate && visitDate <= endDate;
           const matchesOutlet = selectedOutlet === 'all' || 
                                customer.lastVisitOutletId === selectedOutlet ||
                                customer.outletId === selectedOutlet ||
                                customer.visitedOutlets?.includes(selectedOutlet);
           
-          if (visitedToday && matchesOutlet) {
+          if (visitedInPeriod && matchesOutlet) {
             fallbackCheckInCount++;
           }
         });
         
-        console.log(`✅ Check-ins today (fallback) calculated:`, fallbackCheckInCount, 'customers');
+        console.log(`✅ Check-ins for ${timePeriod} (fallback) calculated:`, fallbackCheckInCount, 'customers');
         setData(prev => ({ ...prev, checkIns: fallbackCheckInCount }));
       });
       
       unsubscribes.push(fallbackUnsubscribe);
     });
-          unsubscribes.push(unsubscribeCheckIns);
+    unsubscribes.push(unsubscribeCheckIns);
 
-    // Calculate new signups today from web_customers collection
+    // Calculate new signups for the selected time period from web_customers collection
     const unsubscribeNewSignups = onSnapshot(customersQuery, (snapshot) => {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
       let newSignupsCount = 0;
       
       snapshot.docs.forEach(doc => {
         const customer = doc.data();
         const joinDate = customer.dateJoined?.toDate() || customer.createdAt?.toDate();
         
-        if (joinDate && joinDate >= today) {
+        if (joinDate && joinDate >= startDate && joinDate <= endDate) {
           // Filter by outlet if specific outlet is selected
           const matchesOutlet = selectedOutlet === 'all' || 
                                customer.registrationOutletId === selectedOutlet ||
@@ -628,18 +748,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
         }
       });
       
-      console.log(`✅ New signups today calculated (${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet}):`, newSignupsCount, 'new customers');
-      console.log('🔍 DEBUG: Looking for customers with dateJoined >= today');
-      
-      // Additional debugging to help understand the data
-      if (snapshot.docs.length > 0) {
-        const sampleCustomer = snapshot.docs[0].data();
-        console.log('📱 Sample customer dateJoined field:', {
-          dateJoined: sampleCustomer.dateJoined,
-          createdAt: sampleCustomer.createdAt,
-          registrationOutletId: sampleCustomer.registrationOutletId
-        });
-      }
+      console.log(`✅ New signups for ${timePeriod} calculated (${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet}):`, newSignupsCount, 'new customers');
       
       setData(prev => ({ ...prev, newSignupsToday: newSignupsCount }));
     }, (error) => {
@@ -653,10 +762,10 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     const customersForTransactionsQuery = query(collection(firestore, `users/${user.uid}/web_customers`));
         
     const unsubscribeTransactions = onSnapshot(transactionsQuery, (transactionSnapshot) => {
-      let totalPointsEarned = 0;
-      let totalPointsRedeemed = 0;
-      let filteredTransactions = transactionSnapshot.docs;
-      
+        let totalPointsEarned = 0;
+        let totalPointsRedeemed = 0;
+        let filteredTransactions = transactionSnapshot.docs;
+        
       console.log(`🔍 WEB TRANSACTION FILTERING (${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet})`);
       console.log('Total web_transactions in DB:', transactionSnapshot.docs.length);
       
@@ -672,17 +781,17 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       }
       
       // Debug: Show outlet distribution in transactions
-      if (selectedOutlet === 'all') {
-        const outletDistribution: { [key: string]: number } = {};
+        if (selectedOutlet === 'all') {
+          const outletDistribution: { [key: string]: number } = {};
         let transactionsWithoutOutlet = 0;
-        
-        transactionSnapshot.docs.forEach(doc => {
-          const transaction = doc.data();
-          const outletId = transaction.transactionOutletId;
           
-          if (outletId) {
-            outletDistribution[outletId] = (outletDistribution[outletId] || 0) + 1;
-          } else {
+          transactionSnapshot.docs.forEach(doc => {
+            const transaction = doc.data();
+          const outletId = transaction.transactionOutletId;
+            
+            if (outletId) {
+              outletDistribution[outletId] = (outletDistribution[outletId] || 0) + 1;
+            } else {
             transactionsWithoutOutlet++;
           }
         });
@@ -691,10 +800,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
         console.log('⚠️ Transactions without outlet:', transactionsWithoutOutlet);
       }
               
-        // Calculate points from filtered transactions FOR TODAY ONLY (reset at midnight)
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
+        // Calculate points from filtered transactions FOR THE SELECTED TIME PERIOD
         filteredTransactions.forEach(doc => {
           const transaction = doc.data();
           const pointsChanged = transaction.pointsChanged || 0;
@@ -702,77 +808,23 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
           const isManualTransaction = transaction.isManualTransaction || false;
           const transactionDate = transaction.timestamp?.toDate();
           
-          // Only count transactions from TODAY (midnight reset)
-          if (transactionDate && transactionDate >= today) {
+          // Only count transactions from the selected time period
+          if (transactionDate && transactionDate >= startDate && transactionDate <= endDate) {
             // For EARNED transactions, only count manual ones
             if (transactionType.toUpperCase() === 'EARNED' && isManualTransaction && pointsChanged > 0) {
-              totalPointsEarned += pointsChanged;
+            totalPointsEarned += pointsChanged;
             } else if (transactionType.toUpperCase() === 'REDEEMED' && pointsChanged < 0) {
-              totalPointsRedeemed += Math.abs(pointsChanged);
+            totalPointsRedeemed += Math.abs(pointsChanged);
             }
           }
         });
         
-        console.log(`✅ Transactions data received (${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet}):`, filteredTransactions.length, '/', transactionSnapshot.docs.length, 'documents');
+        console.log(`✅ Transactions data received for ${timePeriod} (${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet}):`, filteredTransactions.length, '/', transactionSnapshot.docs.length, 'documents');
         console.log('💰 Points earned (manual only):', totalPointsEarned, 'Points redeemed:', totalPointsRedeemed);
-        
-        // Debug: Show breakdown of transaction types (simplified for web collections)
-        const transactionTypeBreakdown: { [key: string]: { count: number, points: number, manual: number, automatic: number } } = {};
-        
-        filteredTransactions.forEach((doc, index) => {
-          const transaction = doc.data();
-          const transactionType = transaction.transactionType || 'unknown';
-          const pointsChanged = transaction.pointsChanged || 0;
-          const isManualTransaction = transaction.isManualTransaction || false;
-          
-          if (!transactionTypeBreakdown[transactionType]) {
-            transactionTypeBreakdown[transactionType] = { count: 0, points: 0, manual: 0, automatic: 0 };
-          }
-          transactionTypeBreakdown[transactionType].count++;
-          
-          if (pointsChanged > 0) {
-            transactionTypeBreakdown[transactionType].points += pointsChanged;
-            
-            if (isManualTransaction) {
-              transactionTypeBreakdown[transactionType].manual += pointsChanged;
-            } else {
-              transactionTypeBreakdown[transactionType].automatic += pointsChanged;
-            }
-            
-            // Log first few transactions for debugging
-            if (index < 5) {
-              console.log(`Transaction ${index + 1}:`, {
-                type: transactionType,
-                description: transaction.description,
-                points: pointsChanged,
-                isManual: isManualTransaction,
-                outletId: transaction.transactionOutletId,
-                decision: (transactionType.toUpperCase() === 'EARNED' && isManualTransaction) ? 'INCLUDED' : 'EXCLUDED',
-                timestamp: transaction.timestamp?.toDate?.()?.toLocaleString() || 'no timestamp'
-              });
-            }
-          }
-        });
-        
-        console.log('📊 Transaction type breakdown:', transactionTypeBreakdown);
-        console.log('✅ Using new web collections - transactions are permanently tied to outlets!');
-        
-        // Additional debugging for the mobile app integration
-        console.log('🔍 WEB COLLECTIONS INTEGRATION STATUS:');
-        console.log('- Collection: web_transactions ✅');
-        console.log('- Field: transactionOutletId ✅');
-        console.log('- Field: isManualTransaction ✅');
-        console.log('- Multi-outlet issue: SOLVED ✅');
-        
-        if (filteredTransactions.length > 0) {
-          console.log('📱 Sample transaction from mobile app:', filteredTransactions[0].data());
-        } else {
-          console.warn('⚠️ No transactions found. Mobile app may still be populating web collections.');
-        }
         
         // Calculate revenue 
         const revenue = totalPointsEarned * 0.1; // Assuming 1 point = $0.10
-        console.log(`💵 Calculated revenue: $${revenue.toFixed(2)} (${totalPointsEarned} points * $0.10)`);
+        console.log(`💵 Calculated revenue for ${timePeriod}: $${revenue.toFixed(2)} (${totalPointsEarned} points * $0.10)`);
         
         setData(prev => ({ 
           ...prev, 
@@ -791,7 +843,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     return () => {
       unsubscribes.forEach(unsubscribe => unsubscribe());
     };
-  }, [user.uid, selectedOutlet]); // Re-run when outlet selection changes
+  }, [user.uid, selectedOutlet, timePeriod]); // Re-run when outlet selection or time period changes
 
   // Filter suggestions for different pages
   const FilterSuggestions = ({ page }: { page: string }) => {
@@ -1069,6 +1121,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       }
     }, [searchTerm, signupsData.customers]);
 
+
+
     return (
       <div style={{
         minHeight: '100vh',
@@ -1178,22 +1232,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                   </svg>
                 </div>
               </div>
-              <button
-                onClick={onLogout}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  backgroundColor: 'rgba(255,255,255,0.2)',
-                  color: 'white',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  borderRadius: '12px',
-                  cursor: 'pointer',
-                  fontWeight: '500',
-                  transition: 'all 0.2s',
-                  backdropFilter: 'blur(10px)'
-                }}
-              >
-                Sign Out
-              </button>
+              {headerButtons}
             </div>
           </div>
         </header>
@@ -1521,72 +1560,126 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       return date > today;
     };
 
-    useEffect(() => {
-      // Fetch points data for selected date
-      const fetchPointsData = async () => {
-        const selectedStart = new Date(selectedDate);
-        selectedStart.setHours(0, 0, 0, 0);
-        const selectedEnd = new Date(selectedDate);
-        selectedEnd.setHours(23, 59, 59, 999);
+    // Calendar navigation functions
+    const navigateCalendar = (direction: 'prev' | 'next') => {
+      const newDate = new Date(selectedDate);
+      newDate.setMonth(selectedDate.getMonth() + (direction === 'next' ? 1 : -1));
+      setSelectedDate(newDate);
+    };
 
-        console.log('🔍 Fetching points data for:', formatDate(selectedDate));
-        
-        const transactionsQuery = query(collection(firestore, `users/${user.uid}/web_transactions`));
-        const customersQuery = query(collection(firestore, `users/${user.uid}/web_customers`));
-        const outletsQuery = query(collection(firestore, `users/${user.uid}/outlets`));
-        
-        // Fetch outlet name for header
-        if (selectedOutlet !== 'all') {
-          const outletsSnapshot = await new Promise<any>((resolve) => {
-            const unsubscribeOutlets = onSnapshot(outletsQuery, (outletSnapshot) => {
-              unsubscribeOutlets();
-              resolve(outletSnapshot);
-            });
-          });
+    // Get date range for current time period
+    const getCurrentDateRange = () => {
+      const now = new Date();
+      let startDate = new Date();
+      let endDate = new Date();
+
+      switch (timePeriod) {
+        case 'today':
+          // Use selectedDate for 'today' mode (can be any specific date)
+          startDate = new Date(selectedDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(selectedDate);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'yesterday':
+          const yesterday = new Date(now);
+          yesterday.setDate(now.getDate() - 1);
+          startDate = new Date(yesterday);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(yesterday);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'this_week':
+          const thisWeekStart = new Date(now);
+          thisWeekStart.setDate(now.getDate() - now.getDay());
+          startDate = new Date(thisWeekStart);
+          startDate.setHours(0, 0, 0, 0);
+          const thisWeekEnd = new Date(thisWeekStart);
+          thisWeekEnd.setDate(thisWeekStart.getDate() + 6);
+          endDate = new Date(thisWeekEnd);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'last_week':
+          const lastWeekStart = new Date(now);
+          lastWeekStart.setDate(now.getDate() - now.getDay() - 7);
+          const lastWeekEnd = new Date(lastWeekStart);
+          lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
+          startDate = new Date(lastWeekStart);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(lastWeekEnd);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'this_month':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'last_month':
+          startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth(), 0);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        default:
+          startDate = new Date(selectedDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(selectedDate);
+          endDate.setHours(23, 59, 59, 999);
+      }
+      
+      return { startDate, endDate };
+    };
+
+    // Check if a date is in the selected range
+    const isDateInSelectedRange = (date: Date) => {
+      const { startDate, endDate } = getCurrentDateRange();
+      const checkDate = new Date(date);
+      checkDate.setHours(12, 0, 0, 0); // Set to noon to avoid timezone issues
+      return checkDate >= startDate && checkDate <= endDate;
+    };
+
+    useEffect(() => {
+      if (!user?.uid) return;
+
+      console.log('🔍 Fetching points data for time period:', timePeriod);
+      const { startDate, endDate } = getCurrentDateRange();
+      console.log('📅 Date range:', startDate.toLocaleDateString(), 'to', endDate.toLocaleDateString());
+      
+      setPointsData(prev => ({ ...prev, loading: true }));
+      
+      const transactionsQuery = query(collection(firestore, `users/${user.uid}/web_transactions`));
+      const customersQuery = query(collection(firestore, `users/${user.uid}/web_customers`));
+      
+      // Set up customers listener first
+      const unsubscribeCustomers = onSnapshot(customersQuery, (customersSnapshot) => {
+        // Create a map of customer ID to display name (name or phone)
+        const customerDisplayMap: { [key: string]: string } = {};
+        customersSnapshot.docs.forEach((doc: any) => {
+          const customer = doc.data();
+          const name = customer.name || customer.fullName || customer.firstName;
+          const phone = customer.phoneNumber || customer.phone;
           
-          const outlet = outletsSnapshot.docs.find((doc: any) => doc.id === selectedOutlet);
-          if (outlet) {
-            const outletData = outlet.data();
-            setOutletName(outletData.name || outletData.outletName || selectedOutlet);
+          // Prioritize name over phone number
+          if (name && name.trim() !== '') {
+            customerDisplayMap[doc.id] = name;
+          } else if (phone) {
+            customerDisplayMap[doc.id] = phone;
           } else {
-            setOutletName(selectedOutlet);
+            customerDisplayMap[doc.id] = 'Unknown';
           }
-        }
-        
-        const unsubscribe = onSnapshot(transactionsQuery, async (snapshot) => {
+        });
+
+        // Now set up transactions listener with customer data
+        const unsubscribeTransactions = onSnapshot(transactionsQuery, (snapshot) => {
           let dayTransactions: any[] = [];
           let totalPoints = 0;
-
-          // Get customers data to match phone numbers
-          const customersSnapshot = await new Promise<any>((resolve) => {
-            const unsubscribeCustomers = onSnapshot(customersQuery, (customerSnapshot) => {
-              unsubscribeCustomers();
-              resolve(customerSnapshot);
-            });
-          });
-
-          // Create a map of customer ID to display name (name or phone)
-          const customerDisplayMap: { [key: string]: string } = {};
-          customersSnapshot.docs.forEach((doc: any) => {
-            const customer = doc.data();
-            const name = customer.name || customer.fullName || customer.firstName;
-            const phone = customer.phoneNumber || customer.phone;
-            
-            // Prioritize name over phone number
-            if (name && name.trim() !== '') {
-              customerDisplayMap[doc.id] = name;
-            } else if (phone) {
-              customerDisplayMap[doc.id] = phone;
-            } else {
-              customerDisplayMap[doc.id] = 'Unknown';
-            }
-          });
 
           snapshot.docs.forEach(doc => {
             const transaction = doc.data();
             const transactionDate = transaction.timestamp?.toDate();
             
-            if (transactionDate && transactionDate >= selectedStart && transactionDate <= selectedEnd) {
+            if (transactionDate && transactionDate >= startDate && transactionDate <= endDate) {
               // Filter by outlet
               const matchesOutlet = selectedOutlet === 'all' || transaction.transactionOutletId === selectedOutlet;
               
@@ -1620,21 +1713,34 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
           });
         });
 
-        return unsubscribe;
-      };
-
-      let unsubscribe: (() => void) | undefined;
-      
-      fetchPointsData().then((unsub) => {
-        unsubscribe = unsub;
+        return unsubscribeTransactions;
       });
 
       return () => {
-        if (unsubscribe) {
-          unsubscribe();
-        }
+        unsubscribeCustomers();
       };
-    }, [selectedDate, selectedOutlet, user.uid]);
+    }, [timePeriod, selectedDate, selectedOutlet, user.uid]);
+
+    // Separate useEffect for outlet name to avoid infinite loops
+    useEffect(() => {
+      if (!user?.uid || selectedOutlet === 'all') {
+        setOutletName('');
+        return;
+      }
+
+      const outletsQuery = query(collection(firestore, `users/${user.uid}/outlets`));
+      const unsubscribeOutlets = onSnapshot(outletsQuery, (outletSnapshot) => {
+        const outlet = outletSnapshot.docs.find((doc: any) => doc.id === selectedOutlet);
+        if (outlet) {
+          const outletData = outlet.data();
+          setOutletName(outletData.name || outletData.outletName || selectedOutlet);
+        } else {
+          setOutletName(selectedOutlet);
+        }
+      });
+
+      return () => unsubscribeOutlets();
+    }, [selectedOutlet, user.uid]);
 
     return (
       <div style={{
@@ -1700,7 +1806,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                              <div>
                  <h1 style={{ margin: 0, fontSize: '1.8rem', fontWeight: '700' }}>Points History</h1>
                  <p style={{ margin: 0, opacity: 0.9, fontSize: '0.9rem' }}>
-                   {selectedOutlet === 'all' ? 'All outlets' : `Outlet: ${outletName || selectedOutlet}`}
+                   {selectedOutlet === 'all' ? 'All outlets' : `Outlet: ${outlets.find(outlet => outlet.id === selectedOutlet)?.name || outlets.find(outlet => outlet.id === selectedOutlet)?.outletName || selectedOutlet}`}
                  </p>
                </div>
             </div>
@@ -1766,13 +1872,59 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 ← Previous Day
               </button>
               
-              <div style={{ textAlign: 'center' }}>
-                <h2 style={{ color: 'white', margin: 0, fontSize: '1.5rem' }}>
-                  {formatDate(selectedDate)}
-                </h2>
-                <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
-                  {isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`}
-                </p>
+                            <div style={{ textAlign: 'center', position: 'relative' }}>
+                <button
+                  onClick={() => setTimeDropdownOpen(!timeDropdownOpen)}
+                  data-time-dropdown
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    padding: '0.5rem 1rem',
+                    borderRadius: '12px',
+                    transition: 'all 0.2s',
+                    backgroundColor: timeDropdownOpen ? 'rgba(255,255,255,0.1)' : 'transparent'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!timeDropdownOpen) {
+                      (e.target as HTMLElement).style.backgroundColor = 'rgba(255,255,255,0.05)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!timeDropdownOpen) {
+                      (e.target as HTMLElement).style.backgroundColor = 'transparent';
+                    }
+                  }}
+                >
+                  <h2 style={{ color: 'white', margin: 0, fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
+                    {formatDate(selectedDate)}
+                    <svg 
+                      width="16" 
+                      height="16" 
+                      viewBox="0 0 24 24" 
+                      fill="currentColor"
+                      style={{ 
+                        transform: timeDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.2s',
+                        opacity: 0.7
+                      }}
+                    >
+                      <path d="M7 10l5 5 5-5z"/>
+                    </svg>
+                  </h2>
+                  <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
+                    {timePeriod === 'today' ? 'Today' : 
+                     timePeriod === 'yesterday' ? 'Yesterday' :
+                     timePeriod === 'this_week' ? 'This Week' :
+                     timePeriod === 'last_week' ? 'Last Week' :
+                     timePeriod === 'this_month' ? 'This Month' :
+                     timePeriod === 'last_month' ? 'Last Month' :
+                     isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`}
+                  </p>
+                </button>
+                
+
               </div>
               
               <div style={{ display: 'flex', gap: '1rem' }}>
@@ -1984,6 +2136,404 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             )}
           </div>
         </main>
+
+        {/* Time Period Modal - Two Panel Design */}
+        {timeDropdownOpen && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              backdropFilter: 'blur(10px)',
+              zIndex: 999999999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              animation: 'fadeIn 0.3s ease-out',
+              padding: '2rem'
+            }}
+            onClick={(e) => {
+              // Only close if clicking directly on the backdrop, not on child elements
+              if (e.target === e.currentTarget) {
+                console.log('🔒 Modal backdrop clicked - closing time period selector');
+                setTimeDropdownOpen(false);
+              }
+            }}
+          >
+            {/* Modal Content */}
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                borderRadius: '24px',
+                padding: '0',
+                width: '800px',
+                maxWidth: '90vw',
+                height: '500px',
+                maxHeight: '80vh',
+                boxShadow: '0 25px 50px rgba(0, 0, 0, 0.5)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                position: 'relative',
+                animation: 'slideIn 0.3s ease-out',
+                display: 'flex',
+                overflow: 'hidden'
+              }}
+            >
+              {/* Close Button */}
+              <button
+                onClick={() => setTimeDropdownOpen(false)}
+                style={{
+                  position: 'absolute',
+                  top: '1rem',
+                  right: '1rem',
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '36px',
+                  height: '36px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '1.2rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                  zIndex: 10
+                }}
+                onMouseEnter={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+                }}
+              >
+                ×
+              </button>
+
+              {/* Left Panel - Time Period Options */}
+              <div
+                style={{
+                  flex: '0 0 300px',
+                  padding: '2rem',
+                  borderRight: '1px solid rgba(255, 255, 255, 0.2)',
+                  background: 'rgba(255, 255, 255, 0.05)'
+                }}
+              >
+                <h3
+                  style={{
+                    color: 'white',
+                    fontSize: '1.2rem',
+                    fontWeight: '600',
+                    marginBottom: '1.5rem',
+                    textAlign: 'left'
+                  }}
+                >
+                  Time Periods
+                </h3>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {[
+                    { value: 'today', label: 'Today' },
+                    { value: 'yesterday', label: 'Yesterday' },
+                    { value: 'this_week', label: 'This Week' },
+                    { value: 'last_week', label: 'Last Week' },
+                    { value: 'this_month', label: 'This Month' },
+                    { value: 'last_month', label: 'Last Month' }
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('🎯 TIME PERIOD SELECTED:', option.value);
+                        console.log('🔄 Changing timePeriod from:', timePeriod, 'to:', option.value);
+                        setTimePeriod(option.value);
+                        setTimeDropdownOpen(false);
+                        console.log('✅ Time period updated and modal closed');
+                      }}
+                      style={{
+                        background: timePeriod === option.value 
+                          ? 'rgba(255, 255, 255, 0.3)' 
+                          : 'transparent',
+                        border: 'none',
+                        borderRadius: '12px',
+                        padding: '1rem 1.5rem',
+                        color: 'white',
+                        cursor: 'pointer',
+                        fontSize: '1rem',
+                        fontWeight: timePeriod === option.value ? '600' : '400',
+                        transition: 'all 0.2s ease',
+                        textAlign: 'left',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (timePeriod !== option.value) {
+                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.1)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (timePeriod !== option.value) {
+                          (e.target as HTMLElement).style.background = 'transparent';
+                        }
+                      }}
+                    >
+                      <span>{option.label}</span>
+                      {timePeriod === option.value && (
+                        <span style={{ fontSize: '1rem', color: 'rgba(255, 255, 255, 0.9)' }}>✓</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Right Panel - Calendar */}
+              <div
+                style={{
+                  flex: 1,
+                  padding: '2rem',
+                  background: 'rgba(255, 255, 255, 0.95)',
+                  color: '#333'
+                }}
+              >
+                <h3
+                  style={{
+                    color: '#333',
+                    fontSize: '1.2rem',
+                    fontWeight: '600',
+                    marginBottom: '1.5rem',
+                    textAlign: 'center'
+                  }}
+                >
+                  {(() => {
+                    const now = new Date();
+                    switch (timePeriod) {
+                      case 'today':
+                        return `Today - ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+                      case 'yesterday':
+                        const yesterday = new Date(now);
+                        yesterday.setDate(now.getDate() - 1);
+                        return `Yesterday - ${yesterday.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+                      case 'this_week':
+                        const weekStart = new Date(now);
+                        weekStart.setDate(now.getDate() - now.getDay());
+                        const weekEnd = new Date(weekStart);
+                        weekEnd.setDate(weekStart.getDate() + 6);
+                        return `This Week - ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                      case 'last_week':
+                        const lastWeekStart = new Date(now);
+                        lastWeekStart.setDate(now.getDate() - now.getDay() - 7);
+                        const lastWeekEnd = new Date(lastWeekStart);
+                        lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
+                        return `Last Week - ${lastWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${lastWeekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                      case 'this_month':
+                        return `This Month - ${now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+                      case 'last_month':
+                        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                        return `Last Month - ${lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+                      default:
+                        return 'Selected Period';
+                    }
+                  })()}
+                </h3>
+
+                
+
+                 {/* Calendar Preview */}
+                 <div
+                   style={{
+                     display: 'flex',
+                     flexDirection: 'column',
+                     alignItems: 'center',
+                     gap: '1rem'
+                   }}
+                 >
+                                     {/* Month/Year Navigation */}
+                   <div
+                     style={{
+                       display: 'flex',
+                       alignItems: 'center',
+                       gap: '1rem',
+                       marginBottom: '1rem'
+                     }}
+                   >
+                     <button
+                       onClick={() => navigateCalendar('prev')}
+                       style={{
+                         background: 'none',
+                         border: '1px solid #ccc',
+                         borderRadius: '6px',
+                         padding: '0.5rem',
+                         cursor: 'pointer',
+                         color: '#666',
+                         transition: 'all 0.2s ease'
+                       }}
+                       onMouseEnter={(e) => {
+                         (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
+                         (e.target as HTMLElement).style.borderColor = '#999';
+                       }}
+                       onMouseLeave={(e) => {
+                         (e.target as HTMLElement).style.backgroundColor = 'transparent';
+                         (e.target as HTMLElement).style.borderColor = '#ccc';
+                       }}
+                     >
+                       ←
+                     </button>
+                     <span style={{ fontSize: '1.1rem', fontWeight: '600', minWidth: '150px', textAlign: 'center' }}>
+                       {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                     </span>
+                     <button
+                       onClick={() => navigateCalendar('next')}
+                       style={{
+                         background: 'none',
+                         border: '1px solid #ccc',
+                         borderRadius: '6px',
+                         padding: '0.5rem',
+                         cursor: 'pointer',
+                         color: '#666',
+                         transition: 'all 0.2s ease'
+                       }}
+                       onMouseEnter={(e) => {
+                         (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
+                         (e.target as HTMLElement).style.borderColor = '#999';
+                       }}
+                       onMouseLeave={(e) => {
+                         (e.target as HTMLElement).style.backgroundColor = 'transparent';
+                         (e.target as HTMLElement).style.borderColor = '#ccc';
+                       }}
+                     >
+                       →
+                     </button>
+                   </div>
+
+                  {/* Calendar Grid */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(7, 1fr)',
+                      gap: '0.5rem',
+                      width: '100%',
+                      maxWidth: '350px'
+                    }}
+                  >
+                    {/* Day Headers */}
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                      <div
+                        key={day}
+                        style={{
+                          padding: '0.5rem',
+                          textAlign: 'center',
+                          fontSize: '0.8rem',
+                          fontWeight: '600',
+                          color: '#666'
+                        }}
+                      >
+                        {day}
+                      </div>
+                    ))}
+
+                                         {/* Calendar Days */}
+                     {(() => {
+                       const year = selectedDate.getFullYear();
+                       const month = selectedDate.getMonth();
+                       const firstDay = new Date(year, month, 1);
+                       const lastDay = new Date(year, month + 1, 0);
+                       const startingDayOfWeek = firstDay.getDay();
+                       const daysInMonth = lastDay.getDate();
+                       const today = new Date();
+                       
+                       console.log('🗓️ Rendering calendar for:', year, month + 1, 'with', daysInMonth, 'days');
+                       
+                       const days = [];
+                       
+                       // Empty cells for days before the first day of the month
+                       for (let i = 0; i < startingDayOfWeek; i++) {
+                         days.push(
+                           <div key={`empty-${i}`} style={{ padding: '0.75rem' }}></div>
+                         );
+                       }
+                       
+                       // Days of the month
+                       for (let day = 1; day <= daysInMonth; day++) {
+                         const currentDate = new Date(year, month, day);
+                         const isToday = currentDate.toDateString() === today.toDateString();
+                         const isInSelectedRange = isDateInSelectedRange(currentDate);
+                         const isFutureDate = currentDate > today;
+                         
+                         days.push(
+                           <button
+                             key={day}
+                             onClick={(e) => {
+                               console.log('🔥 CALENDAR BUTTON CLICKED!', day, 'isFutureDate:', isFutureDate);
+                               e.preventDefault();
+                               e.stopPropagation();
+                               e.nativeEvent.stopImmediatePropagation();
+                               if (!isFutureDate) {
+                                 // Set the specific date and switch to single day view
+                                 setSelectedDate(currentDate);
+                                 setTimePeriod('today'); // Use today mode for single date
+                                 setTimeDropdownOpen(false);
+                                 console.log('📅 Date selected:', currentDate.toLocaleDateString());
+                                 console.log('🔄 Switching to single date view for:', formatDate(currentDate));
+                               } else {
+                                 console.log('❌ Future date clicked, ignoring');
+                               }
+                             }}
+                             disabled={isFutureDate}
+                             style={{
+                               padding: '0.75rem',
+                               textAlign: 'center',
+                               borderRadius: '6px',
+                               cursor: isFutureDate ? 'not-allowed' : 'pointer',
+                               border: 'none',
+                               background: isInSelectedRange 
+                                 ? '#667eea' 
+                                 : isToday 
+                                   ? '#e0e7ff' 
+                                   : isFutureDate 
+                                     ? '#f5f5f5' 
+                                     : 'transparent',
+                               color: isInSelectedRange 
+                                 ? 'white' 
+                                 : isToday 
+                                   ? '#667eea' 
+                                   : isFutureDate 
+                                     ? '#ccc' 
+                                     : '#333',
+                               fontWeight: isToday ? '600' : isInSelectedRange ? '500' : '400',
+                               transition: 'all 0.2s ease',
+                               opacity: isFutureDate ? 0.5 : 1
+                             }}
+                             onMouseEnter={(e) => {
+                               if (!isFutureDate && !isInSelectedRange) {
+                                 (e.target as HTMLElement).style.backgroundColor = '#f0f4ff';
+                                 (e.target as HTMLElement).style.color = '#667eea';
+                               }
+                             }}
+                             onMouseLeave={(e) => {
+                               if (!isFutureDate && !isInSelectedRange) {
+                                 (e.target as HTMLElement).style.backgroundColor = isToday ? '#e0e7ff' : isFutureDate ? '#f5f5f5' : 'transparent';
+                                 (e.target as HTMLElement).style.color = isToday ? '#667eea' : isFutureDate ? '#ccc' : '#333';
+                               }
+                             }}
+                           >
+                             {day}
+                           </button>
+                         );
+                       }
+                       
+                       return days;
+                     })()}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -2077,8 +2627,6 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             customerInfoMap[doc.id] = customer;
           });
 
-          const uniqueCustomers = new Set<string>();
-
           visitsSnapshot.docs.forEach(doc => {
             const visit = doc.data();
             const visitDate = visit.timestamp?.toDate() || visit.createdAt?.toDate();
@@ -2090,26 +2638,23 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               if (matchesOutlet) {
                 const customerId = visit.customerId;
                 
-                // Only count unique customers per day
-                if (!uniqueCustomers.has(customerId)) {
-                  uniqueCustomers.add(customerId);
-                  totalCheckins++;
-                  
-                  const customerInfo = customerInfoMap[customerId];
-                  const name = customerInfo?.name || customerInfo?.fullName || customerInfo?.firstName;
-                  const phone = customerInfo?.phoneNumber || customerInfo?.phone;
-                  const outletName = outletNameMap[visit.outletId] || 'Unknown Outlet';
-                  
-                  dayCheckins.push({
-                    id: doc.id,
-                    customerId,
-                    visitDate,
-                    displayName: name && name.trim() !== '' ? name : (phone || 'Unknown Customer'),
-                    outletDisplayName: outletName,
-                    customerInfo,
-                    ...visit
-                  });
-                }
+                // Count ALL visits, including multiple visits by same customer at different outlets
+                totalCheckins++;
+                
+                const customerInfo = customerInfoMap[customerId];
+                const name = customerInfo?.name || customerInfo?.fullName || customerInfo?.firstName;
+                const phone = customerInfo?.phoneNumber || customerInfo?.phone;
+                const outletName = outletNameMap[visit.outletId] || 'Unknown Outlet';
+                
+                dayCheckins.push({
+                  id: doc.id,
+                  customerId,
+                  visitDate,
+                  displayName: name && name.trim() !== '' ? name : (phone || 'Unknown Customer'),
+                  outletDisplayName: outletName,
+                  customerInfo,
+                  ...visit
+                });
               }
             }
           });
@@ -2448,53 +2993,53 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         (e.target as HTMLElement).style.transform = 'translateY(0)';
                       }}
                     >
-                    <div>
-                      <p style={{ 
-                        color: 'white', 
-                        margin: 0, 
-                        fontSize: '1.1rem', 
-                        fontWeight: '600'
-                      }}>
-                        {customer.displayName}
-                      </p>
-                      <p style={{ 
-                        color: 'rgba(255,255,255,0.7)', 
-                        margin: '0.25rem 0 0 0', 
-                        fontSize: '0.9rem' 
-                      }}>
-                        {customer.visitDate.toLocaleDateString()} at {customer.visitDate.toLocaleTimeString()} • Outlet: {customer.outletDisplayName}
-                      </p>
-                      {customer.customerInfo?.phoneNumber && (
+                      <div>
                         <p style={{ 
-                          color: 'rgba(255,255,255,0.6)', 
-                          margin: '0.25rem 0 0 0', 
-                          fontSize: '0.8rem' 
+                          color: 'white', 
+                          margin: 0, 
+                          fontSize: '1.1rem', 
+                          fontWeight: '600'
                         }}>
-                          Phone: {customer.customerInfo.phoneNumber}
+                          {customer.displayName}
                         </p>
-                      )}
-                      <p style={{ 
-                        color: 'rgba(255,255,255,0.5)', 
-                        margin: '0.25rem 0 0 0', 
-                        fontSize: '0.75rem',
-                        fontStyle: 'italic' 
+                        <p style={{ 
+                          color: 'rgba(255,255,255,0.7)', 
+                          margin: '0.25rem 0 0 0', 
+                          fontSize: '0.9rem' 
+                        }}>
+                          {customer.visitDate.toLocaleDateString()} at {customer.visitDate.toLocaleTimeString()} • Outlet: {customer.outletDisplayName}
+                        </p>
+                        {customer.customerInfo?.phoneNumber && (
+                          <p style={{ 
+                            color: 'rgba(255,255,255,0.6)', 
+                            margin: '0.25rem 0 0 0', 
+                            fontSize: '0.8rem' 
+                          }}>
+                            Phone: {customer.customerInfo.phoneNumber}
+                          </p>
+                        )}
+                        <p style={{ 
+                          color: 'rgba(255,255,255,0.5)', 
+                          margin: '0.25rem 0 0 0', 
+                          fontSize: '0.75rem',
+                          fontStyle: 'italic' 
+                        }}>
+                          Click for transaction history →
+                        </p>
+                      </div>
+                      <div style={{
+                        padding: '0.5rem 1rem',
+                        backgroundColor: 'rgba(102, 126, 234, 0.2)',
+                        color: 'white',
+                        borderRadius: '20px',
+                        fontSize: '0.8rem',
+                        fontWeight: '500',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
                       }}>
-                        Click for transaction history →
-                      </p>
+                        CHECK-IN
+                      </div>
                     </div>
-                    <div style={{
-                      padding: '0.5rem 1rem',
-                      backgroundColor: 'rgba(102, 126, 234, 0.2)',
-                      color: 'white',
-                      borderRadius: '20px',
-                      fontSize: '0.8rem',
-                      fontWeight: '500',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.5px'
-                    }}>
-                      CHECK-IN
-                    </div>
-                  </div>
                   ))}
                 </div>
               )}
@@ -3024,10 +3569,16 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
   // Customer Transactions Page Component
   const CustomerTransactionsPage = () => {
     const [customerTransactions, setCustomerTransactions] = useState<any[]>([]);
+    const [filteredTransactions, setFilteredTransactions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [totalTransactions, setTotalTransactions] = useState(0);
     const [totalPoints, setTotalPoints] = useState(0);
     const [averagePoints, setAveragePoints] = useState(0);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [dateFilter, setDateFilter] = useState('all');
+    const [customStartDate, setCustomStartDate] = useState('');
+    const [customEndDate, setCustomEndDate] = useState('');
+    const [transactionTypeFilter, setTransactionTypeFilter] = useState('all');
 
     const formatDate = (date: Date) => {
       return date.toLocaleDateString('en-US', { 
@@ -3036,6 +3587,63 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
         month: 'long', 
         day: 'numeric' 
       });
+    };
+
+    const applyFilters = (transactions: any[]) => {
+      let filtered = [...transactions];
+
+      // Apply search filter
+      if (searchTerm.trim()) {
+        filtered = filtered.filter(transaction => 
+          transaction.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          transaction.transactionType?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          transaction.outletDisplayName?.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+      }
+
+      // Apply date filter
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      switch (dateFilter) {
+        case 'today':
+          filtered = filtered.filter(transaction => {
+            const transactionDate = new Date(transaction.timestamp);
+            const transactionDay = new Date(transactionDate.getFullYear(), transactionDate.getMonth(), transactionDate.getDate());
+            return transactionDay.getTime() === today.getTime();
+          });
+          break;
+        case 'week':
+          const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+          filtered = filtered.filter(transaction => 
+            transaction.timestamp >= weekAgo
+          );
+          break;
+        case 'month':
+          const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+          filtered = filtered.filter(transaction => 
+            transaction.timestamp >= monthAgo
+          );
+          break;
+        case 'custom':
+          if (customStartDate && customEndDate) {
+            const startDate = new Date(customStartDate);
+            const endDate = new Date(customEndDate + 'T23:59:59');
+            filtered = filtered.filter(transaction => 
+              transaction.timestamp >= startDate && transaction.timestamp <= endDate
+            );
+          }
+          break;
+      }
+
+      // Apply transaction type filter
+      if (transactionTypeFilter !== 'all') {
+        filtered = filtered.filter(transaction => 
+          transaction.transactionType?.toLowerCase() === transactionTypeFilter.toLowerCase()
+        );
+      }
+
+      return filtered;
     };
 
     useEffect(() => {
@@ -3092,6 +3700,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             const avgPts = totalTxns > 0 ? totalPts / totalTxns : 0;
 
             setCustomerTransactions(customerTransactionList);
+            setFilteredTransactions(applyFilters(customerTransactionList));
             setTotalTransactions(totalTxns);
             setTotalPoints(totalPts);
             setAveragePoints(avgPts);
@@ -3108,6 +3717,13 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       const unsubscribe = fetchCustomerTransactions();
       return () => unsubscribe && unsubscribe();
     }, [selectedCustomer, user.uid]);
+
+    // Apply filters when search/filter criteria change
+    useEffect(() => {
+      if (customerTransactions.length > 0) {
+        setFilteredTransactions(applyFilters(customerTransactions));
+      }
+    }, [searchTerm, dateFilter, customStartDate, customEndDate, transactionTypeFilter, customerTransactions]);
 
     if (!selectedCustomer) return null;
 
@@ -3136,7 +3752,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             justifyContent: 'space-between',
             alignItems: 'center',
             maxWidth: '1400px',
-            margin: '0 auto'
+            margin: '0 auto',
+            marginBottom: '1rem'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <button
@@ -3199,6 +3816,160 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             >
               Sign Out
             </button>
+          </div>
+
+          {/* Search and Filter Bar */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            maxWidth: '1400px',
+            margin: '0 auto',
+            gap: '2rem',
+            flexWrap: 'wrap'
+          }}>
+            {/* Search Bar - Left Side */}
+            <div style={{ position: 'relative', flex: '1', minWidth: '300px' }}>
+              <input
+                type="text"
+                placeholder="Search transactions by description, type, or outlet..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem 1rem 0.75rem 2.5rem',
+                  background: 'rgba(255,255,255,0.1)',
+                  color: 'white',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: '12px',
+                  fontSize: '0.9rem',
+                  outline: 'none',
+                  backdropFilter: 'blur(10px)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                }}
+                onFocus={(e) => {
+                  (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.5)';
+                  (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.15)';
+                }}
+                onBlur={(e) => {
+                  (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.3)';
+                  (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.1)';
+                }}
+              />
+              <div style={{
+                position: 'absolute',
+                left: '1rem',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'rgba(255,255,255,0.6)',
+                fontSize: '1rem'
+              }}>
+                🔍
+              </div>
+            </div>
+
+            {/* Filter Controls - Right Side */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+              {/* Date Filter */}
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                style={{
+                  padding: '0.75rem 1rem',
+                  background: 'rgba(255,255,255,0.1)',
+                  color: 'white',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: '12px',
+                  fontSize: '0.9rem',
+                  outline: 'none',
+                  backdropFilter: 'blur(10px)',
+                  cursor: 'pointer',
+                  minWidth: '120px'
+                }}
+              >
+                <option value="all" style={{ background: '#333', color: 'white' }}>All Time</option>
+                <option value="today" style={{ background: '#333', color: 'white' }}>Today</option>
+                <option value="week" style={{ background: '#333', color: 'white' }}>This Week</option>
+                <option value="month" style={{ background: '#333', color: 'white' }}>This Month</option>
+                <option value="custom" style={{ background: '#333', color: 'white' }}>Custom Range</option>
+              </select>
+
+              {/* Transaction Type Filter */}
+              <select
+                value={transactionTypeFilter}
+                onChange={(e) => setTransactionTypeFilter(e.target.value)}
+                style={{
+                  padding: '0.75rem 1rem',
+                  background: 'rgba(255,255,255,0.1)',
+                  color: 'white',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: '12px',
+                  fontSize: '0.9rem',
+                  outline: 'none',
+                  backdropFilter: 'blur(10px)',
+                  cursor: 'pointer',
+                  minWidth: '120px'
+                }}
+              >
+                <option value="all" style={{ background: '#333', color: 'white' }}>All Types</option>
+                <option value="earned" style={{ background: '#333', color: 'white' }}>Earned</option>
+                <option value="redeemed" style={{ background: '#333', color: 'white' }}>Redeemed</option>
+              </select>
+
+              {/* Custom Date Range */}
+              {dateFilter === 'custom' && (
+                <>
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      background: 'rgba(255,255,255,0.1)',
+                      color: 'white',
+                      border: '1px solid rgba(255,255,255,0.3)',
+                      borderRadius: '12px',
+                      fontSize: '0.9rem',
+                      outline: 'none',
+                      backdropFilter: 'blur(10px)',
+                      cursor: 'pointer'
+                    }}
+                  />
+                  <span style={{ color: 'rgba(255,255,255,0.7)' }}>to</span>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      background: 'rgba(255,255,255,0.1)',
+                      color: 'white',
+                      border: '1px solid rgba(255,255,255,0.3)',
+                      borderRadius: '12px',
+                      fontSize: '0.9rem',
+                      outline: 'none',
+                      backdropFilter: 'blur(10px)',
+                      cursor: 'pointer'
+                    }}
+                  />
+                </>
+              )}
+
+              {/* Results Count */}
+              <div style={{
+                padding: '0.75rem 1rem',
+                background: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.3)',
+                borderRadius: '12px',
+                fontSize: '0.9rem',
+                color: 'rgba(255,255,255,0.9)',
+                backdropFilter: 'blur(10px)',
+                minWidth: '80px',
+                textAlign: 'center'
+              }}>
+                {filteredTransactions.length} results
+              </div>
+            </div>
           </div>
         </header>
 
@@ -3298,15 +4069,20 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 }} />
                 <p style={{ color: 'rgba(255,255,255,0.8)', margin: 0 }}>Loading transactions...</p>
               </div>
-            ) : customerTransactions.length === 0 ? (
+            ) : filteredTransactions.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '2rem' }}>
                 <p style={{ color: 'rgba(255,255,255,0.8)', margin: 0, fontSize: '1.1rem' }}>
-                  No transactions found for this customer
+                  {customerTransactions.length === 0 ? 'No transactions found for this customer' : 'No transactions match your search criteria'}
                 </p>
+                {customerTransactions.length > 0 && filteredTransactions.length === 0 && (
+                  <p style={{ color: 'rgba(255,255,255,0.6)', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
+                    Try adjusting your search term or date filters
+                  </p>
+                )}
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {customerTransactions.map((transaction, index) => (
+                {filteredTransactions.map((transaction, index) => (
                   <div key={transaction.id} style={{
                     background: 'rgba(255,255,255,0.1)',
                     padding: '1.5rem',
@@ -3436,18 +4212,37 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               outletNameMap[doc.id] = outlet.name || outlet.outletName || `Outlet ${doc.id}`;
             });
 
-            // Filter customers by outlet
+            // Filter customers by outlet - USE SAME LOGIC AS DASHBOARD OVERVIEW
             let filteredCustomers = snapshot.docs;
             if (selectedOutlet !== 'all') {
               filteredCustomers = snapshot.docs.filter(doc => {
                 const customer = doc.data();
-                const hasVisitedOutlet = customer.visitedOutlets?.includes(selectedOutlet);
+                // Count customers ONLY where this is their LAST VISITED outlet
+                // This ensures each customer is counted in only ONE outlet
+                const lastVisitedOutlet = customer.lastVisitOutletId === selectedOutlet;
                 const isCurrentOutlet = customer.outletId === selectedOutlet;
-                return hasVisitedOutlet || isCurrentOutlet;
+                
+                // If no lastVisitOutletId, fall back to outletId
+                return lastVisitedOutlet || (isCurrentOutlet && !customer.lastVisitOutletId);
               });
             }
 
-            const customersList = filteredCustomers.map(doc => {
+            // Apply phone number deduplication - same logic as dashboard overview
+            const uniquePhoneNumbers = new Set<string>();
+            const deduplicatedCustomers: any[] = [];
+            
+            filteredCustomers.forEach(doc => {
+              const customer = doc.data();
+              const phone = customer.phoneNumber || customer.phone;
+              
+              // Skip customers without phone numbers or duplicates
+              if (!phone || uniquePhoneNumbers.has(phone)) return;
+              
+              uniquePhoneNumbers.add(phone);
+              deduplicatedCustomers.push(doc);
+            });
+
+            const customersList = deduplicatedCustomers.map(doc => {
               const customer = doc.data();
               const name = customer.name || customer.fullName || customer.firstName;
               const phone = customer.phoneNumber || customer.phone;
@@ -3463,7 +4258,28 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 joinDate: joinDate,
                 searchableText: `${name || ''} ${phone || ''}`.toLowerCase()
               };
+            }).sort((a, b) => {
+              // Sort by join date - most recent first
+              if (a.joinDate && b.joinDate) {
+                return b.joinDate.getTime() - a.joinDate.getTime();
+              }
+              // Put customers without join date at the end
+              if (a.joinDate && !b.joinDate) return -1;
+              if (!a.joinDate && b.joinDate) return 1;
+              // If both don't have join date, sort alphabetically by name
+              return (a.displayName || '').localeCompare(b.displayName || '');
             });
+
+            console.log(`🔍 CUSTOMER DETAILS PAGE - ${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet}:`);
+            console.log('📊 Total customer documents before filtering:', snapshot.docs.length);
+            console.log('📊 After outlet filtering:', filteredCustomers.length);
+            console.log('📊 After phone deduplication and sorting:', customersList.length);
+            console.log('📞 Unique phone numbers in details page:', uniquePhoneNumbers.size);
+            console.log('📅 Customers sorted by most recent join date first');
+            if (customersList.length > 0) {
+              console.log('📅 Most recent customer:', customersList[0].displayName, customersList[0].joinDate);
+              console.log('📅 Oldest customer:', customersList[customersList.length - 1].displayName, customersList[customersList.length - 1].joinDate);
+            }
 
             setCustomersData({
               totalCustomers: customersList.length,
@@ -3859,6 +4675,19 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     );
   };
 
+  // Show admin dashboard if requested
+  if (showAdminDashboard && isAuthorizedAdmin) {
+    return (
+      <AdminDashboard 
+        user={user} 
+        onClose={() => {
+          setShowAdminDashboard(false);
+          setCurrentPage('dashboard');
+        }} 
+      />
+    );
+  }
+
   // Render different pages
   if (currentPage === 'signups') {
     return <SignupsDetailsPage />;
@@ -3878,6 +4707,13 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
   
   if (currentPage === 'customers') {
     return selectedCustomer ? <CustomerTransactionsPage /> : <CustomersDetailsPage />;
+  }
+  
+  if (currentPage === 'sms-marketing') {
+            return <CampaignManager user={user} onBack={() => {
+              setCurrentPage('dashboard');
+              setShowAdminDashboard(false);
+            }} />;
   }
   
   if (currentPage === 'outlets') {
@@ -4045,11 +4881,11 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               <div style={{ position: 'relative' }} data-dropdown>
                 <button
                   onClick={() => setDropdownOpen(!dropdownOpen)}
-                  style={{
+                style={{
                     minWidth: '240px',
                     padding: '1rem 1.5rem',
                     background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
-                    color: 'white',
+                  color: 'white',
                     border: '1px solid rgba(255,255,255,0.2)',
                     borderRadius: '20px',
                     cursor: 'pointer',
@@ -4114,9 +4950,9 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                     background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                     backdropFilter: 'blur(20px)',
                     borderRadius: '20px',
-                    border: '1px solid rgba(255,255,255,0.3)',
+                  border: '1px solid rgba(255,255,255,0.3)',
                     boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-                    zIndex: 1000,
+                    zIndex: 9999,
                     overflow: 'hidden',
                     animation: 'dropdownFade 0.3s ease'
                   }}>
@@ -4128,7 +4964,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       style={{
                         padding: '1rem 1.5rem',
                         color: 'white',
-                        cursor: 'pointer',
+                  cursor: 'pointer',
                         fontSize: '1rem',
                         fontWeight: '500',
                         textShadow: '1px 1px 2px rgba(0,0,0,0.3)',
@@ -4143,11 +4979,11 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         (e.target as HTMLDivElement).style.background = selectedOutlet === 'all' ? 'rgba(255,255,255,0.2)' : 'transparent';
                       }}
                     >
-                      All Outlets ({data.outlets})
+                  All Outlets ({data.outlets})
                     </div>
-                    {outlets.map((outlet) => (
+                {outlets.map((outlet) => (
                       <div
-                        key={outlet.id}
+                    key={outlet.id} 
                         onClick={() => {
                           setSelectedOutlet(outlet.id);
                           setDropdownOpen(false);
@@ -4169,11 +5005,11 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         onMouseLeave={(e) => {
                           (e.target as HTMLDivElement).style.background = selectedOutlet === outlet.id ? 'rgba(255,255,255,0.2)' : 'transparent';
                         }}
-                      >
-                        {outlet.name || outlet.outletName || `Outlet ${outlet.id}`}
+                  >
+                    {outlet.name || outlet.outletName || `Outlet ${outlet.id}`}
                       </div>
-                    ))}
-                    {outlets.length === 0 && (
+                ))}
+                {outlets.length === 0 && (
                       <div style={{
                         padding: '1rem 1.5rem',
                         color: 'rgba(255,255,255,0.7)',
@@ -4181,9 +5017,9 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         fontStyle: 'italic',
                         textAlign: 'center'
                       }}>
-                        No outlets found
+                    No outlets found
                       </div>
-                    )}
+                )}
                   </div>
                 )}
               </div>
@@ -4192,7 +5028,12 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Welcome back,</div>
               <div style={{ fontWeight: '600' }}>{user.email}</div>
+              
+
             </div>
+            
+
+            
             <button
               onClick={onLogout}
               style={{
@@ -4460,14 +5301,14 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               <div 
                 onClick={() => handleCardClick('signups')}
                 style={{
-                  background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
-                  color: 'white',
-                  padding: '2.5rem',
-                  borderRadius: '20px',
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  backdropFilter: 'blur(20px)',
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
+                color: 'white',
+                padding: '2.5rem',
+                borderRadius: '20px',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+                position: 'relative',
+                overflow: 'hidden',
+                backdropFilter: 'blur(20px)',
                   border: '1px solid rgba(255,255,255,0.2)',
                   cursor: 'pointer',
                   transition: 'all 0.3s ease'
@@ -4500,14 +5341,14 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               <div 
                 onClick={() => handleCardClick('outlets')}
                 style={{
-                  background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
-                  color: 'white',
-                  padding: '2.5rem',
-                  borderRadius: '20px',
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  backdropFilter: 'blur(20px)',
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
+                color: 'white',
+                padding: '2.5rem',
+                borderRadius: '20px',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+                position: 'relative',
+                overflow: 'hidden',
+                backdropFilter: 'blur(20px)',
                   border: '1px solid rgba(255,255,255,0.2)',
                   cursor: 'pointer',
                   transition: 'all 0.3s ease',
@@ -4534,7 +5375,94 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>Active Outlets</h3>
                 <p style={{ fontSize: '3.5rem', fontWeight: '900', margin: 0 }}>{data.outlets.toLocaleString()}</p>
                 <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>Click to manage outlets →</div>
+                </div>
+              
+              {/* Three-Tier Rewards System Card */}
+              <div 
+              onClick={() => handleCardClick('sms-marketing')}
+              style={{
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
+                color: 'white',
+                padding: '2.5rem',
+                borderRadius: '20px',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+                position: 'relative',
+                overflow: 'hidden',
+                backdropFilter: 'blur(20px)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                transform: 'translateY(0)'
+              }}
+              onMouseEnter={(e) => {
+                (e.target as HTMLElement).style.transform = 'translateY(-5px)';
+                (e.target as HTMLElement).style.boxShadow = '0 12px 40px rgba(0,0,0,0.3)';
+              }}
+              onMouseLeave={(e) => {
+                (e.target as HTMLElement).style.transform = 'translateY(0)';
+                (e.target as HTMLElement).style.boxShadow = '0 8px 32px rgba(0,0,0,0.2)';
+              }}
+            >
+                <div style={{ 
+                  position: 'absolute', 
+                  top: '20px', 
+                  right: '20px', 
+                  opacity: 0.4,
+                  transform: 'scale(1.2)',
+                  display: 'flex',
+                  gap: '3px'
+                }}>
+                  <div style={{ fontSize: '1.2rem' }}>🟢</div>
+                  <div style={{ fontSize: '1.2rem' }}>🔵</div>
+                  <div style={{ fontSize: '1.2rem' }}>🟡</div>
+                </div>
+                <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>Rewards System</h3>
+                <p style={{ fontSize: '2.5rem', fontWeight: '900', margin: 0, color: '#10B981' }}>3-TIER</p>
+                <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>Campaigns • Promotions • Points →</div>
               </div>
+
+              {/* Admin Panel Card - Only for Authorized Users */}
+              {isAuthorizedAdmin && (
+                <div 
+                  onClick={() => setShowAdminDashboard(true)}
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(255,215,0,0.4) 0%, rgba(255,165,0,0.3) 100%)',
+                    color: 'white',
+                    padding: '2.5rem',
+                    borderRadius: '20px',
+                    boxShadow: '0 8px 32px rgba(255,215,0,0.3)',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    backdropFilter: 'blur(20px)',
+                    border: '2px solid rgba(255,215,0,0.5)',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    transform: 'translateY(0)'
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.target as HTMLElement).style.transform = 'translateY(-5px)';
+                    (e.target as HTMLElement).style.boxShadow = '0 12px 40px rgba(255,215,0,0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.target as HTMLElement).style.transform = 'translateY(0)';
+                    (e.target as HTMLElement).style.boxShadow = '0 8px 32px rgba(255,215,0,0.3)';
+                  }}
+                >
+                  <div style={{ 
+                    position: 'absolute', 
+                    top: '20px', 
+                    right: '20px', 
+                    opacity: 0.4,
+                    transform: 'scale(1.5)',
+                    fontSize: '2rem'
+                  }}>
+                    👑
+                  </div>
+                  <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>Admin Panel</h3>
+                  <p style={{ fontSize: '2.5rem', fontWeight: '900', margin: 0, color: '#FFD700' }}>ADMIN</p>
+                  <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>Manage users & settings →</div>
+                </div>
+              )}
             </div>
           </>
         )}

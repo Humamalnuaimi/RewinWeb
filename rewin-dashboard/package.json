@@ -11,17 +11,21 @@
   },
   "dependencies": {
     "@types/chart.js": "^2.9.41",
+    "@types/papaparse": "^5.3.16",
     "@types/react-router-dom": "^5.3.3",
     "@types/recharts": "^1.8.29",
     "chart.js": "^4.5.0",
     "date-fns": "^4.1.0",
+    "dotenv": "^17.2.0",
     "firebase": "^11.10.0",
     "lucide-react": "^0.525.0",
+    "papaparse": "^5.5.3",
     "react": "^19.1.0",
     "react-chartjs-2": "^5.3.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.6.3",
-    "recharts": "^3.1.0"
+    "recharts": "^3.1.0",
+    "twilio": "^5.7.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",
