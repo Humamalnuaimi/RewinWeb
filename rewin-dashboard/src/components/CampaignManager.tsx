@@ -255,37 +255,8 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
       console.log('🎯 Available outlets:', outletsList.map(o => `${o.id}: ${o.name}`));
     } catch (error) {
       console.error('Error loading outlets:', error);
-      // 🚀 Fallback: Create default outlets if none exist
-      console.log('🔧 Creating default outlets...');
-      await createDefaultOutlets();
-    }
-  };
-
-  // 🚀 Create default outlets if none exist
-  const createDefaultOutlets = async () => {
-    if (!user?.uid) return;
-    
-    const defaultOutlets = [
-      { name: 'Main Location', id: 'main_location' },
-      { name: 'Downtown Store', id: 'downtown_store' },
-      { name: 'Mall Branch', id: 'mall_branch' },
-      { name: 'Airport Branch', id: 'airport_branch' }
-    ];
-
-    try {
-      for (const outlet of defaultOutlets) {
-        await addDoc(collection(firestore, `users/${user.uid}/outlets`), {
-          name: outlet.name,
-          outletName: outlet.name,
-          createdAt: Timestamp.now(),
-          isActive: true
-        });
-      }
-      console.log('✅ Created 4 default outlets');
-      // Reload outlets after creation
-      loadOutlets();
-    } catch (error) {
-      console.error('Error creating default outlets:', error);
+      // Just show the error, don't create any data automatically
+      setOutlets([]);
     }
   };
 
