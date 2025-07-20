@@ -32,6 +32,8 @@ interface Campaign {
   businessId?: string; // 🔥 CRITICAL: Business ownership
   targetAudience: 'ALL' | 'NEW_CUSTOMERS' | 'RETURNING';
   targetOutlets: string[];
+  targetOutletId: string; // 🎯 NEW: Single outlet targeting for mobile app
+  targetOutletName: string; // 🎯 NEW: Outlet display name for mobile app
   createdAt?: any;
   type: 'CAMPAIGN';
 }
@@ -47,6 +49,8 @@ interface Promotion {
   isActive: boolean;
   businessId?: string; // 🔥 CRITICAL: Business ownership
   targetOutlets: string[];
+  targetOutletId: string; // 🎯 NEW: Single outlet targeting for mobile app
+  targetOutletName: string; // 🎯 NEW: Outlet display name for mobile app
   createdAt?: any;
   type: 'PROMOTION';
 }
@@ -99,6 +103,8 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
     isActive: true,
     targetAudience: 'ALL',
     targetOutlets: [],
+    targetOutletId: '',
+    targetOutletName: '',
     type: 'CAMPAIGN'
   });
 
@@ -110,6 +116,8 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
     endDate: '',
     isActive: true,
     targetOutlets: [],
+    targetOutletId: '',
+    targetOutletName: '',
     type: 'PROMOTION'
   });
 
@@ -176,9 +184,15 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
     if (businessId) {
       loadCampaigns();
       loadPromotions();
-      loadOutlets();
     }
   }, [businessId]);
+
+  // Load outlets when user is available (outlets are stored under user path)
+  useEffect(() => {
+    if (user?.uid) {
+      loadOutlets();
+    }
+  }, [user?.uid]);
 
   // Load campaigns from Firebase (business-specific collection) 🔒
   const loadCampaigns = () => {
@@ -220,24 +234,58 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
     });
   };
 
-  // Load outlets for targeting (business-specific) 🔒
+  // Load outlets for targeting (corrected path) 🔒
   const loadOutlets = async () => {
-    if (!businessId) return;
+    if (!user?.uid) return;
     
     try {
-      const outletsRef = collection(firestore, `businesses/${businessId}/outlets`);
+      // ✅ FIXED: Use the correct path where outlets are actually stored
+      const outletsRef = collection(firestore, `users/${user.uid}/outlets`);
       const snapshot = await getDocs(outletsRef);
       const outletsList: any[] = [];
       snapshot.forEach((doc) => {
         outletsList.push({
           id: doc.id,
+          name: doc.data().name || doc.data().outletName || `Outlet ${doc.id}`,
           ...doc.data()
         });
       });
       setOutlets(outletsList);
-      console.log('🏪 Loaded', outletsList.length, 'outlets for business:', businessId);
+      console.log('🏪 ✅ FIXED: Loaded', outletsList.length, 'outlets for user:', user.uid);
+      console.log('🎯 Available outlets:', outletsList.map(o => `${o.id}: ${o.name}`));
     } catch (error) {
       console.error('Error loading outlets:', error);
+      // 🚀 Fallback: Create default outlets if none exist
+      console.log('🔧 Creating default outlets...');
+      await createDefaultOutlets();
+    }
+  };
+
+  // 🚀 Create default outlets if none exist
+  const createDefaultOutlets = async () => {
+    if (!user?.uid) return;
+    
+    const defaultOutlets = [
+      { name: 'Main Location', id: 'main_location' },
+      { name: 'Downtown Store', id: 'downtown_store' },
+      { name: 'Mall Branch', id: 'mall_branch' },
+      { name: 'Airport Branch', id: 'airport_branch' }
+    ];
+
+    try {
+      for (const outlet of defaultOutlets) {
+        await addDoc(collection(firestore, `users/${user.uid}/outlets`), {
+          name: outlet.name,
+          outletName: outlet.name,
+          createdAt: Timestamp.now(),
+          isActive: true
+        });
+      }
+      console.log('✅ Created 4 default outlets');
+      // Reload outlets after creation
+      loadOutlets();
+    } catch (error) {
+      console.error('Error creating default outlets:', error);
     }
   };
 
@@ -245,6 +293,12 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
   const createCampaign = async () => {
     if (!businessId) {
       alert('❌ Business context not loaded. Please refresh the page.');
+      return;
+    }
+
+    // 🎯 NEW: Validate required outlet selection for mobile app
+    if (!campaignForm.targetOutletId || !campaignForm.targetOutletName) {
+      alert('❌ Please select a target outlet. This is required for the mobile app.');
       return;
     }
 
@@ -260,7 +314,9 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
         isActive: true,
         businessId: businessId, // 🔥 CRITICAL: Business ownership
         targetAudience: campaignForm.targetAudience,
-        targetOutlets: campaignForm.targetOutlets,
+        targetOutlets: campaignForm.targetOutlets, // Keep for backward compatibility
+        targetOutletId: campaignForm.targetOutletId, // 🎯 NEW: Single outlet targeting for mobile app
+        targetOutletName: campaignForm.targetOutletName, // 🎯 NEW: Outlet display name for mobile app
         createdAt: Timestamp.now(),
         type: "CAMPAIGN"
       };
@@ -284,6 +340,8 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
         isActive: true,
         targetAudience: 'ALL',
         targetOutlets: [],
+        targetOutletId: '',
+        targetOutletName: '',
         type: 'CAMPAIGN'
       });
       setShowCreateCampaign(false);
@@ -304,6 +362,12 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
       return;
     }
 
+    // 🎯 NEW: Validate required outlet selection for mobile app
+    if (!promotionForm.targetOutletId || !promotionForm.targetOutletName) {
+      alert('❌ Please select a target outlet. This is required for the mobile app.');
+      return;
+    }
+
     setLoading(true);
     try {
       const promotionData = {
@@ -315,7 +379,9 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
         endDate: Timestamp.fromDate(new Date(promotionForm.endDate)),
         isActive: true,
         businessId: businessId, // 🔥 CRITICAL: Business ownership
-        targetOutlets: promotionForm.targetOutlets, // Empty = all outlets
+        targetOutlets: promotionForm.targetOutlets, // Keep for backward compatibility
+        targetOutletId: promotionForm.targetOutletId, // 🎯 NEW: Single outlet targeting for mobile app
+        targetOutletName: promotionForm.targetOutletName, // 🎯 NEW: Outlet display name for mobile app
         createdAt: Timestamp.now(),
         type: "PROMOTION"
       };
@@ -336,6 +402,8 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
         endDate: '',
         isActive: true,
         targetOutlets: [],
+        targetOutletId: '',
+        targetOutletName: '',
         type: 'PROMOTION'
       });
       setShowCreatePromotion(false);
@@ -1061,6 +1129,53 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
               </select>
             </div>
 
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#f1f5f9' }}>
+                Target Outlet * 🎯 (Required for Mobile App)
+              </label>
+              <p style={{ 
+                fontSize: '0.8rem', 
+                color: '#c4b5fd', 
+                margin: '0 0 0.5rem 0',
+                fontStyle: 'italic'
+              }}>
+                Select which outlet this campaign applies to
+              </p>
+              <select
+                value={campaignForm.targetOutletId ? `${campaignForm.targetOutletId}|${campaignForm.targetOutletName}` : ''}
+                onChange={(e) => {
+                  const [outletId, outletName] = e.target.value.split('|');
+                  setCampaignForm(prev => ({ 
+                    ...prev, 
+                    targetOutletId: outletId || '', 
+                    targetOutletName: outletName || '' 
+                  }));
+                }}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #a855f7',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  backgroundColor: 'rgba(30, 41, 59, 0.8)',
+                  color: '#f1f5f9',
+                  outline: 'none'
+                }}
+                required
+              >
+                <option value="">Select Target Outlet</option>
+                {outlets.length > 0 ? (
+                  outlets.map((outlet) => (
+                    <option key={outlet.id} value={`${outlet.id}|${outlet.name || outlet.outletName || 'Unknown Outlet'}`}>
+                      {outlet.name || outlet.outletName || 'Unknown Outlet'}
+                    </option>
+                  ))
+                ) : (
+                  <option value="" disabled>No outlets available</option>
+                )}
+              </select>
+            </div>
+
             <div style={{ marginBottom: '2rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#f1f5f9' }}>
                 Target Outlets 🔒 (leave empty for all business outlets)
@@ -1295,6 +1410,53 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
                   }}
                 />
               </div>
+            </div>
+
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#f1f5f9' }}>
+                Target Outlet * 🎯 (Required for Mobile App)
+              </label>
+              <p style={{ 
+                fontSize: '0.8rem', 
+                color: '#c4b5fd', 
+                margin: '0 0 0.5rem 0',
+                fontStyle: 'italic'
+              }}>
+                Select which outlet this promotion applies to
+              </p>
+              <select
+                value={promotionForm.targetOutletId ? `${promotionForm.targetOutletId}|${promotionForm.targetOutletName}` : ''}
+                onChange={(e) => {
+                  const [outletId, outletName] = e.target.value.split('|');
+                  setPromotionForm(prev => ({ 
+                    ...prev, 
+                    targetOutletId: outletId || '', 
+                    targetOutletName: outletName || '' 
+                  }));
+                }}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #a855f7',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  backgroundColor: 'rgba(30, 41, 59, 0.8)',
+                  color: '#f1f5f9',
+                  outline: 'none'
+                }}
+                required
+              >
+                <option value="">Select Target Outlet</option>
+                {outlets.length > 0 ? (
+                  outlets.map((outlet) => (
+                    <option key={outlet.id} value={`${outlet.id}|${outlet.name || outlet.outletName || 'Unknown Outlet'}`}>
+                      {outlet.name || outlet.outletName || 'Unknown Outlet'}
+                    </option>
+                  ))
+                ) : (
+                  <option value="" disabled>No outlets available</option>
+                )}
+              </select>
             </div>
 
             <div style={{ marginBottom: '2rem' }}>
