@@ -459,9 +459,11 @@ Check: /businesses/${businessId}/promotions/${promotionRef.id}
 
           // Save to customer's promotions (using the path where mobile app expects it)
           const customerPromotionRef = doc(
-            collection(firestore, 'users', user.uid, 'customers', customerId, 'promotions')
+            collection(firestore, 'businesses', businessId, 'customerPromotions', customerId, 'promotions')
           );
           batch.set(customerPromotionRef, campaignPromotion);
+          
+          console.log(`💾 Saving promotion to: businesses/${businessId}/customerPromotions/${customerId}/promotions/`);
         }
       });
 
