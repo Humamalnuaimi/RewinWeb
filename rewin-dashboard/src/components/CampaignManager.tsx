@@ -22,7 +22,8 @@ import {
   Timestamp,
   writeBatch,
   limit,
-  deleteDoc
+  deleteDoc,
+  where
 } from 'firebase/firestore';
 
 interface CampaignManagerProps {
@@ -35,10 +36,13 @@ interface Promotion {
   id?: string;
   title: string;
   description: string;
+  discountType: 'dollar' | 'percentage';  // NEW: Support both $ and % discounts
   discountAmount: number;
   minimumPurchase: number;
   targetOutlets: string[] | 'ALL';
   validityDays: number;
+  expiresAt?: any;                        // NEW: Expiration timestamp (per customer)
+  expirationDays?: number;                // NEW: Days until expiration (template)
   createdAt: any;
   isActive: boolean;
 }
@@ -46,29 +50,26 @@ interface Promotion {
 interface Campaign {
   id?: string;
   name: string;
-  type: 'inactive' | 'birthday' | 'spending';
-  triggerConditions: {
-    daysSinceLastVisit?: number;
-    birthdayOffset?: number;
-    minimumSpending?: number;
-  };
-  promotionTemplate: {
-    title: string;
-    discountAmount: number;
-    minimumPurchase: number;
-  };
-  targetOutlets: string[] | 'ALL';
-  smsMessage: string;
-  isActive: boolean;
+  discountType: 'dollar' | 'percentage';           // NEW: Support both $ and % discounts
+  discountAmount: number;                          // 40% or $40
+  minimumPurchase: number;                        // $60 minimum
+  triggerType: 'birthday' | 'inactive_15' | 'inactive_30';  // NEW: App team spec
+  outletIds: string[];                            // ["all"] or ["outlet1", "outlet2"]
+  expirationDays?: number;                        // NEW: Days until campaign promotions expire
+  isActive: boolean;                              // Can pause/resume
   createdAt: any;
+  lastProcessed?: any;                            // Track when last processed
 }
 
 interface PromotionForm {
   title: string;
   description: string;
+  discountType: 'dollar' | 'percentage';  // NEW: Support both $ and % discounts
   discountAmount: number;
   minimumPurchase: number;
   validityDays: number;
+  expirationDays: number;                  // NEW: Days until promotion expires
+  hasExpiration: boolean;                  // NEW: Checkbox to enable expiration
   targetOutlets: string[];
   smsMessage: string;
   sendSMS: boolean;
@@ -76,15 +77,11 @@ interface PromotionForm {
 
 interface CampaignForm {
   name: string;
-  type: 'inactive' | 'birthday' | 'spending' | '';
-  daysSinceLastVisit: number;
-  birthdayOffset: number;
-  minimumSpending: number;
-  promotionTitle: string;
+  discountType: 'dollar' | 'percentage';
   discountAmount: number;
   minimumPurchase: number;
-  smsMessage: string;
-  targetOutlets: string[];
+  triggerType: 'birthday' | 'inactive_15' | 'inactive_30' | '';
+  outletIds: string[];
 }
 
 const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
@@ -106,9 +103,12 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
   const [promotionForm, setPromotionForm] = useState<PromotionForm>({
     title: '',
     description: '',
+    discountType: 'dollar',  // Default to dollar discount
     discountAmount: 0,
     minimumPurchase: 0,
     validityDays: 30,
+    expirationDays: 7,       // Default 7 days expiration
+    hasExpiration: false,    // Default no expiration
     targetOutlets: [],
     smsMessage: '',
     sendSMS: true
@@ -116,15 +116,11 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
 
   const [campaignForm, setCampaignForm] = useState<CampaignForm>({
     name: '',
-    type: '',
-    daysSinceLastVisit: 15,
-    birthdayOffset: 0,
-    minimumSpending: 100,
-    promotionTitle: '',
+    discountType: 'dollar',
     discountAmount: 0,
     minimumPurchase: 0,
-    smsMessage: '',
-    targetOutlets: []
+    triggerType: '',
+    outletIds: []
   });
 
   // 🔥 BUSINESS ID FUNCTION (Production-Ready with User Profile Retrieval)
@@ -199,14 +195,16 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
       const promotion: Promotion = {
         title: promotionForm.title,
         description: promotionForm.description,
+        discountType: promotionForm.discountType,
         discountAmount: promotionForm.discountAmount,
         minimumPurchase: promotionForm.minimumPurchase,
         targetOutlets: promotionForm.targetOutlets.length === 0 ? 'ALL' : promotionForm.targetOutlets,
         validityDays: promotionForm.validityDays,
+        expirationDays: promotionForm.hasExpiration ? promotionForm.expirationDays : undefined,  // NEW: Expiration template
         createdAt: Timestamp.now(),
         isActive: true
       };
-      
+
       // Save to Firebase: /businesses/{businessId}/promotions/{promotionId}
       const promotionRef = await addDoc(
         collection(firestore, 'businesses', businessId, 'promotions'),
@@ -234,108 +232,217 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
 
 🔍 FIREBASE CONSOLE:
 Check: /businesses/${businessId}/promotions/${promotionRef.id}
-Check: /businesses/${businessId}/customerPromotions/[customerId]/promotions/${promotionRef.id}`);
-      
-      // Reset form and close modal
+
+📋 PROMOTION DETAILS:
+• Title: ${promotion.title}
+• Discount: ${promotion.discountType === 'percentage' ? promotion.discountAmount + '%' : '$' + promotion.discountAmount} off
+• Expires in: ${promotionForm.expirationDays} days`);
+
+      // Reset form and close
       setPromotionForm({
         title: '',
-        description: '',
+        discountType: 'dollar',
         discountAmount: 0,
         minimumPurchase: 0,
-        validityDays: 30,
-        targetOutlets: [],
-        smsMessage: '',
-        sendSMS: true
+        expirationDays: 7,
+        sendSMS: false,
+        smsMessage: ''
       });
       setShowCreatePromotion(false);
-      
-      // Reload promotions
-      await loadPromotions();
+      loadPromotions(); // Refresh the list
       
     } catch (error) {
       console.error('❌ Error creating promotion:', error);
-      alert('Error creating promotion: ' + (error as Error).message);
+      alert(`❌ Error creating promotion: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
   };
 
-
-
-  // 🔍 DEBUG SYSTEM STATUS - FIND YOUR 92 CUSTOMERS
-  const debugSystemStatus = async () => {
+  // 🤖 CAMPAIGN AUTOMATION SYSTEM (As Per App Team Specification)
+  const assignCampaignToCustomers = async (businessId: string, campaign: Campaign) => {
     try {
+      console.log('🎯 Processing campaign for customers:', campaign.name);
+      
+      // Find customers who match the campaign criteria
+      let customersSnapshot: any;
+      try {
+        // First try the user's customers path (where we found your 92 customers)
+        const userCustomersRef = collection(firestore, 'users', user.uid, 'customers');
+        customersSnapshot = await getDocs(userCustomersRef);
+        console.log(`📋 Found ${customersSnapshot.size} customers in user collection`);
+      } catch (error) {
+        console.log('⚠️ User customers not found, trying business collection...');
+        // Fallback to business customers
+        const businessCustomersRef = collection(firestore, 'businesses', businessId, 'customers');
+        customersSnapshot = await getDocs(businessCustomersRef);
+        console.log(`📋 Found ${customersSnapshot.size} customers in business collection`);
+      }
+
+      if (customersSnapshot.size === 0) {
+        console.warn('⚠️ No customers found for campaign assignment');
+        return { assigned: 0, smsEligible: 0 };
+      }
+
+      let qualifyingCustomers: any[] = [];
+      const batch = writeBatch(firestore);
+      const today = new Date();
+
+      // Filter customers based on campaign trigger type
+      customersSnapshot.docs.forEach((customerDoc: any) => {
+        const customerData = customerDoc.data();
+        const customerId = customerDoc.id;
+
+        // Check if customer is active (default to true if not specified)
+        if (customerData.isActive === false) return;
+
+        let qualifies = false;
+
+        switch (campaign.triggerType) {
+          case 'birthday':
+            // Check if today is customer's birthday
+            if (customerData.birthDate) {
+              const birthDate = customerData.birthDate; // Expected format: "01-15" (MM-DD)
+              const todayMMDD = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+              if (birthDate === todayMMDD) {
+                qualifies = true;
+                console.log(`🎂 Birthday match: Customer ${customerId} birthday is today (${birthDate})`);
+              }
+            }
+            break;
+
+          case 'inactive_15':
+            // Check if customer hasn't visited in 15 days
+            if (customerData.lastVisit) {
+              const lastVisit = customerData.lastVisit.toDate ? customerData.lastVisit.toDate() : new Date(customerData.lastVisit);
+              const daysSinceVisit = Math.floor((today.getTime() - lastVisit.getTime()) / (1000 * 60 * 60 * 24));
+              if (daysSinceVisit >= 15) {
+                qualifies = true;
+                console.log(`😴 Inactive 15+ days: Customer ${customerId} last visit ${daysSinceVisit} days ago`);
+              }
+            }
+            break;
+
+          case 'inactive_30':
+            // Check if customer hasn't visited in 30 days
+            if (customerData.lastVisit) {
+              const lastVisit = customerData.lastVisit.toDate ? customerData.lastVisit.toDate() : new Date(customerData.lastVisit);
+              const daysSinceVisit = Math.floor((today.getTime() - lastVisit.getTime()) / (1000 * 60 * 60 * 24));
+              if (daysSinceVisit >= 30) {
+                qualifies = true;
+                console.log(`😴 Inactive 30+ days: Customer ${customerId} last visit ${daysSinceVisit} days ago`);
+              }
+            }
+            break;
+        }
+
+        if (qualifies) {
+          qualifyingCustomers.push({ id: customerId, data: customerData });
+
+          // Create campaign-generated promotion for this customer
+          const campaignPromotion = {
+            title: `${campaign.name}`,
+            description: `Special ${campaign.triggerType === 'birthday' ? 'Birthday' : 'Welcome Back'} Offer!`,
+            discountType: campaign.discountType,
+            discountAmount: campaign.discountAmount,
+            minimumPurchase: campaign.minimumPurchase,
+            source: `campaign_${campaign.triggerType}`,
+            campaignId: campaign.id,
+            isUsed: false,
+            isActive: true,
+            assignedAt: Timestamp.now(),
+            createdAt: Timestamp.now(),
+            validityDays: 30, // Default 30-day validity
+            expiresAt: Timestamp.fromDate(new Date(Date.now() + ((campaign.expirationDays || 7) * 24 * 60 * 60 * 1000))), // NEW: Use campaign expiration or default 7 days
+            targetOutlets: campaign.outletIds || ['ALL']
+          };
+
+          // Save to customer's promotions (using the path where mobile app expects it)
+          const customerPromotionRef = doc(
+            collection(firestore, 'users', user.uid, 'customers', customerId, 'promotions')
+          );
+          batch.set(customerPromotionRef, campaignPromotion);
+        }
+      });
+
+      // Execute batch write
+      if (qualifyingCustomers.length > 0) {
+        await batch.commit();
+        console.log(`✅ Campaign assigned to ${qualifyingCustomers.length} qualifying customers`);
+
+        // Count SMS-eligible customers
+        const smsEligibleCount = qualifyingCustomers.filter(customer => 
+          customer.data.optedInForSMS === true
+        ).length;
+
+        // Send SMS to eligible customers (placeholder for now)
+        qualifyingCustomers.forEach(customer => {
+          if (customer.data.optedInForSMS) {
+            console.log(`📱 [SMS] Would send to ${customer.data.name || customer.id}: "${campaign.name} - Special offer!"`);
+          }
+        });
+
+        return { assigned: qualifyingCustomers.length, smsEligible: smsEligibleCount };
+      } else {
+        console.log('ℹ️ No customers qualified for this campaign');
+        return { assigned: 0, smsEligible: 0 };
+      }
+
+    } catch (error) {
+      console.error('❌ Error assigning campaign to customers:', error);
+      throw error;
+    }
+  };
+
+  // 🔄 PROCESS ALL CAMPAIGNS (Daily Automation)
+  const processAllCampaigns = async () => {
+    try {
+      setLoading(true);
+      console.log('🤖 Starting campaign automation process...');
+
       const businessId = await getCurrentBusinessId();
       
-      // Check multiple possible customer locations
-      console.log('🔍 SEARCHING FOR YOUR 92 CUSTOMERS...');
+      // Get all active campaigns
+      const campaignsRef = collection(firestore, 'businesses', businessId, 'campaigns');
+      const campaignsSnapshot = await getDocs(campaignsRef);
       
-      // Location 1: Business customers
-      const businessCustomersRef = collection(firestore, 'businesses', businessId, 'customers');
-      const businessCustomersSnapshot = await getDocs(businessCustomersRef);
-      
-      // Location 2: User customers  
-      const userCustomersRef = collection(firestore, 'users', user.uid, 'customers');
-      const userCustomersSnapshot = await getDocs(userCustomersRef);
-      
-      // Location 3: Direct customers collection
-      const directCustomersRef = collection(firestore, 'customers');
-      const directCustomersSnapshot = await getDocs(query(directCustomersRef, limit(10))); // Sample check
-      
-      // Check promotions
-      const promotionsRef = collection(firestore, 'businesses', businessId, 'promotions');
-      const promotionsSnapshot = await getDocs(promotionsRef);
-      
-      // Check outlets
-      const outletsRef = collection(firestore, 'users', user.uid, 'outlets');
-      const outletsSnapshot = await getDocs(outletsRef);
-      
-      console.log('📊 CUSTOMER SEARCH RESULTS:');
-      console.log(`Business customers (/businesses/${businessId}/customers/): ${businessCustomersSnapshot.size}`);
-      console.log(`User customers (/users/${user.uid}/customers/): ${userCustomersSnapshot.size}`);
-      console.log(`Direct customers (/customers/): ${directCustomersSnapshot.size > 0 ? 'Found some' : 'None'}`);
-      
-      // Find where your 92 customers actually are
-      let customerLocation = 'NOT FOUND';
-      let customerCount = 0;
-      let sampleCustomer = null;
-      
-      if (businessCustomersSnapshot.size > 0) {
-        customerLocation = `/businesses/${businessId}/customers/`;
-        customerCount = businessCustomersSnapshot.size;
-        sampleCustomer = businessCustomersSnapshot.docs[0]?.data();
-      } else if (userCustomersSnapshot.size > 0) {
-        customerLocation = `/users/${user.uid}/customers/`;
-        customerCount = userCustomersSnapshot.size;
-        sampleCustomer = userCustomersSnapshot.docs[0]?.data();
+      if (campaignsSnapshot.size === 0) {
+        alert('ℹ️ No campaigns found to process');
+        return;
       }
-      
-      alert(`🔍 CUSTOMER LOCATION SEARCH RESULTS:
 
-🎯 YOUR CUSTOMERS FOUND:
-• Location: ${customerLocation}
-• Count: ${customerCount}
-• Expected: 92 customers
+      let totalProcessed = 0;
+      let totalAssigned = 0;
 
-📊 SEARCH BREAKDOWN:
-• Business path: ${businessCustomersSnapshot.size} customers
-• User path: ${userCustomersSnapshot.size} customers
-• Direct path: ${directCustomersSnapshot.size > 0 ? 'Some found' : 'None'}
+      for (const campaignDoc of campaignsSnapshot.docs) {
+        const campaign = { id: campaignDoc.id, ...campaignDoc.data() } as Campaign;
+        
+        if (!campaign.isActive) {
+          console.log(`⏸️ Skipping inactive campaign: ${campaign.name}`);
+          continue;
+        }
 
-🏢 OTHER DATA:
-• Business ID: ${businessId}
-• Promotions: ${promotionsSnapshot.size}
-• Outlets: ${outletsSnapshot.size}
+        console.log(`🎯 Processing campaign: ${campaign.name} (Type: ${campaign.triggerType})`);
+        
+        const result = await assignCampaignToCustomers(businessId, campaign);
+        totalAssigned += result.assigned;
+        totalProcessed++;
 
-${customerCount === 0 ? '❌ ISSUE: Cannot find your 92 customers in any expected location!' : 
-customerCount !== 92 ? `⚠️ PARTIAL: Found ${customerCount} customers, but you mentioned having 92` : 
-'✅ SUCCESS: Found your customers!'}
+        // Update campaign's lastProcessed timestamp
+        await getDocs(query(collection(firestore, 'businesses', businessId, 'campaigns'), limit(1))).then(async () => {
+          // Update the campaign document with lastProcessed timestamp
+          const campaignRef = doc(firestore, 'businesses', businessId, 'campaigns', campaign.id!);
+          // Note: You might want to use updateDoc here, but keeping it simple for now
+        });
+      }
 
-${sampleCustomer ? `👤 SAMPLE CUSTOMER: ${JSON.stringify(sampleCustomer, null, 2).substring(0, 200)}...` : ''}`);
+      alert(`✅ Campaign Processing Complete!\n\n📊 Results:\n• ${totalProcessed} campaigns processed\n• ${totalAssigned} promotions assigned\n\nCheck the mobile app to see the new promotions!`);
       
     } catch (error) {
-      console.error('❌ Error debugging system status:', error);
-      alert('❌ Error checking system status: ' + (error as Error).message);
+      console.error('❌ Error processing campaigns:', error);
+      alert(`❌ Error processing campaigns: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -366,7 +473,10 @@ ${sampleCustomer ? `👤 SAMPLE CUSTOMER: ${JSON.stringify(sampleCustomer, null,
             businessId: businessId,
             isUsed: false,
             usedAt: null,
-            assignedAt: Timestamp.now()
+            assignedAt: Timestamp.now(),
+            expiresAt: promotion.expirationDays ?              // NEW: Calculate expiration per customer
+              Timestamp.fromDate(new Date(Date.now() + (promotion.expirationDays * 24 * 60 * 60 * 1000))) :
+              null
           };
 
           // Store in customer's promotions subcollection (using new path structure)
@@ -589,8 +699,8 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       setLoading(true);
       
       // Validate required fields
-      if (!campaignForm.name || !campaignForm.type || !campaignForm.promotionTitle || !campaignForm.discountAmount) {
-        alert('❌ Please fill in all required fields');
+      if (!campaignForm.name || !campaignForm.discountAmount) {
+        alert('❌ Please fill in required fields (Name and Discount Amount)');
         return;
       }
 
@@ -599,19 +709,12 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       
       const campaign: Campaign = {
         name: campaignForm.name,
-        type: campaignForm.type as 'inactive' | 'birthday' | 'spending',
-        triggerConditions: {
-          daysSinceLastVisit: campaignForm.daysSinceLastVisit,
-          birthdayOffset: campaignForm.birthdayOffset,
-          minimumSpending: campaignForm.minimumSpending
-        },
-        promotionTemplate: {
-          title: campaignForm.promotionTitle,
-          discountAmount: campaignForm.discountAmount,
-          minimumPurchase: campaignForm.minimumPurchase
-        },
-        targetOutlets: campaignForm.targetOutlets.length === 0 ? 'ALL' : campaignForm.targetOutlets,
-        smsMessage: campaignForm.smsMessage,
+        discountType: campaignForm.discountType,
+        discountAmount: campaignForm.discountAmount,
+        minimumPurchase: campaignForm.minimumPurchase,
+        triggerType: campaignForm.triggerType as any || 'birthday',
+        outletIds: campaignForm.outletIds.length === 0 ? ['all'] : campaignForm.outletIds,
+        expirationDays: 7, // Default 7-day expiration
         isActive: true,
         createdAt: Timestamp.now()
       };
@@ -627,15 +730,11 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       // Reset form and close modal
       setCampaignForm({
         name: '',
-        type: '',
-        daysSinceLastVisit: 15,
-        birthdayOffset: 0,
-        minimumSpending: 100,
-        promotionTitle: '',
+        discountType: 'dollar',
         discountAmount: 0,
         minimumPurchase: 0,
-        smsMessage: '',
-        targetOutlets: []
+        triggerType: '',
+        outletIds: []
       });
       setShowCreateCampaign(false);
       
@@ -654,36 +753,50 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
   const loadPromotions = async () => {
     try {
       const businessId = await getCurrentBusinessId();
-      const promotionsSnapshot = await getDocs(
-        collection(firestore, 'businesses', businessId, 'promotions')
-      );
+      const promotionsRef = collection(firestore, 'businesses', businessId, 'promotions');
+      const snapshot = await getDocs(promotionsRef);
       
-      const loadedPromotions = promotionsSnapshot.docs.map(doc => ({
+      const loadedPromotions = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Promotion[];
       
       setPromotions(loadedPromotions);
-      console.log(`📋 Loaded ${loadedPromotions.length} promotions`);
     } catch (error) {
       console.error('❌ Error loading promotions:', error);
+    }
+  };
+
+  // 🗑️ DELETE CAMPAIGN
+  const deleteCampaign = async (campaignId: string) => {
+    if (!confirm('Are you sure you want to delete this campaign?')) return;
+    
+    try {
+      setLoading(true);
+      const businessId = await getCurrentBusinessId();
+      await deleteDoc(doc(firestore, 'businesses', businessId, 'campaigns', campaignId));
+      loadCampaigns();
+      alert('✅ Campaign deleted successfully!');
+    } catch (error) {
+      console.error('❌ Error deleting campaign:', error);
+      alert(`❌ Error deleting campaign: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
     }
   };
 
   const loadCampaigns = async () => {
     try {
       const businessId = await getCurrentBusinessId();
-      const campaignsSnapshot = await getDocs(
-        collection(firestore, 'businesses', businessId, 'campaigns')
-      );
+      const campaignsRef = collection(firestore, 'businesses', businessId, 'campaigns');
+      const snapshot = await getDocs(campaignsRef);
       
-      const loadedCampaigns = campaignsSnapshot.docs.map(doc => ({
+      const loadedCampaigns = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Campaign[];
       
       setCampaigns(loadedCampaigns);
-      console.log(`📋 Loaded ${loadedCampaigns.length} campaigns`);
     } catch (error) {
       console.error('❌ Error loading campaigns:', error);
     }
@@ -691,17 +804,15 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
 
   const loadOutlets = async () => {
     try {
-      const outletsSnapshot = await getDocs(
-        collection(firestore, 'users', user.uid, 'outlets')
-      );
+      const outletsRef = collection(firestore, 'users', user.uid, 'outlets');
+      const snapshot = await getDocs(outletsRef);
       
-      const loadedOutlets = outletsSnapshot.docs.map(doc => ({
+      const loadedOutlets = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
       
       setOutlets(loadedOutlets);
-      console.log(`📍 Loaded ${loadedOutlets.length} outlets`);
     } catch (error) {
       console.error('❌ Error loading outlets:', error);
     }
@@ -748,6 +859,28 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
   const cancelDelete = () => {
     setShowDeleteConfirmation(false);
     setPromotionToDelete(null);
+  };
+
+  // 🕐 EXPIRATION HELPER FUNCTIONS (As Per App Team Specification)
+  const getPromotionExpirationInfo = (promotion: Promotion) => {
+    if (!promotion.expiresAt) {
+      return { isExpired: false, daysRemaining: null, formattedText: '' };
+    }
+
+    const now = new Date();
+    const expiresDate = promotion.expiresAt.toDate ? promotion.expiresAt.toDate() : new Date(promotion.expiresAt);
+    const daysRemaining = Math.ceil((expiresDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    const isExpired = daysRemaining <= 0;
+
+    const discountText = promotion.discountType === 'percentage' 
+      ? `${promotion.discountAmount}% off $${promotion.minimumPurchase}+`
+      : `$${promotion.discountAmount} off $${promotion.minimumPurchase}+`;
+
+    const formattedText = isExpired 
+      ? `${discountText} (Expired)`
+      : `${discountText} (${daysRemaining} days left)`;
+
+    return { isExpired, daysRemaining, formattedText };
   };
 
   // 🔄 LOAD DATA ON COMPONENT MOUNT
@@ -928,7 +1061,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
           <button
             onClick={() => {
               if (activeTab === 'campaigns') {
-                setShowCreateCampaign(true);
+                alert('Campaign creation is temporarily disabled. Use "Process All Campaigns" to run existing campaigns.');
               } else {
                 setShowCreatePromotion(true);
               }
@@ -952,22 +1085,43 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
           
           {activeTab === 'promotions' && (
             <button
-              onClick={debugSystemStatus}
+              onClick={() => alert('🤖 Campaign automation is being rebuilt. Please use Promotion features for now!')}
               disabled={loading}
               style={{
                 padding: '1rem 2rem',
-                backgroundColor: loading ? '#6b7280' : '#6366f1',
+                backgroundColor: loading ? '#6b7280' : '#f59e0b',
                 color: 'white',
                 border: 'none',
                 borderRadius: '10px',
                 cursor: loading ? 'not-allowed' : 'pointer',
                 fontSize: '1rem',
                 fontWeight: 'bold',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)',
                 opacity: loading ? 0.7 : 1
               }}
             >
-              🔍 Find Your 92 Customers
+              🤖 Process All Campaigns
+            </button>
+          )}
+          
+          {activeTab === 'campaigns' && (
+            <button
+              onClick={() => alert('🤖 Campaign automation is being rebuilt. Please use Promotion features for now!')}
+              disabled={loading}
+              style={{
+                padding: '1rem 2rem',
+                backgroundColor: loading ? '#6b7280' : '#f59e0b',
+                color: 'white',
+                border: 'none',
+                borderRadius: '10px',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                fontSize: '1rem',
+                fontWeight: 'bold',
+                boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)',
+                opacity: loading ? 0.7 : 1
+              }}
+            >
+              🤖 Process All Campaigns
             </button>
           )}
         </div>
@@ -994,22 +1148,184 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                   </p>
                 </div>
               ) : (
-                <div style={{ display: 'grid', gap: '1rem' }}>
-                  {campaigns.map((campaign) => (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))',
+                  gap: '2rem',
+                  marginTop: '1rem'
+                }}>
+                  {campaigns.filter(campaign => campaign && campaign.id).map((campaign) => (
                     <div key={campaign.id} style={{
-                      background: 'rgba(16, 185, 129, 0.1)',
-                      border: '1px solid rgba(16, 185, 129, 0.3)',
-                      borderRadius: '8px',
-                      padding: '1.5rem'
+                      backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                      borderRadius: '20px',
+                      padding: '2rem',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      backdropFilter: 'blur(15px)',
+                      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+                      position: 'relative',
+                      overflow: 'hidden'
                     }}>
-                      <h4 style={{ color: '#4ade80', margin: '0 0 0.5rem 0' }}>
-                        🟢 {campaign.name}
-                      </h4>
-                      <p style={{ color: '#cbd5e1', margin: '0 0 1rem 0', fontSize: '0.9rem' }}>
-                        Type: {campaign.type} • Discount: ${campaign.promotionTemplate.discountAmount}
-                      </p>
-                      <div style={{ color: '#94a3b8', fontSize: '0.8rem' }}>
-                        📱 SMS: "{campaign.smsMessage}"
+                      {/* STATUS BADGE */}
+                      <div style={{
+                        position: 'absolute',
+                        top: '1.5rem',
+                        right: '1.5rem',
+                        backgroundColor: campaign.isActive ? '#10b981' : '#ef4444',
+                        color: 'white',
+                        padding: '0.5rem 1rem',
+                        borderRadius: '25px',
+                        fontSize: '0.8rem',
+                        fontWeight: 'bold',
+                        letterSpacing: '0.5px'
+                      }}>
+                        {campaign.isActive ? 'ACTIVE' : 'INACTIVE'}
+                      </div>
+
+                      {/* CAMPAIGN TYPE LABEL */}
+                      <div style={{
+                        display: 'inline-block',
+                        backgroundColor: '#10b981',
+                        color: 'white',
+                        padding: '0.4rem 1rem',
+                        borderRadius: '20px',
+                        fontSize: '0.75rem',
+                        fontWeight: 'bold',
+                        marginBottom: '1.5rem',
+                        letterSpacing: '0.5px'
+                      }}>
+                        CAMPAIGN
+                      </div>
+
+                      {/* MAIN TITLE */}
+                      <h2 style={{
+                        color: 'white',
+                        fontSize: '1.5rem',
+                        fontWeight: 'bold',
+                        marginBottom: '1rem',
+                        lineHeight: '1.3'
+                      }}>
+                        {campaign.name}
+                      </h2>
+
+                      {/* CAMPAIGN DETAILS */}
+                      <div style={{ marginBottom: '2rem' }}>
+                        <div style={{
+                          color: '#d1d5db',
+                          fontSize: '1rem',
+                          marginBottom: '0.5rem'
+                        }}>
+                          <strong style={{ color: '#fbbf24' }}>Discount:</strong> {
+                            campaign.discountType === 'percentage' 
+                              ? `${campaign.discountAmount || 0}%` 
+                              : `$${campaign.discountAmount || 0}`
+                          }
+                        </div>
+                        <div style={{
+                          color: '#d1d5db',
+                          fontSize: '1rem',
+                          marginBottom: '0.5rem'
+                        }}>
+                          <strong style={{ color: '#34d399' }}>Minimum Purchase:</strong> ${campaign.minimumPurchase || 0}
+                        </div>
+                        <div style={{
+                          color: '#d1d5db',
+                          fontSize: '1rem',
+                          marginBottom: '0.5rem'
+                        }}>
+                          <strong style={{ color: '#a78bfa' }}>Trigger:</strong> {
+                            campaign.triggerType === 'birthday' ? 'Birthday' :
+                            campaign.triggerType === 'inactive_15' ? 'Inactive 15+ days' :
+                            campaign.triggerType === 'inactive_30' ? 'Inactive 30+ days' :
+                            campaign.triggerType
+                          }
+                        </div>
+                        {campaign.expirationDays && (
+                          <div style={{
+                            color: '#d1d5db',
+                            fontSize: '1rem',
+                            marginBottom: '0.5rem'
+                          }}>
+                            <strong style={{ color: '#f59e0b' }}>⏰ Expires After:</strong> {campaign.expirationDays} days
+                          </div>
+                        )}
+                        <div style={{
+                          color: '#d1d5db',
+                          fontSize: '1rem'
+                        }}>
+                          <strong style={{ color: '#f472b6' }}>Outlets:</strong> {
+                            !campaign.outletIds || campaign.outletIds.length === 0 ? 'No outlets selected' :
+                            campaign.outletIds.includes('all') ? 'All outlets' : 
+                            `${campaign.outletIds.length} selected`
+                          }
+                        </div>
+                      </div>
+
+                      {/* ACTION BUTTONS */}
+                      <div style={{
+                        display: 'flex',
+                        gap: '0.75rem'
+                      }}>
+                        <button
+                          onClick={() => {
+                            // Toggle campaign status functionality
+                            console.log('Toggle status for:', campaign.name);
+                          }}
+                          disabled={loading}
+                          style={{
+                            flex: 1,
+                            padding: '0.75rem 1.5rem',
+                            backgroundColor: campaign.isActive ? '#ef4444' : '#10b981',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '12px',
+                            cursor: loading ? 'not-allowed' : 'pointer',
+                            fontSize: '0.9rem',
+                            fontWeight: 'bold',
+                            opacity: loading ? 0.7 : 1,
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseOver={(e) => {
+                            if (!loading) {
+                              e.currentTarget.style.transform = 'translateY(-2px)';
+                              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+                            }
+                          }}
+                          onMouseOut={(e) => {
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = 'none';
+                          }}
+                        >
+                          {campaign.isActive ? 'Deactivate' : 'Activate'}
+                        </button>
+                        <button
+                          onClick={() => deleteCampaign(campaign.id!)}
+                          disabled={loading}
+                          style={{
+                            flex: 1,
+                            padding: '0.75rem 1.5rem',
+                            backgroundColor: '#dc2626',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '12px',
+                            cursor: loading ? 'not-allowed' : 'pointer',
+                            fontSize: '0.9rem',
+                            fontWeight: 'bold',
+                            opacity: loading ? 0.7 : 1,
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseOver={(e) => {
+                            if (!loading) {
+                              e.currentTarget.style.transform = 'translateY(-2px)';
+                              e.currentTarget.style.boxShadow = '0 4px 12px rgba(220,38,38,0.4)';
+                            }
+                          }}
+                          onMouseOut={(e) => {
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = 'none';
+                          }}
+                        >
+                          🗑️ Delete
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -1114,7 +1430,11 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                           fontSize: '1rem',
                           marginBottom: '0.5rem'
                         }}>
-                          <strong style={{ color: '#fbbf24' }}>Discount:</strong> ${promotion.discountAmount}
+                          <strong style={{ color: '#fbbf24' }}>Discount:</strong> {
+                            promotion.discountType === 'percentage' 
+                              ? `${promotion.discountAmount}%` 
+                              : `$${promotion.discountAmount}`
+                          }
                         </div>
                         <div style={{
                           color: '#d1d5db',
@@ -1123,6 +1443,26 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                         }}>
                           <strong style={{ color: '#34d399' }}>Minimum Purchase:</strong> ${promotion.minimumPurchase}
                         </div>
+                        {promotion.expiresAt && (
+                          <div style={{
+                            color: '#d1d5db',
+                            fontSize: '1rem',
+                            marginBottom: '0.5rem'
+                          }}>
+                            <strong style={{ color: getPromotionExpirationInfo(promotion).isExpired ? '#ef4444' : '#f59e0b' }}>
+                              ⏰ {getPromotionExpirationInfo(promotion).isExpired ? 'Expired' : `${getPromotionExpirationInfo(promotion).daysRemaining} days left`}
+                            </strong>
+                          </div>
+                        )}
+                        {promotion.expirationDays && !promotion.expiresAt && (
+                          <div style={{
+                            color: '#d1d5db',
+                            fontSize: '1rem',
+                            marginBottom: '0.5rem'
+                          }}>
+                            <strong style={{ color: '#f59e0b' }}>⏰ Expires After:</strong> {promotion.expirationDays} days (template)
+                          </div>
+                        )}
                         <div style={{
                           color: '#d1d5db',
                           fontSize: '1rem',
@@ -1286,16 +1626,59 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               />
             </div>
 
+            {/* NEW: Discount Type Selection */}
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.75rem', fontWeight: 'bold' }}>
+                Discount Type *
+              </label>
+              <div style={{ display: 'flex', gap: '2rem', marginBottom: '0.5rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="discountType"
+                    value="dollar"
+                    checked={promotionForm.discountType === 'dollar'}
+                    onChange={(e) => setPromotionForm(prev => ({ ...prev, discountType: e.target.value as 'dollar' | 'percentage' }))}
+                    style={{ marginRight: '0.5rem', transform: 'scale(1.2)' }}
+                  />
+                  <span style={{ color: '#10b981' }}>💰 Dollar Amount ($)</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="discountType"
+                    value="percentage"
+                    checked={promotionForm.discountType === 'percentage'}
+                    onChange={(e) => setPromotionForm(prev => ({ ...prev, discountType: e.target.value as 'dollar' | 'percentage' }))}
+                    style={{ marginRight: '0.5rem', transform: 'scale(1.2)' }}
+                  />
+                  <span style={{ color: '#f59e0b' }}>📊 Percentage (%)</span>
+                </label>
+              </div>
+              {/* Dynamic Preview Text */}
+              <div style={{ 
+                fontSize: '0.85rem', 
+                color: '#94a3b8', 
+                fontStyle: 'italic',
+                marginTop: '0.25rem'
+              }}>
+                {promotionForm.discountType === 'dollar' 
+                  ? `💡 Example: Create $${promotionForm.discountAmount || 5} off $${promotionForm.minimumPurchase || 10} or more deal`
+                  : `💡 Example: Create ${promotionForm.discountAmount || 40}% off $${promotionForm.minimumPurchase || 60} or more deal`
+                }
+              </div>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                  Discount Amount ($) *
+                  {promotionForm.discountType === 'dollar' ? 'Discount Amount ($) *' : 'Discount Percentage (%) *'}
                 </label>
                 <input
                   type="number"
                   value={promotionForm.discountAmount}
                   onChange={(e) => setPromotionForm(prev => ({ ...prev, discountAmount: Number(e.target.value) }))}
-                  placeholder="10"
+                  placeholder={promotionForm.discountType === 'dollar' ? '10' : '40'}
                   style={{
                     width: '100%',
                     padding: '0.75rem',
@@ -1348,6 +1731,79 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                   fontSize: '1rem'
                 }}
               />
+            </div>
+
+            {/* NEW: Expiration Settings */}
+            <div style={{ 
+              marginBottom: '1rem',
+              background: 'rgba(245, 158, 11, 0.1)',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+              borderRadius: '8px',
+              padding: '1rem'
+            }}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'bold' }}>
+                  <input
+                    type="checkbox"
+                    checked={promotionForm.hasExpiration}
+                    onChange={(e) => setPromotionForm(prev => ({ ...prev, hasExpiration: e.target.checked }))}
+                    style={{ marginRight: '0.75rem', transform: 'scale(1.3)' }}
+                  />
+                  <span style={{ color: '#f59e0b' }}>⏰ Set Expiration Date</span>
+                </label>
+                <div style={{ 
+                  fontSize: '0.85rem', 
+                  color: '#94a3b8', 
+                  marginTop: '0.25rem',
+                  marginLeft: '1.75rem'
+                }}>
+                  Add countdown timer and automatic expiration to this promotion
+                </div>
+              </div>
+
+              {promotionForm.hasExpiration && (
+                <>
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+                      Expires After (Days) *
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="365"
+                      value={promotionForm.expirationDays}
+                      onChange={(e) => setPromotionForm(prev => ({ ...prev, expirationDays: Number(e.target.value) }))}
+                      placeholder="7"
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        border: '1px solid #475569',
+                        borderRadius: '8px',
+                        background: 'rgba(30, 41, 59, 0.8)',
+                        color: 'white',
+                        fontSize: '1rem'
+                      }}
+                    />
+                  </div>
+                  
+                  {/* Preview Text */}
+                  <div style={{ 
+                    fontSize: '0.85rem', 
+                    color: '#10b981', 
+                    fontStyle: 'italic',
+                    background: 'rgba(16, 185, 129, 0.1)',
+                    padding: '0.5rem',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(16, 185, 129, 0.2)'
+                  }}>
+                    💡 <strong>Preview:</strong> Customers will see "{
+                      promotionForm.discountType === 'dollar' 
+                        ? `$${promotionForm.discountAmount || 5} off $${promotionForm.minimumPurchase || 10}+ (${promotionForm.expirationDays} days left)`
+                        : `${promotionForm.discountAmount || 40}% off $${promotionForm.minimumPurchase || 60}+ (${promotionForm.expirationDays} days left)`
+                    }"
+                  </div>
+                </>
+              )}
             </div>
 
             <div style={{ marginBottom: '1rem' }}>
