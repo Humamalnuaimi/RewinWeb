@@ -284,9 +284,35 @@ Check: /businesses/${businessId}/promotions/${promotionRef.id}
         return { assigned: 0, smsEligible: 0 };
       }
 
+      // 🔍 DETAILED CUSTOMER DEBUGGING
+      console.log(`\n🔍 FOUND ${customersSnapshot.size} CUSTOMERS IN COLLECTION`);
+      console.log(`📍 Collection path: users/${user.uid}/customers/`);
+      
+      let customerCount = 0;
+      customersSnapshot.docs.forEach((customerDoc: any) => {
+        customerCount++;
+        const customerData = customerDoc.data();
+        const customerId = customerDoc.id;
+        console.log(`\n👤 Customer ${customerCount}/${customersSnapshot.size}:`);
+        console.log(`   📋 ID: ${customerId}`);
+        console.log(`   📱 Phone: ${customerData.phoneNumber || 'No phone'}`);
+        console.log(`   🎂 Birthday: "${customerData.birthDate}" (type: ${typeof customerData.birthDate})`);
+        console.log(`   🟢 Active: ${customerData.isActive !== false ? 'YES' : 'NO'}`);
+        
+        // Special highlight for our target customer
+        if (customerData.phoneNumber === '(444) 444-4444' || customerData.phoneNumber === '4444444444') {
+          console.log(`   🎯 *** TARGET CUSTOMER FOUND! ***`);
+          console.log(`   📊 Full data:`, customerData);
+        }
+      });
+
       let qualifyingCustomers: any[] = [];
       const batch = writeBatch(firestore);
       const today = new Date();
+      
+      console.log(`\n📅 TODAY'S DATE FOR MATCHING: ${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`);
+      console.log(`📅 MM-DD FORMAT: ${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`);
+      console.log(`\n🎯 STARTING CUSTOMER QUALIFICATION PROCESS...`);
 
       // Filter customers based on campaign trigger type
       customersSnapshot.docs.forEach((customerDoc: any) => {
@@ -300,14 +326,88 @@ Check: /businesses/${businessId}/promotions/${promotionRef.id}
 
         switch (campaign.triggerType) {
           case 'birthday':
-            // Check if today is customer's birthday
+            // Check if today is customer's birthday - FLEXIBLE FORMAT SUPPORT
+            console.log(`\n🎂 PROCESSING BIRTHDAY CHECK FOR CUSTOMER ${customerId}`);
+            console.log(`   📱 Phone: ${customerData.phoneNumber}`);
+            
             if (customerData.birthDate) {
-              const birthDate = customerData.birthDate; // Expected format: "01-15" (MM-DD)
+              const birthDate = customerData.birthDate;
               const todayMMDD = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-              if (birthDate === todayMMDD) {
-                qualifies = true;
-                console.log(`🎂 Birthday match: Customer ${customerId} birthday is today (${birthDate})`);
+              
+              console.log(`   🎂 Birthday stored: "${birthDate}" (type: ${typeof birthDate})`);
+              console.log(`   📅 Today's MM-DD: "${todayMMDD}"`);
+              
+              let matchesBirthday = false;
+              
+              // Handle different birthday formats
+              if (typeof birthDate === 'string') {
+                // Format 1: "MM-DD" (exact match)
+                if (birthDate === todayMMDD) {
+                  matchesBirthday = true;
+                }
+                // Format 2: "MM-DD-YYYY" or "YYYY-MM-DD" (full date with dashes)
+                else if (birthDate.includes('-') && birthDate.length > 5) {
+                  const parts = birthDate.split('-');
+                  console.log(`   🔍 Parsing dashed format:`, parts);
+                  if (parts.length >= 3) {
+                    let monthDay = '';
+                    if (parts[0].length === 4) {
+                      // YYYY-MM-DD format
+                      monthDay = `${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+                      console.log(`   📝 Detected YYYY-MM-DD: ${monthDay}`);
+                    } else {
+                      // MM-DD-YYYY format (like "07-22-1994")
+                      monthDay = `${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+                      console.log(`   📝 Detected MM-DD-YYYY: ${monthDay}`);
+                    }
+                    console.log(`   🎯 Comparing: "${monthDay}" vs "${todayMMDD}"`);
+                    if (monthDay === todayMMDD) {
+                      matchesBirthday = true;
+                    }
+                  }
+                }
+                // Format 3: "MM/DD/YYYY" (US format)
+                else if (birthDate.includes('/')) {
+                  const parts = birthDate.split('/');
+                  if (parts.length >= 2) {
+                    const monthDay = `${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+                    if (monthDay === todayMMDD) {
+                      matchesBirthday = true;
+                    }
+                  }
+                }
+                // Format 4: "DD-MM" (day-month)
+                else if (birthDate.includes('-') && birthDate.length === 5) {
+                  const parts = birthDate.split('-');
+                  if (parts.length === 2) {
+                    const monthDay = `${parts[1]}-${parts[0]}`;
+                    if (monthDay === todayMMDD) {
+                      matchesBirthday = true;
+                    }
+                  }
+                }
               }
+              // Handle Firebase Timestamp format
+              else if (birthDate && typeof birthDate === 'object' && birthDate.toDate) {
+                const date = birthDate.toDate();
+                const monthDay = `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                if (monthDay === todayMMDD) {
+                  matchesBirthday = true;
+                }
+              }
+              
+              console.log(`   🔍 Birthday format analysis complete`);
+              console.log(`   ✅ Match result: ${matchesBirthday ? 'BIRTHDAY MATCH!' : 'No match'}`);
+              
+              if (matchesBirthday) {
+                qualifies = true;
+                console.log(`🎉 🎂 BIRTHDAY MATCH CONFIRMED! Customer ${customerId} (${customerData.phoneNumber}) qualifies for birthday campaign!`);
+              } else {
+                console.log(`❌ No birthday match: Customer ${customerId} (${customerData.phoneNumber})`);
+                console.log(`   📊 Raw data: "${birthDate}" vs today "${todayMMDD}"`);
+              }
+            } else {
+              console.log(`⚠️ Customer ${customerId} has no birthDate field`);
             }
             break;
 
@@ -1061,7 +1161,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
           <button
             onClick={() => {
               if (activeTab === 'campaigns') {
-                alert('Campaign creation is temporarily disabled. Use "Process All Campaigns" to run existing campaigns.');
+                setShowCreateCampaign(true);
               } else {
                 setShowCreatePromotion(true);
               }
@@ -1085,7 +1185,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
           
           {activeTab === 'promotions' && (
             <button
-              onClick={() => alert('🤖 Campaign automation is being rebuilt. Please use Promotion features for now!')}
+              onClick={processAllCampaigns}
               disabled={loading}
               style={{
                 padding: '1rem 2rem',
@@ -1106,7 +1206,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
           
           {activeTab === 'campaigns' && (
             <button
-              onClick={() => alert('🤖 Campaign automation is being rebuilt. Please use Promotion features for now!')}
+              onClick={processAllCampaigns}
               disabled={loading}
               style={{
                 padding: '1rem 2rem',
