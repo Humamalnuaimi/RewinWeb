@@ -7,6 +7,37 @@ import CampaignManager from './components/CampaignManager';
 
 import AdminDashboard from './components/AdminDashboard';
 
+// Timezone utility functions
+const convertToLocalDate = (firebaseTimestamp: any): Date => {
+  if (!firebaseTimestamp) return new Date();
+  
+  // If it's a Firebase timestamp, convert it
+  if (firebaseTimestamp.toDate) {
+    return firebaseTimestamp.toDate();
+  }
+  
+  // If it's already a Date object, return it
+  if (firebaseTimestamp instanceof Date) {
+    return firebaseTimestamp;
+  }
+  
+  // If it's a string or number, create a new Date
+  return new Date(firebaseTimestamp);
+};
+
+const isSameDay = (date1: Date, date2: Date): boolean => {
+  return date1.toDateString() === date2.toDateString();
+};
+
+const isDateInRange = (date: Date, startDate: Date, endDate: Date): boolean => {
+  // Compare dates in local timezone
+  const localDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), date.getMinutes(), date.getSeconds());
+  const localStartDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(), startDate.getHours(), startDate.getMinutes(), startDate.getSeconds());
+  const localEndDate = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), endDate.getHours(), endDate.getMinutes(), endDate.getSeconds());
+  
+  return localDate >= localStartDate && localDate <= localEndDate;
+};
+
 // Modern SVG Icons as components
 const AnalyticsIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -395,7 +426,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
   const [showAdminDashboard, setShowAdminDashboard] = useState(false);
   
   // Time period filter states
-  const [timePeriod, setTimePeriod] = useState('today'); // 'today', 'yesterday', 'this_week', etc.
+  const [timePeriod, setTimePeriod] = useState('today'); // Show only today's data by default
   const [timeDropdownOpen, setTimeDropdownOpen] = useState(false);
 
   // Admin functionality - only authorized emails
@@ -495,48 +526,41 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
       switch (timePeriod) {
         case 'today':
-          startDate.setHours(0, 0, 0, 0);
-          endDate.setHours(23, 59, 59, 999);
+          // Use local timezone for today's range
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
           break;
         case 'yesterday':
           const yesterday = new Date(now);
           yesterday.setDate(now.getDate() - 1);
-          startDate = new Date(yesterday);
-          startDate.setHours(0, 0, 0, 0);
-          endDate = new Date(yesterday);
-          endDate.setHours(23, 59, 59, 999);
+          startDate = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
+          endDate = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
           break;
         case 'this_week':
           const thisWeekStart = new Date(now);
           thisWeekStart.setDate(now.getDate() - now.getDay());
-          startDate = new Date(thisWeekStart);
-          startDate.setHours(0, 0, 0, 0);
-          endDate.setHours(23, 59, 59, 999);
+          startDate = new Date(thisWeekStart.getFullYear(), thisWeekStart.getMonth(), thisWeekStart.getDate(), 0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
           break;
         case 'last_week':
           const lastWeekStart = new Date(now);
           lastWeekStart.setDate(now.getDate() - now.getDay() - 7);
           const lastWeekEnd = new Date(lastWeekStart);
           lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
-          startDate = new Date(lastWeekStart);
-          startDate.setHours(0, 0, 0, 0);
-          endDate = new Date(lastWeekEnd);
-          endDate.setHours(23, 59, 59, 999);
+          startDate = new Date(lastWeekStart.getFullYear(), lastWeekStart.getMonth(), lastWeekStart.getDate(), 0, 0, 0, 0);
+          endDate = new Date(lastWeekEnd.getFullYear(), lastWeekEnd.getMonth(), lastWeekEnd.getDate(), 23, 59, 59, 999);
           break;
         case 'this_month':
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          startDate.setHours(0, 0, 0, 0);
-          endDate.setHours(23, 59, 59, 999);
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
           break;
         case 'last_month':
-          startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-          startDate.setHours(0, 0, 0, 0);
-          endDate = new Date(now.getFullYear(), now.getMonth(), 0);
-          endDate.setHours(23, 59, 59, 999);
+          startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
           break;
         default:
-          startDate.setHours(0, 0, 0, 0);
-          endDate.setHours(23, 59, 59, 999);
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
       }
       
       return { startDate, endDate };
@@ -544,11 +568,18 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
     const { startDate, endDate } = getDateRange();
     console.log(`📅 Date range for ${timePeriod}:`, startDate, 'to', endDate);
+    console.log(`🌍 Local timezone:`, Intl.DateTimeFormat().resolvedOptions().timeZone);
+    console.log(`🕐 Current local time:`, new Date().toISOString());
+    console.log(`📅 Today's local date:`, new Date().toLocaleDateString());
+    console.log(`🕐 Today's local time:`, new Date().toLocaleTimeString());
 
     // Listen for customers collection under user's path
     const customersQuery = query(collection(firestore, `users/${user.uid}/web_customers`));
+    console.log('🔍 Setting up web_customers listener for user:', user.uid);
+    console.log('🔍 Collection path:', `users/${user.uid}/web_customers`);
         
     const unsubscribeCustomers = onSnapshot(customersQuery, (snapshot) => {
+      console.log('📊 Web customers snapshot received:', snapshot.docs.length, 'documents');
       // Create a Set to track unique phone numbers (deduplication)
       const uniquePhoneNumbers = new Set<string>();
       
@@ -630,6 +661,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       setData(prev => ({ ...prev, customers: customerCount }));
     }, (error) => {
       console.log('❌ Customers data not available:', error.message);
+      console.log('🔍 Error details:', error);
+      console.log('🔍 User authentication status:', user?.uid, user?.email);
       setData(prev => ({ ...prev, customers: 0 }));
     });
     unsubscribes.push(unsubscribeCustomers);
@@ -662,23 +695,52 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     });
     unsubscribes.push(unsubscribeOutlets);
 
-    // Calculate check-ins from customers who visited in the selected time period (using web_visits collection for accuracy)
+    // Calculate check-ins from customers who visited in the selected time period (using web_visits collection as per app team)
     const visitsQuery = query(collection(firestore, `users/${user.uid}/web_visits`));
+    console.log('🔍 Setting up web_visits listener for user:', user.uid);
+    console.log('🔍 Collection path:', `users/${user.uid}/web_visits`);
+    
     const unsubscribeCheckIns = onSnapshot(visitsQuery, (snapshot) => {
+      console.log('📊 Web visits snapshot received:', snapshot.docs.length, 'documents');
+      console.log('📅 Date range filter:', startDate, 'to', endDate);
+      console.log('🏪 Selected outlet filter:', selectedOutlet);
+      
       let checkInCount = 0;
+      let totalVisits = 0;
+      let filteredByDate = 0;
+      let filteredByOutlet = 0;
       
       snapshot.docs.forEach(doc => {
         const visit = doc.data();
-        const visitDate = visit.timestamp?.toDate();
+        const visitDate = convertToLocalDate(visit.timestamp);
+        totalVisits++;
         
-        if (visitDate && visitDate >= startDate && visitDate <= endDate) {
+        console.log('🔍 Visit data:', {
+          customerId: visit.customerId,
+          outletId: visit.outletId,
+          timestamp: visit.timestamp,
+          visitDate: visitDate,
+          isInDateRange: isDateInRange(visitDate, startDate, endDate),
+          matchesOutlet: selectedOutlet === 'all' || visit.outletId === selectedOutlet
+        });
+        
+        if (isDateInRange(visitDate, startDate, endDate)) {
+          filteredByDate++;
           // Filter by outlet if specific outlet is selected
           if (selectedOutlet === 'all' || visit.outletId === selectedOutlet) {
+            filteredByOutlet++;
             // Count ALL visits, including multiple visits by same customer at different outlets
             checkInCount++;
+            console.log('✅ Counted visit for customer:', visit.customerId, 'at outlet:', visit.outletId);
           }
         }
       });
+      
+      console.log(`📊 Check-ins filtering summary:`);
+      console.log(`- Total visits in collection: ${totalVisits}`);
+      console.log(`- Visits in date range: ${filteredByDate}`);
+      console.log(`- Visits matching outlet filter: ${filteredByOutlet}`);
+      console.log(`- Final check-in count: ${checkInCount}`);
       
       const uniqueCustomersInPeriod = new Set<string>();
       snapshot.docs.forEach(doc => {
@@ -694,10 +756,13 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       
       console.log(`✅ Check-ins for ${timePeriod} calculated (${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet}):`, checkInCount, 'total visits');
       console.log('🔍 DEBUG: Unique customers in period:', uniqueCustomersInPeriod.size);
+      console.log('📅 Date range:', startDate, 'to', endDate);
       
       setData(prev => ({ ...prev, checkIns: checkInCount }));
     }, (error) => {
       console.log('❌ Check-ins calculation failed:', error.message);
+      console.log('🔍 Error details:', error);
+      console.log('🔍 User authentication status:', user?.uid, user?.email);
       console.log('⚠️ Falling back to web_customers lastVisit method');
       
       // Fallback: Use customers collection if web_visits doesn't exist yet
@@ -707,8 +772,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
           const customer = doc.data();
           
           // Check if customer visited in the selected time period and matches outlet filter
-          const visitDate = customer.lastVisit?.toDate();
-          const visitedInPeriod = visitDate && visitDate >= startDate && visitDate <= endDate;
+          const visitDate = convertToLocalDate(customer.lastVisit);
+          const visitedInPeriod = isDateInRange(visitDate, startDate, endDate);
           const matchesOutlet = selectedOutlet === 'all' || 
                                customer.lastVisitOutletId === selectedOutlet ||
                                customer.outletId === selectedOutlet ||
@@ -733,9 +798,9 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       
       snapshot.docs.forEach(doc => {
         const customer = doc.data();
-        const joinDate = customer.dateJoined?.toDate() || customer.createdAt?.toDate();
+        const joinDate = convertToLocalDate(customer.dateJoined || customer.createdAt);
         
-        if (joinDate && joinDate >= startDate && joinDate <= endDate) {
+        if (isDateInRange(joinDate, startDate, endDate)) {
           // Filter by outlet if specific outlet is selected
           const matchesOutlet = selectedOutlet === 'all' || 
                                customer.registrationOutletId === selectedOutlet ||
@@ -757,14 +822,24 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     });
     unsubscribes.push(unsubscribeNewSignups);
 
-    // Listen for transactions collection under user's path
+    // Listen for transactions collection under user's path (using web_transactions collection as per app team)
     const transactionsQuery = query(collection(firestore, `users/${user.uid}/web_transactions`));
     const customersForTransactionsQuery = query(collection(firestore, `users/${user.uid}/web_customers`));
+    
+    console.log('🔍 Setting up web_transactions listener for user:', user.uid);
+    console.log('🔍 Collection path:', `users/${user.uid}/web_transactions`);
         
     const unsubscribeTransactions = onSnapshot(transactionsQuery, (transactionSnapshot) => {
+        console.log('📊 Web transactions snapshot received:', transactionSnapshot.docs.length, 'documents');
+        console.log('📅 Date range filter:', startDate, 'to', endDate);
+        console.log('🏪 Selected outlet filter:', selectedOutlet);
+        
         let totalPointsEarned = 0;
         let totalPointsRedeemed = 0;
         let filteredTransactions = transactionSnapshot.docs;
+        let totalTransactions = 0;
+        let filteredByDate = 0;
+        let filteredByOutlet = 0;
         
       console.log(`🔍 WEB TRANSACTION FILTERING (${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet})`);
       console.log('Total web_transactions in DB:', transactionSnapshot.docs.length);
@@ -773,11 +848,14 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       if (selectedOutlet !== 'all') {
         filteredTransactions = transactionSnapshot.docs.filter(doc => {
           const transaction = doc.data();
+          totalTransactions++;
           // Use the new transactionOutletId field directly - no more customer mapping needed!
-          return transaction.transactionOutletId === selectedOutlet;
+          const matchesOutlet = transaction.transactionOutletId === selectedOutlet;
+          if (matchesOutlet) filteredByOutlet++;
+          return matchesOutlet;
         });
         
-        console.log(`✅ Filtered transactions: ${filteredTransactions.length} / ${transactionSnapshot.docs.length}`);
+        console.log(`✅ Filtered transactions by outlet: ${filteredTransactions.length} / ${transactionSnapshot.docs.length}`);
       }
       
       // Debug: Show outlet distribution in transactions
@@ -806,18 +884,41 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
           const pointsChanged = transaction.pointsChanged || 0;
           const transactionType = transaction.transactionType || '';
           const isManualTransaction = transaction.isManualTransaction || false;
-          const transactionDate = transaction.timestamp?.toDate();
+          const transactionDate = convertToLocalDate(transaction.timestamp);
+          
+          console.log('🔍 Transaction data:', {
+            customerId: transaction.customerId,
+            transactionOutletId: transaction.transactionOutletId,
+            pointsChanged: pointsChanged,
+            transactionType: transactionType,
+            isManualTransaction: isManualTransaction,
+            timestamp: transaction.timestamp,
+            transactionDate: transactionDate,
+            isInDateRange: isDateInRange(transactionDate, startDate, endDate),
+            isEarned: transactionType.toUpperCase() === 'EARNED',
+            isRedeemed: transactionType.toUpperCase() === 'REDEEMED'
+          });
           
           // Only count transactions from the selected time period
-          if (transactionDate && transactionDate >= startDate && transactionDate <= endDate) {
+          if (isDateInRange(transactionDate, startDate, endDate)) {
+            filteredByDate++;
             // For EARNED transactions, only count manual ones
             if (transactionType.toUpperCase() === 'EARNED' && isManualTransaction && pointsChanged > 0) {
-            totalPointsEarned += pointsChanged;
+              totalPointsEarned += pointsChanged;
+              console.log('✅ Counted earned points:', pointsChanged, 'for customer:', transaction.customerId);
             } else if (transactionType.toUpperCase() === 'REDEEMED' && pointsChanged < 0) {
-            totalPointsRedeemed += Math.abs(pointsChanged);
+              totalPointsRedeemed += Math.abs(pointsChanged);
+              console.log('✅ Counted redeemed points:', Math.abs(pointsChanged), 'for customer:', transaction.customerId);
             }
           }
         });
+        
+        console.log(`📊 Points filtering summary:`);
+        console.log(`- Total transactions in collection: ${transactionSnapshot.docs.length}`);
+        console.log(`- Transactions matching outlet filter: ${filteredTransactions.length}`);
+        console.log(`- Transactions in date range: ${filteredByDate}`);
+        console.log(`- Points earned: ${totalPointsEarned}`);
+        console.log(`- Points redeemed: ${totalPointsRedeemed}`);
         
         console.log(`✅ Transactions data received for ${timePeriod} (${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet}):`, filteredTransactions.length, '/', transactionSnapshot.docs.length, 'documents');
         console.log('💰 Points earned (manual only):', totalPointsEarned, 'Points redeemed:', totalPointsRedeemed);
@@ -835,6 +936,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       
     }, (error) => {
       console.log('❌ Transactions data not available:', error.message);
+      console.log('🔍 Error details:', error);
+      console.log('🔍 User authentication status:', user?.uid, user?.email);
       setData(prev => ({ ...prev, revenue: 0, totalPoints: 0, loading: false }));
     });
     unsubscribes.push(unsubscribeTransactions);
@@ -2588,6 +2691,9 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
         selectedEnd.setHours(23, 59, 59, 999);
 
         console.log('🔍 Fetching check-ins data for:', formatDate(selectedDate));
+        console.log('📅 Selected date:', selectedDate.toDateString());
+        console.log('📅 Date range:', selectedStart.toISOString(), 'to', selectedEnd.toISOString());
+        console.log('📅 Current time:', new Date().toISOString());
         
         const visitsQuery = query(collection(firestore, `users/${user.uid}/web_visits`));
         const outletsQuery = query(collection(firestore, `users/${user.uid}/outlets`));

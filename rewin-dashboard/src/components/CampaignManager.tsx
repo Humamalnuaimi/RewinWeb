@@ -23,7 +23,9 @@ import {
   writeBatch,
   limit,
   deleteDoc,
-  where
+  where,
+  updateDoc,
+  getDoc
 } from 'firebase/firestore';
 
 interface CampaignManagerProps {
@@ -40,6 +42,8 @@ interface Promotion {
   discountAmount: number;
   minimumPurchase: number;
   targetOutlets: string[] | 'ALL';
+  targetOutletId?: string;                // NEW: Single outlet targeting (app compatibility)
+  targetOutletName?: string;              // NEW: Outlet name for display (app compatibility)
   validityDays: number;
   expiresAt?: any;                        // NEW: Expiration timestamp (per customer)
   expirationDays?: number;                // NEW: Days until expiration (template)
@@ -53,9 +57,10 @@ interface Campaign {
   discountType: 'dollar' | 'percentage';           // NEW: Support both $ and % discounts
   discountAmount: number;                          // 40% or $40
   minimumPurchase: number;                        // $60 minimum
-  triggerType: 'birthday' | 'inactive_15' | 'inactive_30';  // NEW: App team spec
+  triggerType: 'birthday' | 'inactive_15' | 'inactive_30' | 'inactive_custom';  // NEW: Added custom inactive
   outletIds: string[];                            // ["all"] or ["outlet1", "outlet2"]
   expirationDays?: number;                        // NEW: Days until campaign promotions expire
+  daysSinceLastVisit?: number;                    // NEW: Custom days for inactive campaigns
   isActive: boolean;                              // Can pause/resume
   createdAt: any;
   lastProcessed?: any;                            // Track when last processed
@@ -82,6 +87,13 @@ interface CampaignForm {
   minimumPurchase: number;
   triggerType: 'birthday' | 'inactive_15' | 'inactive_30' | '';
   outletIds: string[];
+  type: 'inactive' | 'birthday' | 'spending' | '';
+  daysSinceLastVisit: number;
+  birthdayOffset: number;
+  minimumSpending: number;
+  promotionTitle: string;
+  smsMessage: string;
+  targetOutlets: string[];
 }
 
 const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
@@ -99,6 +111,17 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [promotionToDelete, setPromotionToDelete] = useState<Promotion | null>(null);
 
+  // 🤖 NEW: AUTOMATIC PROCESSING STATE
+  const [autoProcessing, setAutoProcessing] = useState({
+    enabled: localStorage.getItem('campaignAutoProcessing') === 'true',
+    interval: parseInt(localStorage.getItem('campaignAutoInterval') || '60'), // minutes
+    lastProcessed: localStorage.getItem('campaignLastProcessed') || null,
+    processing: false,
+    nextRun: null as Date | null
+  });
+  const [autoProcessInterval, setAutoProcessInterval] = useState<NodeJS.Timeout | null>(null);
+  const [showAutoSettings, setShowAutoSettings] = useState(false);
+  
   // 📋 FORM STATE MANAGEMENT
   const [promotionForm, setPromotionForm] = useState<PromotionForm>({
     title: '',
@@ -120,7 +143,14 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
     discountAmount: 0,
     minimumPurchase: 0,
     triggerType: '',
-    outletIds: []
+    outletIds: [],
+    type: '',
+    daysSinceLastVisit: 15,
+    birthdayOffset: 0,
+    minimumSpending: 100,
+    promotionTitle: '',
+    smsMessage: '',
+    targetOutlets: []
   });
 
   // 🔥 BUSINESS ID FUNCTION (Production-Ready with User Profile Retrieval)
@@ -190,6 +220,15 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
       const businessId = await getCurrentBusinessId();
       console.log('🎯 Creating promotion for business:', businessId);
       console.log('📋 Promotion data:', promotionForm);
+      console.log('🎯 Target outlets selected:', promotionForm.targetOutlets);
+      console.log('🎯 Available outlets:', outlets);
+      
+      // DEBUG: Log outlet details for app team verification
+      console.log('🔍 DEBUG - Outlet Details:');
+      outlets.forEach(outlet => {
+        console.log(`   Outlet: ${outlet.name} | ID: ${outlet.id}`);
+      });
+      console.log('🔍 DEBUG - Selected outlet IDs:', promotionForm.targetOutlets);
       
       // Create promotion object (exact as per Firebase structure spec)
       const promotion: Promotion = {
@@ -199,6 +238,10 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
         discountAmount: promotionForm.discountAmount,
         minimumPurchase: promotionForm.minimumPurchase,
         targetOutlets: promotionForm.targetOutlets.length === 0 ? 'ALL' : promotionForm.targetOutlets,
+        // NEW: Add app-compatible fields
+        targetOutletId: promotionForm.targetOutlets.length === 1 ? promotionForm.targetOutlets[0] : undefined,
+        targetOutletName: promotionForm.targetOutlets.length === 1 ? 
+          outlets.find(o => o.id === promotionForm.targetOutlets[0])?.name : undefined,
         validityDays: promotionForm.validityDays,
         expirationDays: promotionForm.hasExpiration ? promotionForm.expirationDays : undefined,  // NEW: Expiration template
         createdAt: Timestamp.now(),
@@ -241,12 +284,16 @@ Check: /businesses/${businessId}/promotions/${promotionRef.id}
       // Reset form and close
       setPromotionForm({
         title: '',
+        description: '',
         discountType: 'dollar',
         discountAmount: 0,
         minimumPurchase: 0,
+        validityDays: 30,
         expirationDays: 7,
-        sendSMS: false,
-        smsMessage: ''
+        hasExpiration: false,
+        targetOutlets: [],
+        smsMessage: '',
+        sendSMS: false
       });
       setShowCreatePromotion(false);
       loadPromotions(); // Refresh the list
@@ -272,11 +319,11 @@ Check: /businesses/${businessId}/promotions/${promotionRef.id}
         customersSnapshot = await getDocs(userCustomersRef);
         console.log(`📋 Found ${customersSnapshot.size} customers in user collection`);
       } catch (error) {
-        console.log('⚠️ User customers not found, trying business collection...');
-        // Fallback to business customers
-        const businessCustomersRef = collection(firestore, 'businesses', businessId, 'customers');
-        customersSnapshot = await getDocs(businessCustomersRef);
-        console.log(`📋 Found ${customersSnapshot.size} customers in business collection`);
+        console.log('⚠️ User customers not found, trying web_customers collection...');
+        // Fallback to web_customers collection
+        const webCustomersRef = collection(firestore, 'users', user.uid, 'web_customers');
+        customersSnapshot = await getDocs(webCustomersRef);
+        console.log(`📋 Found ${customersSnapshot.size} customers in web_customers collection`);
       }
 
       if (customersSnapshot.size === 0) {
@@ -321,6 +368,26 @@ Check: /businesses/${businessId}/promotions/${promotionRef.id}
 
         // Check if customer is active (default to true if not specified)
         if (customerData.isActive === false) return;
+
+        // Check outlet targeting for campaigns (skip if customer's outlet doesn't match)
+        if (campaign.outletIds && campaign.outletIds.length > 0 && !campaign.outletIds.includes('all')) {
+          console.log(`🔍 Checking outlet targeting for customer ${customerId}:`);
+          console.log(`   📋 Customer outletId: ${customerData.outletId || 'none'}`);
+          console.log(`   📋 Customer outletName: ${customerData.outletName || 'none'}`);
+          console.log(`   📋 Campaign targetOutlets: ${campaign.outletIds.join(', ')}`);
+          
+          // Check if customer's outlet matches any of the campaign target outlets
+          // Use outletId for exact matching (as per app team fix)
+          const hasMatchingOutlet = customerData.outletId && 
+            campaign.outletIds.includes(customerData.outletId);
+          
+          console.log(`   🎯 Has matching outlet: ${hasMatchingOutlet}`);
+          
+          if (!hasMatchingOutlet) {
+            console.log(`   ⏭️ SKIPPING customer ${customerId} - outlet doesn't match`);
+            return; // Skip this customer
+          }
+        }
 
         let qualifies = false;
 
@@ -411,6 +478,27 @@ Check: /businesses/${businessId}/promotions/${promotionRef.id}
             }
             break;
 
+          case 'inactive_custom':
+            // Check if customer hasn't visited in the custom number of days
+            const customDays = campaign.daysSinceLastVisit || 15; // fallback to 15 if not set
+            console.log(`\n😴 PROCESSING INACTIVE CHECK FOR CUSTOMER ${customerId} (${customDays} days)`);
+            
+            if (customerData.lastVisit) {
+              const lastVisit = customerData.lastVisit.toDate ? customerData.lastVisit.toDate() : new Date(customerData.lastVisit);
+              const daysSinceVisit = Math.floor((today.getTime() - lastVisit.getTime()) / (1000 * 60 * 60 * 24));
+              console.log(`   📅 Last visit: ${daysSinceVisit} days ago (threshold: ${customDays} days)`);
+              
+              if (daysSinceVisit >= customDays) {
+                qualifies = true;
+                console.log(`✅ INACTIVE MATCH! Customer ${customerId} (${customerData.phoneNumber}) inactive for ${daysSinceVisit} days (>= ${customDays})`);
+              } else {
+                console.log(`❌ Not inactive enough: Customer ${customerId} last visit ${daysSinceVisit} days ago (< ${customDays})`);
+              }
+            } else {
+              console.log(`⚠️ Customer ${customerId} has no lastVisit field`);
+            }
+            break;
+
           case 'inactive_15':
             // Check if customer hasn't visited in 15 days
             if (customerData.lastVisit) {
@@ -497,10 +585,15 @@ Check: /businesses/${businessId}/promotions/${promotionRef.id}
   };
 
   // 🔄 PROCESS ALL CAMPAIGNS (Daily Automation)
-  const processAllCampaigns = async () => {
+  const processAllCampaigns = async (isAutomatic = false) => {
     try {
-      setLoading(true);
-      console.log('🤖 Starting campaign automation process...');
+      if (!isAutomatic) {
+        setLoading(true);
+      } else {
+        setAutoProcessing(prev => ({ ...prev, processing: true }));
+      }
+      
+      console.log(`🤖 Starting campaign automation process... (${isAutomatic ? 'Automatic' : 'Manual'})`);
 
       const businessId = await getCurrentBusinessId();
       
@@ -509,8 +602,10 @@ Check: /businesses/${businessId}/promotions/${promotionRef.id}
       const campaignsSnapshot = await getDocs(campaignsRef);
       
       if (campaignsSnapshot.size === 0) {
-        alert('ℹ️ No campaigns found to process');
-        return;
+        if (!isAutomatic) {
+          alert('ℹ️ No campaigns found to process');
+        }
+        return { processed: 0, assigned: 0 };
       }
 
       let totalProcessed = 0;
@@ -538,13 +633,97 @@ Check: /businesses/${businessId}/promotions/${promotionRef.id}
         });
       }
 
-      alert(`✅ Campaign Processing Complete!\n\n📊 Results:\n• ${totalProcessed} campaigns processed\n• ${totalAssigned} promotions assigned\n\nCheck the mobile app to see the new promotions!`);
+      // Update last processed time
+      const now = new Date().toISOString();
+      localStorage.setItem('campaignLastProcessed', now);
+      setAutoProcessing(prev => ({ ...prev, lastProcessed: now }));
+
+      if (!isAutomatic) {
+        alert(`✅ Campaign Processing Complete!\n\n📊 Results:\n• ${totalProcessed} campaigns processed\n• ${totalAssigned} promotions assigned\n\nCheck the mobile app to see the new promotions!`);
+      } else {
+        console.log(`✅ Auto-processing complete: ${totalProcessed} campaigns, ${totalAssigned} assignments`);
+      }
+
+      return { processed: totalProcessed, assigned: totalAssigned };
       
     } catch (error) {
       console.error('❌ Error processing campaigns:', error);
-      alert(`❌ Error processing campaigns: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      if (!isAutomatic) {
+        alert(`❌ Error processing campaigns: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+      return { processed: 0, assigned: 0 };
     } finally {
-      setLoading(false);
+      if (!isAutomatic) {
+        setLoading(false);
+      } else {
+        setAutoProcessing(prev => ({ ...prev, processing: false }));
+      }
+    }
+  };
+
+  // 🤖 AUTOMATIC PROCESSING FUNCTIONS
+  const startAutoProcessing = () => {
+    if (autoProcessInterval) {
+      clearInterval(autoProcessInterval);
+    }
+
+    const intervalMs = autoProcessing.interval * 60 * 1000; // Convert minutes to milliseconds
+    
+    const interval = setInterval(async () => {
+      console.log('🔄 Running automatic campaign processing...');
+      await processAllCampaigns(true);
+      updateNextRunTime();
+    }, intervalMs);
+
+    setAutoProcessInterval(interval);
+    updateNextRunTime();
+    
+    // Save to localStorage
+    localStorage.setItem('campaignAutoProcessing', 'true');
+    localStorage.setItem('campaignAutoInterval', autoProcessing.interval.toString());
+    
+    console.log(`✅ Automatic processing started (every ${autoProcessing.interval} minutes)`);
+  };
+
+  const stopAutoProcessing = () => {
+    if (autoProcessInterval) {
+      clearInterval(autoProcessInterval);
+      setAutoProcessInterval(null);
+    }
+    
+    setAutoProcessing(prev => ({ ...prev, nextRun: null }));
+    localStorage.setItem('campaignAutoProcessing', 'false');
+    
+    console.log('⏹️ Automatic processing stopped');
+  };
+
+  const updateNextRunTime = () => {
+    const nextRun = new Date(Date.now() + (autoProcessing.interval * 60 * 1000));
+    setAutoProcessing(prev => ({ ...prev, nextRun }));
+  };
+
+  const toggleAutoProcessing = () => {
+    const newEnabled = !autoProcessing.enabled;
+    setAutoProcessing(prev => ({ ...prev, enabled: newEnabled }));
+    
+    if (newEnabled) {
+      startAutoProcessing();
+    } else {
+      stopAutoProcessing();
+    }
+  };
+
+  const updateAutoInterval = (newInterval: number) => {
+    setAutoProcessing(prev => ({ ...prev, interval: newInterval }));
+    localStorage.setItem('campaignAutoInterval', newInterval.toString());
+    
+    // Restart with new interval if currently running
+    if (autoProcessing.enabled) {
+      stopAutoProcessing();
+      setTimeout(() => {
+        setAutoProcessing(prev => ({ ...prev, enabled: true }));
+        startAutoProcessing();
+      }, 100);
     }
   };
 
@@ -623,36 +802,29 @@ The promotion is now available on your mobile app!`);
     try {
       console.log('🔄 Assigning promotion to customers with flexible field requirements...');
       
-      // Get customers with flexible field requirements - only require customers to exist
-      const customersRef = collection(firestore, 'businesses', businessId, 'customers');
-      const customersSnapshot = await getDocs(customersRef);
-      console.log(`📋 Found ${customersSnapshot.size} total customers`);
+      // Get customers from user collection (where app team data is stored)
+      const userCustomersRef = collection(firestore, 'users', user.uid, 'customers');
+      const userCustomersSnapshot = await getDocs(userCustomersRef);
+      console.log(`📋 Found ${userCustomersSnapshot.size} customers in user collection`);
       
-      if (customersSnapshot.size === 0) {
+      if (userCustomersSnapshot.size === 0) {
         console.error('❌ NO CUSTOMERS FOUND - DEBUGGING INFO:');
-        console.log(`📍 Searched path: /businesses/${businessId}/customers/`);
-        console.log(`🔍 Business ID: ${businessId}`);
+        console.log(`📍 Searched path: /users/${user.uid}/customers/`);
         console.log(`👤 User ID: ${user.uid}`);
         
-        // Let's check alternative paths where customers might exist
-        console.log('🔍 Checking alternative customer locations...');
-        
-        // Check if customers are in the user's collection
+        // Fallback to web_customers collection if user collection is empty
+        console.log('🔍 Checking web_customers collection as fallback...');
         try {
-          const userCustomersRef = collection(firestore, 'users', user.uid, 'customers');
-          const userCustomersSnapshot = await getDocs(userCustomersRef);
-          console.log(`📋 Found ${userCustomersSnapshot.size} customers in /users/${user.uid}/customers/`);
+          const webCustomersRef = collection(firestore, 'users', user.uid, 'web_customers');
+          const webCustomersSnapshot = await getDocs(webCustomersRef);
+          console.log(`📋 Found ${webCustomersSnapshot.size} customers in web_customers collection`);
           
-          if (userCustomersSnapshot.size > 0) {
-            console.log('✅ Found customers in user collection! Using these instead.');
-            const customersData = userCustomersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            console.log('👥 Customer sample:', customersData[0]);
-            
-            // Use the user's customers instead
-            return await assignPromotionToUserCustomers(businessId, promotionId, promotion, userCustomersSnapshot);
+          if (webCustomersSnapshot.size > 0) {
+            console.log('⚠️ Using web_customers collection (may have outdated outlet data)');
+            return await assignPromotionToUserCustomers(businessId, promotionId, promotion, webCustomersSnapshot);
           }
         } catch (error) {
-          console.log('❌ Error checking user customers:', error);
+          console.log('❌ Error checking web_customers:', error);
         }
         
         alert(`❌ CUSTOMER LOOKUP ERROR
@@ -660,13 +832,13 @@ The promotion is now available on your mobile app!`);
 You mentioned having 92 customers, but the system isn't finding them.
 
 🔍 DEBUGGING DETAILS:
-• Business ID: ${businessId}
-• Searched path: /businesses/${businessId}/customers/
-• Found customers: ${customersSnapshot.size}
+• User ID: ${user.uid}
+• Searched path: /users/${user.uid}/customers/
+• Found customers: ${userCustomersSnapshot.size}
 
 📧 NEXT STEPS:
 1. Check Firebase Console for your actual customer location
-2. Verify the correct business ID is being used
+2. Verify the correct user ID is being used
 3. Customers might be stored in a different path
 
 The promotion "${promotion.title}" was created but needs customers to assign to.`);
@@ -682,7 +854,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       expiresAt.setDate(expiresAt.getDate() + promotion.validityDays);
       
       // Assign to each customer with graceful field handling
-      customersSnapshot.docs.forEach(customerDoc => {
+      userCustomersSnapshot.docs.forEach((customerDoc: any) => {
         const customer = customerDoc.data();
         const customerId = customerDoc.id;
         
@@ -691,7 +863,51 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
         
         // Check outlet targeting (skip if customer has no outlet and promotion is outlet-specific)
         if (promotion.targetOutlets !== 'ALL' && Array.isArray(promotion.targetOutlets)) {
-          if (!customer.outletId || !promotion.targetOutlets.includes(customer.outletId)) {
+          console.log(`🔍 Checking outlet targeting for customer ${customerId}:`);
+          console.log(`   📋 Customer outletId: ${customer.outletId || 'none'}`);
+          console.log(`   📋 Customer outletName: ${customer.outletName || 'none'}`);
+          console.log(`   📋 Promotion targetOutlets: ${promotion.targetOutlets.join(', ')}`);
+          console.log(`   🎯 Using outletId matching (app team fix applied)`);
+          
+          // Check if customer has a valid outlet assignment
+          const hasValidOutlet = customer.outletId && 
+            customer.outletId.trim() !== '' && 
+            customer.outletName && 
+            customer.outletName.trim() !== '';
+          
+          // Check if customer's outlet matches any of the target outlets
+          // Skip customers with no outlet or no outlet match
+          const hasMatchingOutlet = hasValidOutlet && 
+            promotion.targetOutlets.includes(customer.outletId);
+          
+          // Skip customers with no outlet assignment or no outlet match
+          if (!hasValidOutlet) {
+            console.log(`⏭️ SKIPPING - Customer ${customerId} (${customer.phoneNumber}) - No outlet assigned`);
+            return; // Skip this iteration
+          }
+          
+          // DEBUG: Log the exact comparison for troubleshooting
+          console.log(`   🔍 DEBUG - Outlet matching details:`);
+          console.log(`      Customer outletId: "${customer.outletId}"`);
+          console.log(`      Promotion targetOutlets: [${promotion.targetOutlets.join(', ')}]`);
+          console.log(`      Is customer outletId in targetOutlets? ${promotion.targetOutlets.includes(customer.outletId)}`);
+          console.log(`      Final hasMatchingOutlet: ${hasMatchingOutlet}`);
+          
+          // DEBUG: Log first 5 customers for app team verification
+          if (assignedCount < 5) {
+            console.log(`🔍 DEBUG - Customer ${customerId} outlet data:`, {
+              outletId: customer.outletId,
+              outletName: customer.outletName,
+              phoneNumber: customer.phoneNumber,
+              name: customer.name || customer.firstName,
+              hasMatchingOutlet: hasMatchingOutlet
+            });
+          }
+          
+          console.log(`   🎯 Has matching outlet: ${hasMatchingOutlet}`);
+          
+          if (!hasMatchingOutlet) {
+            console.log(`   ⏭️ SKIPPING customer ${customerId} - outlet doesn't match`);
             return; // Skip this customer
           }
         }
@@ -718,6 +934,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
         
         batch.set(customerPromotionRef, customerPromotionData);
         assignedCount++;
+        console.log(`✅ ASSIGNED promotion to customer ${customerId}`);
         
         // Handle SMS only if customer has phone and opted in
         if (promotionForm.sendSMS && customer.phoneNumber && customer.optedInForSMS && promotionForm.smsMessage) {
@@ -729,12 +946,20 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       
       // Execute batch
       await batch.commit();
-      console.log(`✅ Successfully assigned promotion to ${assignedCount} customers out of ${customersSnapshot.size} total`);
+      console.log(`✅ Successfully assigned promotion to ${assignedCount} customers out of ${userCustomersSnapshot.size} total`);
+      console.log(`📊 Outlet targeting: ${promotion.targetOutlets === 'ALL' ? 'ALL outlets' : promotion.targetOutlets.join(', ')}`);
       
       if (assignedCount === 0) {
         alert('⚠️ No customers were eligible for this promotion based on targeting criteria.');
       } else {
-        console.log(`🎯 Assignment breakdown: ${assignedCount} assigned, ${customersSnapshot.size - assignedCount} skipped`);
+        console.log(`🎯 Assignment breakdown: ${assignedCount} assigned, ${userCustomersSnapshot.size - assignedCount} skipped`);
+        
+        // Show assignment summary to user
+        const targetOutletNames = promotion.targetOutlets === 'ALL' 
+          ? 'ALL outlets' 
+          : outlets.filter(o => promotion.targetOutlets.includes(o.id)).map(o => o.name).join(', ');
+        
+        alert(`✅ Promotion "${promotion.title}" assigned successfully!\n\n📊 Assignment Summary:\n• Total customers: ${userCustomersSnapshot.size}\n• Assigned: ${assignedCount}\n• Skipped: ${userCustomersSnapshot.size - assignedCount}\n• Target outlets: ${targetOutletNames}\n\n💡 Check the browser console for detailed customer information.`);
       }
       
     } catch (error) {
@@ -748,8 +973,8 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
     try {
       console.log('📱 Sending SMS to customers with flexible requirements...');
       
-      // Get all customers first, then filter gracefully
-      const customersRef = collection(firestore, 'businesses', businessId, 'customers');
+      // Get all customers first, then filter gracefully (using user collection as per app team)
+      const customersRef = collection(firestore, 'users', user.uid, 'customers');
       const customersSnapshot = await getDocs(customersRef);
       console.log(`📋 Found ${customersSnapshot.size} total customers for SMS`);
       
@@ -801,20 +1026,43 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       setLoading(true);
       
       // Validate required fields
-      if (!campaignForm.name || !campaignForm.discountAmount) {
-        alert('❌ Please fill in required fields (Name and Discount Amount)');
+      if (!campaignForm.name || !campaignForm.discountAmount || !campaignForm.type) {
+        alert('❌ Please fill in required fields (Name, Campaign Type, and Discount Amount)');
         return;
       }
 
       const businessId = await getCurrentBusinessId();
       console.log('🤖 Creating campaign for business:', businessId);
+      console.log('🏢 Business ID used for creation:', businessId);
+      
+      // Map campaign type to proper trigger type
+      let triggerType: 'birthday' | 'inactive_15' | 'inactive_30' | 'inactive_custom' = 'birthday';
+      let daysSinceLastVisit: number | undefined = undefined;
+      
+      switch (campaignForm.type) {
+        case 'inactive':
+          // Use custom trigger type and store the actual days
+          triggerType = 'inactive_custom';
+          daysSinceLastVisit = campaignForm.daysSinceLastVisit;
+          break;
+        case 'birthday':
+          triggerType = 'birthday';
+          break;
+        case 'spending':
+          // For now, map spending campaigns to inactive (you can adjust this later)
+          triggerType = 'inactive_15';
+          break;
+        default:
+          triggerType = 'birthday';
+      }
       
       const campaign: Campaign = {
         name: campaignForm.name,
         discountType: campaignForm.discountType,
         discountAmount: campaignForm.discountAmount,
         minimumPurchase: campaignForm.minimumPurchase,
-        triggerType: campaignForm.triggerType as any || 'birthday',
+        triggerType: triggerType,
+        daysSinceLastVisit: daysSinceLastVisit, // Store custom days
         outletIds: campaignForm.outletIds.length === 0 ? ['all'] : campaignForm.outletIds,
         expirationDays: 7, // Default 7-day expiration
         isActive: true,
@@ -836,7 +1084,14 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
         discountAmount: 0,
         minimumPurchase: 0,
         triggerType: '',
-        outletIds: []
+        outletIds: [],
+        type: '',
+        daysSinceLastVisit: 15,
+        birthdayOffset: 0,
+        minimumSpending: 100,
+        promotionTitle: '',
+        smsMessage: '',
+        targetOutlets: []
       });
       setShowCreateCampaign(false);
       
@@ -869,16 +1124,197 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
     }
   };
 
-  // 🗑️ DELETE CAMPAIGN
-  const deleteCampaign = async (campaignId: string) => {
-    if (!confirm('Are you sure you want to delete this campaign?')) return;
+  // 🧹 CLEAN ALL DATA (NUCLEAR OPTION)
+  const cleanAllData = async () => {
+    if (!confirm('⚠️ DANGER: This will delete ALL campaigns and customer promotions. Are you absolutely sure?')) return;
+    if (!confirm('⚠️ FINAL WARNING: This action cannot be undone. Continue?')) return;
     
     try {
       setLoading(true);
       const businessId = await getCurrentBusinessId();
-      await deleteDoc(doc(firestore, 'businesses', businessId, 'campaigns', campaignId));
+      
+      console.log('🧹 Starting complete data cleanup...');
+      
+      const batch = writeBatch(firestore);
+      let totalDeleted = 0;
+      
+      // 1. Delete all campaigns
+      console.log('🗑️ Deleting all campaigns...');
+      const campaignsRef = collection(firestore, 'businesses', businessId, 'campaigns');
+      const campaignsSnapshot = await getDocs(campaignsRef);
+      campaignsSnapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+        totalDeleted++;
+        console.log(`   ✅ Queued campaign deletion: ${doc.data().name}`);
+      });
+      
+      // 2. Delete all standalone promotions
+      console.log('🗑️ Deleting all standalone promotions...');
+      const promotionsRef = collection(firestore, 'businesses', businessId, 'promotions');
+      const promotionsSnapshot = await getDocs(promotionsRef);
+      promotionsSnapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+        totalDeleted++;
+        console.log(`   ✅ Queued promotion deletion: ${doc.data().title}`);
+      });
+      
+      // 3. Delete ALL customer promotions
+      console.log('🗑️ Deleting all customer promotions...');
+      const allCustomersRef = collection(firestore, 'businesses', businessId, 'customerPromotions');
+      const customersSnapshot = await getDocs(allCustomersRef);
+      
+      for (const customerDoc of customersSnapshot.docs) {
+        const customerPromotionsRef = collection(firestore, 'businesses', businessId, 'customerPromotions', customerDoc.id, 'promotions');
+        const promotionsSnapshot = await getDocs(customerPromotionsRef);
+        
+        promotionsSnapshot.docs.forEach(promotionDoc => {
+          batch.delete(promotionDoc.ref);
+          totalDeleted++;
+          console.log(`   ✅ Queued customer promotion deletion: ${customerDoc.id}`);
+        });
+      }
+      
+      // Commit all deletions
+      await batch.commit();
+      console.log(`🎉 Cleanup complete! Deleted ${totalDeleted} items total.`);
+      
+      // Refresh all data
       loadCampaigns();
-      alert('✅ Campaign deleted successfully!');
+      loadPromotions();
+      
+      alert(`✅ Complete cleanup finished! Deleted ${totalDeleted} items. Your system is now clean and ready for new campaigns.`);
+      
+    } catch (error) {
+      console.error('❌ Error during cleanup:', error);
+      alert('❌ Error during cleanup. Check console for details.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 🗑️ DELETE CAMPAIGN WITH CLEANUP
+  const deleteCampaign = async (campaignId: string) => {
+    if (!confirm('⚠️ This will delete the campaign AND remove all customer promotions generated by it. Continue?')) return;
+    
+    try {
+      setLoading(true);
+      const businessId = await getCurrentBusinessId();
+      
+      console.log('🗑️ Deleting campaign and cleaning up customer promotions...');
+      
+      // Step 1: Get campaign details for better matching
+      const campaignToDelete = campaigns.find(c => c.id === campaignId);
+      const campaignName = campaignToDelete?.name || '';
+      
+      console.log(`🔍 Available campaigns in state:`);
+      campaigns.forEach(c => {
+        console.log(`   - ${c.name} (ID: ${c.id})`);
+      });
+      console.log(`🔍 Looking for campaign with ID: ${campaignId}`);
+      console.log(`🔍 Found campaign: ${campaignToDelete ? 'YES' : 'NO'}`);
+      
+      console.log(`🔍 Deleting campaign: "${campaignName}" (ID: ${campaignId})`);
+      console.log(`🏢 Using business ID: ${businessId}`);
+      console.log(`🎯 Looking for promotions with campaignId: "${campaignId}"`);
+      console.log(`🎯 Or promotions with title: "${campaignName}"`);
+      
+      // Step 2: Find all customer promotions generated by this campaign
+      // Use the SAME collection that campaign processing uses
+      let allCustomersRef;
+      let customersSnapshot;
+      
+      try {
+        // First try the user's customers path (same as campaign processing)
+        allCustomersRef = collection(firestore, 'users', user.uid, 'customers');
+        customersSnapshot = await getDocs(allCustomersRef);
+        console.log(`🔍 Found ${customersSnapshot.docs.length} customers in user collection (same as campaign processing)`);
+      } catch (error) {
+        console.log('⚠️ User customers not found, trying web_customers collection...');
+        // Fallback to web_customers
+        allCustomersRef = collection(firestore, 'users', user.uid, 'web_customers');
+        customersSnapshot = await getDocs(allCustomersRef);
+        console.log(`🔍 Found ${customersSnapshot.docs.length} customers in web_customers collection`);
+      }
+      
+      // Also check if we have any customers at all
+      const allCustomersDataRef = collection(firestore, 'users', user.uid, 'web_customers');
+      const allCustomersDataSnapshot = await getDocs(allCustomersDataRef);
+      console.log(`📊 Total customers in web_customers database: ${allCustomersDataSnapshot.docs.length}`);
+      
+      // Check what business ID the campaign was created with
+      if (campaignToDelete) {
+        console.log(`📋 Campaign was created in business: ${businessId}`);
+      }
+      
+      if (customersSnapshot.docs.length === 0) {
+        console.log(`⚠️ No customerPromotions collection found. This might mean:`);
+        console.log(`   1. No customers have received promotions yet`);
+        console.log(`   2. Mobile app cleaned everything already`);
+        console.log(`   3. Data structure is different`);
+        console.log(`   4. Business ID mismatch between creation and deletion`);
+      }
+      
+      const batch = writeBatch(firestore);
+      let cleanupCount = 0;
+      
+             // Step 2: Remove campaign-generated promotions from each customer
+       for (const customerDoc of customersSnapshot.docs) {
+         const customerId = customerDoc.id;
+         
+         // Campaign promotions are ALWAYS saved to business collection, regardless of where customers come from
+         const customerPromotionsRef = collection(firestore, 'businesses', businessId, 'customerPromotions', customerId, 'promotions');
+         
+         const promotionsSnapshot = await getDocs(customerPromotionsRef);
+         
+         console.log(`🔍 Customer ${customerId}: Found ${promotionsSnapshot.docs.length} promotions`);
+         
+         promotionsSnapshot.docs.forEach(promotionDoc => {
+           const promotion = promotionDoc.data();
+           const promotionId = promotionDoc.id;
+           
+           console.log(`🔍 Checking promotion ${promotionId} for customer ${customerId}:`);
+           console.log(`   📋 campaignId: "${promotion.campaignId}"`);
+           console.log(`   📋 source: "${promotion.source}"`);
+           console.log(`   📋 title: "${promotion.title}"`);
+           console.log(`   📋 description: "${promotion.description}"`);
+           
+           // Enhanced matching logic for campaign-generated promotions
+           const isCampaignPromotion = 
+             promotion.campaignId === campaignId || 
+             (promotion.source?.includes('campaign') && promotion.title === campaignName) ||
+             promotion.source?.startsWith('campaign_') ||
+             (promotion.title?.includes(campaignName) && promotion.source?.includes('campaign')) ||
+             (promotion.description?.includes('Special') && promotion.source?.includes('campaign')) ||
+             (promotion.description?.includes('Birthday') && promotion.source?.includes('campaign')) ||
+             (promotion.description?.includes('Welcome Back') && promotion.source?.includes('campaign'));
+           
+           console.log(`   🎯 Matching check:`);
+           console.log(`      campaignId match: ${promotion.campaignId === campaignId}`);
+           console.log(`      source includes campaign: ${promotion.source?.includes('campaign')}`);
+           console.log(`      title match: ${promotion.title === campaignName}`);
+           console.log(`      title includes campaign name: ${promotion.title?.includes(campaignName)}`);
+           console.log(`      Final result: ${isCampaignPromotion}`);
+           
+           if (isCampaignPromotion) {
+             batch.delete(promotionDoc.ref);
+             cleanupCount++;
+             console.log(`✅ DELETING campaign promotion from customer ${customerId}: "${promotion.title}"`);
+           } else {
+             console.log(`⏭️ SKIPPING non-campaign promotion: "${promotion.title}"`);
+           }
+         });
+       }
+      
+      // Step 3: Delete the campaign itself
+      batch.delete(doc(firestore, 'businesses', businessId, 'campaigns', campaignId));
+      
+      // Execute all deletions
+      await batch.commit();
+      
+      console.log(`✅ Campaign deleted and ${cleanupCount} customer promotions cleaned up`);
+      
+      loadCampaigns();
+      alert(`✅ Campaign deleted successfully!\n🧹 Cleaned up ${cleanupCount} customer promotions`);
     } catch (error) {
       console.error('❌ Error deleting campaign:', error);
       alert(`❌ Error deleting campaign: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -931,17 +1367,64 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
     
     try {
       setLoading(true);
-      console.log('🗑️ Deleting promotion:', promotionToDelete.title);
+      console.log('🗑️ Deleting promotion and cleaning up customer assignments:', promotionToDelete.title);
       
       const businessId = await getCurrentBusinessId();
+      const promotionId = promotionToDelete.id!;
       
-      // Delete from master promotions
-      await deleteDoc(doc(firestore, 'businesses', businessId, 'promotions', promotionToDelete.id!));
+      // Step 1: Find and remove all customer assignments of this promotion
+      // Use the SAME collection that campaign processing uses
+      let allCustomersRef;
+      let customersSnapshot;
       
-      // TODO: Also remove from customer assignments if needed
-      // This would require querying all customer assignments and removing this promotion
+      try {
+        // First try the user's customers path (same as campaign processing)
+        allCustomersRef = collection(firestore, 'users', user.uid, 'customers');
+        customersSnapshot = await getDocs(allCustomersRef);
+        console.log(`🔍 Found ${customersSnapshot.docs.length} customers in user collection for promotion cleanup`);
+      } catch (error) {
+        console.log('⚠️ User customers not found, trying business collection...');
+        // Fallback to business customers
+        allCustomersRef = collection(firestore, 'businesses', businessId, 'customers');
+        customersSnapshot = await getDocs(allCustomersRef);
+        console.log(`🔍 Found ${customersSnapshot.docs.length} customers in business collection for promotion cleanup`);
+      }
       
-      console.log('✅ Promotion deleted successfully');
+      const batch = writeBatch(firestore);
+      let cleanupCount = 0;
+      
+      // Step 2: Remove this promotion from each customer's assignments
+      for (const customerDoc of customersSnapshot.docs) {
+        const customerId = customerDoc.id;
+        
+        // Campaign promotions are ALWAYS saved to business collection, regardless of where customers come from
+        const customerPromotionsRef = collection(firestore, 'businesses', businessId, 'customerPromotions', customerId, 'promotions');
+        const promotionsSnapshot = await getDocs(customerPromotionsRef);
+        
+        console.log(`🔍 Customer ${customerId}: Found ${promotionsSnapshot.docs.length} promotions`);
+        
+        promotionsSnapshot.docs.forEach(promotionDoc => {
+          const promotion = promotionDoc.data();
+          const currentPromotionId = promotionDoc.id;
+          
+          // Check if this is the promotion we want to delete
+          if (currentPromotionId === promotionId) {
+            batch.delete(promotionDoc.ref);
+            cleanupCount++;
+            console.log(`✅ DELETING promotion from customer ${customerId}: "${promotion.title}"`);
+          } else {
+            console.log(`⏭️ SKIPPING other promotion: "${promotion.title}"`);
+          }
+        });
+      }
+      
+      // Step 3: Delete from master promotions
+      batch.delete(doc(firestore, 'businesses', businessId, 'promotions', promotionId));
+      
+      // Execute all deletions
+      await batch.commit();
+      
+      console.log(`✅ Promotion deleted and ${cleanupCount} customer assignments cleaned up`);
       
       // Reload promotions to update the display
       await loadPromotions();
@@ -949,6 +1432,8 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       // Close confirmation dialog
       setShowDeleteConfirmation(false);
       setPromotionToDelete(null);
+      
+      alert(`✅ Promotion "${promotionToDelete.title}" deleted successfully!\n🧹 Cleaned up ${cleanupCount} customer assignments`);
       
     } catch (error) {
       console.error('❌ Error deleting promotion:', error);
@@ -961,6 +1446,98 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
   const cancelDelete = () => {
     setShowDeleteConfirmation(false);
     setPromotionToDelete(null);
+  };
+
+  // 🔄 TOGGLE CAMPAIGN ACTIVE STATUS
+  const toggleCampaignStatus = async (campaignId: string, currentStatus: boolean) => {
+    try {
+      setLoading(true);
+      const businessId = await getCurrentBusinessId();
+      const campaignRef = doc(firestore, 'businesses', businessId, 'campaigns', campaignId);
+      
+      const newStatus = !currentStatus;
+      console.log(`🔄 ${newStatus ? 'Activating' : 'Deactivating'} campaign ${campaignId}`);
+      
+      // Update the campaign status in Firebase
+      await updateDoc(campaignRef, {
+        isActive: newStatus
+      });
+      
+      console.log(`✅ Campaign ${newStatus ? 'activated' : 'deactivated'} successfully`);
+      
+      // Reload campaigns to update the display
+      await loadCampaigns();
+      alert(`Campaign ${newStatus ? 'activated' : 'deactivated'} successfully!`);
+      
+    } catch (error) {
+      console.error('❌ Error toggling campaign status:', error);
+      alert(`❌ Error updating campaign: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 🔄 TOGGLE PROMOTION ACTIVE STATUS  
+  const togglePromotionStatus = async (promotionId: string, currentStatus: boolean) => {
+    try {
+      setLoading(true);
+      const businessId = await getCurrentBusinessId();
+      
+      const newStatus = !currentStatus;
+      console.log(`🔄 ${newStatus ? 'Activating' : 'Deactivating'} promotion ${promotionId}`);
+      
+      // Step 1: Update the master promotion status
+      const promotionRef = doc(firestore, 'businesses', businessId, 'promotions', promotionId);
+      await updateDoc(promotionRef, {
+        isActive: newStatus
+      });
+      
+      // Step 2: Update customer assignments if deactivating
+      let customerUpdateCount = 0;
+      if (!newStatus) {
+        const allCustomersRef = collection(firestore, 'businesses', businessId, 'customerPromotions');
+        const customersSnapshot = await getDocs(allCustomersRef);
+        
+        const batch = writeBatch(firestore);
+        
+        // Deactivate this promotion for all customers
+        for (const customerDoc of customersSnapshot.docs) {
+          const customerPromotionRef = doc(firestore, 'businesses', businessId, 'customerPromotions', customerDoc.id, 'promotions', promotionId);
+          
+          try {
+            // Check if customer has this promotion and update its status
+            const promotionSnapshot = await getDocs(query(collection(firestore, 'businesses', businessId, 'customerPromotions', customerDoc.id, 'promotions'), where('__name__', '==', promotionId)));
+            if (!promotionSnapshot.empty) {
+              batch.update(customerPromotionRef, {
+                isActive: false
+              });
+              customerUpdateCount++;
+              console.log(`🔄 Deactivating promotion for customer ${customerDoc.id}`);
+            }
+          } catch (error) {
+            // Customer might not have this promotion
+            console.log(`ℹ️ Customer ${customerDoc.id} doesn't have promotion ${promotionId}`);
+          }
+        }
+        
+        if (customerUpdateCount > 0) {
+          await batch.commit();
+          console.log(`🔄 Updated ${customerUpdateCount} customer assignments`);
+        }
+      }
+      
+      console.log(`✅ Promotion ${newStatus ? 'activated' : 'deactivated'} successfully`);
+      
+      // Reload promotions to update the display
+      await loadPromotions();
+      alert(`Promotion ${newStatus ? 'activated' : 'deactivated'} successfully!${!newStatus ? `\n🧹 Updated ${customerUpdateCount} customer assignments` : ''}`);
+      
+    } catch (error) {
+      console.error('❌ Error toggling promotion status:', error);
+      alert(`❌ Error updating promotion: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // 🕐 EXPIRATION HELPER FUNCTIONS (As Per App Team Specification)
@@ -991,7 +1568,77 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
     loadCampaigns();
     loadOutlets();
   }, [user]);
+
+  // 🤖 AUTOMATIC PROCESSING LIFECYCLE
+  useEffect(() => {
+    // Add CSS for pulse animation
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+    `;
+    document.head.appendChild(style);
+
+    // Start automatic processing if it was enabled
+    if (autoProcessing.enabled) {
+      startAutoProcessing();
+    }
+
+    // Cleanup interval on unmount
+    return () => {
+      if (autoProcessInterval) {
+        clearInterval(autoProcessInterval);
+      }
+      document.head.removeChild(style);
+    };
+  }, []);
+
+  // Update next run time when interval changes
+  useEffect(() => {
+    if (autoProcessing.enabled && autoProcessing.nextRun) {
+      updateNextRunTime();
+    }
+  }, [autoProcessing.interval]);
   
+  // 🔍 CUSTOMER LOOKUP FUNCTION
+  const lookupCustomer = async (customerId: string) => {
+    try {
+      const businessId = await getCurrentBusinessId();
+      
+      // Try user collection first (where app team stores customers)
+      const userCustomersRef = collection(firestore, 'users', user.uid, 'customers');
+      const userCustomerDoc = doc(userCustomersRef, customerId);
+      const userCustomerSnapshot = await getDoc(userCustomerDoc);
+      
+      if (userCustomerSnapshot.exists()) {
+        const customerData = userCustomerSnapshot.data();
+        console.log(`🔍 Customer ${customerId} found in user collection:`, customerData);
+        alert(`📱 Customer Information:\n\nID: ${customerId}\nPhone: ${customerData.phoneNumber || 'Not found'}\nName: ${customerData.name || customerData.firstName || 'Not found'}\nOutlet: ${customerData.outletName || 'Not found'} (${customerData.outletId || 'Not found'})`);
+        return;
+      }
+      
+      // Try user collection (primary source as per app team)
+      const userCustomersRef2 = collection(firestore, 'users', user.uid, 'customers');
+      const userCustomerDoc2 = doc(userCustomersRef2, customerId);
+      const userCustomerSnapshot2 = await getDoc(userCustomerDoc2);
+      
+      if (userCustomerSnapshot2.exists()) {
+        const customerData = userCustomerSnapshot2.data();
+        console.log(`🔍 Customer ${customerId} found in user collection:`, customerData);
+        alert(`📱 Customer Information:\n\nID: ${customerId}\nPhone: ${customerData.phoneNumber || 'Not found'}\nName: ${customerData.name || customerData.firstName || 'Not found'}\nOutlet: ${customerData.outletName || 'Not found'} (${customerData.outletId || 'Not found'})`);
+        return;
+      }
+      
+      alert(`❌ Customer ${customerId} not found in either collection.`);
+      
+    } catch (error) {
+      console.error('❌ Error looking up customer:', error);
+      alert(`❌ Error looking up customer: ${(error as Error).message}`);
+    }
+  };
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -1049,6 +1696,59 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
 
       {/* Main Content */}
       <main style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+        
+        {/* 🔍 Customer Lookup Tool */}
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.1)',
+          borderRadius: '15px',
+          padding: '1.5rem',
+          marginBottom: '2rem',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          backdropFilter: 'blur(10px)'
+        }}>
+          <h3 style={{ color: 'white', fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '1rem' }}>
+            🔍 Customer Lookup Tool
+          </h3>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <input
+              type="text"
+              placeholder="Enter customer ID (e.g., j0AQ1MwNMtpKJXTdIeKm)"
+              style={{
+                flex: 1,
+                padding: '0.75rem 1rem',
+                border: '1px solid rgba(255, 255, 255, 0.3)',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                color: 'white',
+                fontSize: '0.9rem'
+              }}
+              id="customerLookupInput"
+            />
+            <button
+              onClick={() => {
+                const input = document.getElementById('customerLookupInput') as HTMLInputElement;
+                const customerId = input.value.trim();
+                if (customerId) {
+                  lookupCustomer(customerId);
+                } else {
+                  alert('Please enter a customer ID');
+                }
+              }}
+              style={{
+                padding: '0.75rem 1.5rem',
+                backgroundColor: '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: 'bold'
+              }}
+            >
+              🔍 Lookup
+            </button>
+          </div>
+        </div>
         
         {/* Three-Tier System Overview */}
         <div style={{
@@ -1158,6 +1858,85 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
           </button>
         </div>
 
+        {/* Automatic Processing Status */}
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(59, 130, 246, 0.1))',
+          borderRadius: '15px',
+          padding: '1.5rem',
+          marginBottom: '2rem',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          backdropFilter: 'blur(20px)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{
+                width: '12px',
+                height: '12px',
+                borderRadius: '50%',
+                backgroundColor: autoProcessing.enabled ? '#10b981' : '#ef4444',
+                boxShadow: autoProcessing.enabled ? '0 0 10px rgba(16, 185, 129, 0.5)' : '0 0 10px rgba(239, 68, 68, 0.5)',
+                animation: autoProcessing.processing ? 'pulse 2s infinite' : 'none'
+              }} />
+              <div>
+                <h3 style={{ color: 'white', margin: 0, fontSize: '1.2rem' }}>
+                  🤖 Automatic Processing {autoProcessing.enabled ? 'ON' : 'OFF'}
+                </h3>
+                <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0.25rem 0 0 0', fontSize: '0.9rem' }}>
+                  {autoProcessing.enabled ? (
+                    <>
+                      Running every {autoProcessing.interval} minutes
+                      {autoProcessing.nextRun && (
+                        <> • Next run: {autoProcessing.nextRun.toLocaleTimeString()}</>
+                      )}
+                      {autoProcessing.lastProcessed && (
+                        <> • Last: {new Date(autoProcessing.lastProcessed).toLocaleString()}</>
+                      )}
+                    </>
+                  ) : (
+                    'Click to enable automatic campaign processing'
+                  )}
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              <button
+                onClick={toggleAutoProcessing}
+                disabled={loading}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: autoProcessing.enabled ? '#ef4444' : '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: 'bold',
+                  opacity: loading ? 0.7 : 1,
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                {autoProcessing.enabled ? '⏹️ Stop Auto' : '▶️ Start Auto'}
+              </button>
+              <button
+                onClick={() => setShowAutoSettings(true)}
+                disabled={loading}
+                style={{
+                  padding: '0.75rem 1rem',
+                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  color: 'white',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: '8px',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontSize: '0.9rem',
+                  opacity: loading ? 0.7 : 1
+                }}
+              >
+                ⚙️ Settings
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Create Buttons */}
         <div style={{ marginBottom: '2rem', textAlign: 'center', display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
           <button
@@ -1185,47 +1964,24 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             {loading ? '⏳ Processing...' : `+ Create New ${activeTab === 'campaigns' ? 'Campaign' : 'Promotion'}`}
           </button>
           
-          {activeTab === 'promotions' && (
-            <button
-              onClick={processAllCampaigns}
-              disabled={loading}
-              style={{
-                padding: '1rem 2rem',
-                backgroundColor: loading ? '#6b7280' : '#f59e0b',
-                color: 'white',
-                border: 'none',
-                borderRadius: '10px',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                fontSize: '1rem',
-                fontWeight: 'bold',
-                boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)',
-                opacity: loading ? 0.7 : 1
-              }}
-            >
-              🤖 Process All Campaigns
-            </button>
-          )}
-          
-          {activeTab === 'campaigns' && (
-            <button
-              onClick={processAllCampaigns}
-              disabled={loading}
-              style={{
-                padding: '1rem 2rem',
-                backgroundColor: loading ? '#6b7280' : '#f59e0b',
-                color: 'white',
-                border: 'none',
-                borderRadius: '10px',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                fontSize: '1rem',
-                fontWeight: 'bold',
-                boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)',
-                opacity: loading ? 0.7 : 1
-              }}
-            >
-              🤖 Process All Campaigns
-            </button>
-          )}
+          <button
+            onClick={() => processAllCampaigns(false)}
+            disabled={loading}
+            style={{
+              padding: '1rem 2rem',
+              backgroundColor: loading ? '#6b7280' : '#f59e0b',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              fontSize: '1rem',
+              fontWeight: 'bold',
+              boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)',
+              opacity: loading ? 0.7 : 1
+            }}
+          >
+            🔄 Process Now
+          </button>
         </div>
 
         {/* Content Area - Real Data Display */}
@@ -1336,6 +2092,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                         }}>
                           <strong style={{ color: '#a78bfa' }}>Trigger:</strong> {
                             campaign.triggerType === 'birthday' ? 'Birthday' :
+                            campaign.triggerType === 'inactive_custom' ? `Inactive ${campaign.daysSinceLastVisit || 15}+ days` :
                             campaign.triggerType === 'inactive_15' ? 'Inactive 15+ days' :
                             campaign.triggerType === 'inactive_30' ? 'Inactive 30+ days' :
                             campaign.triggerType
@@ -1368,10 +2125,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                         gap: '0.75rem'
                       }}>
                         <button
-                          onClick={() => {
-                            // Toggle campaign status functionality
-                            console.log('Toggle status for:', campaign.name);
-                          }}
+                          onClick={() => toggleCampaignStatus(campaign.id!, campaign.isActive)}
                           disabled={loading}
                           style={{
                             flex: 1,
@@ -1586,10 +2340,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                         gap: '0.75rem'
                       }}>
                         <button
-                          onClick={() => {
-                            // Toggle promotion status functionality
-                            console.log('Toggle status for:', promotion.title);
-                          }}
+                          onClick={() => togglePromotionStatus(promotion.id!, promotion.isActive)}
                           disabled={loading}
                           style={{
                             flex: 1,
@@ -2290,16 +3041,16 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               </button>
               <button
                 onClick={createCampaign}
-                disabled={loading || !campaignForm.name || !campaignForm.type || !campaignForm.promotionTitle || !campaignForm.discountAmount}
+                disabled={loading || !campaignForm.name || !campaignForm.type || !campaignForm.discountAmount}
                 style={{
                   padding: '0.75rem 1.5rem',
                   border: 'none',
                   borderRadius: '8px',
-                  background: (loading || !campaignForm.name || !campaignForm.type || !campaignForm.promotionTitle || !campaignForm.discountAmount) 
+                  background: (loading || !campaignForm.name || !campaignForm.type || !campaignForm.discountAmount) 
                     ? '#6b7280' 
                     : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                   color: 'white',
-                  cursor: (loading || !campaignForm.name || !campaignForm.type || !campaignForm.promotionTitle || !campaignForm.discountAmount) ? 'not-allowed' : 'pointer',
+                  cursor: (loading || !campaignForm.name || !campaignForm.type || !campaignForm.discountAmount) ? 'not-allowed' : 'pointer',
                   fontWeight: 'bold'
                 }}
               >
@@ -2453,6 +3204,239 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 }}
               >
                 {loading ? 'Deleting...' : '🗑️ Delete Promotion'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🤖 AUTOMATIC PROCESSING SETTINGS MODAL */}
+      {showAutoSettings && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          background: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 2000
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+            borderRadius: '20px',
+            padding: '2.5rem',
+            width: '90%',
+            maxWidth: '600px',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            boxShadow: '0 25px 50px rgba(0, 0, 0, 0.5)',
+            color: 'white'
+          }}>
+            {/* Header */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              marginBottom: '2rem'
+            }}>
+              <div style={{ fontSize: '2rem', marginRight: '1rem' }}>⚙️</div>
+              <div>
+                <h2 style={{
+                  color: '#10b981',
+                  fontSize: '1.5rem',
+                  fontWeight: 'bold',
+                  margin: 0
+                }}>
+                  Automatic Processing Settings
+                </h2>
+                <p style={{
+                  color: 'rgba(255,255,255,0.7)',
+                  margin: '0.5rem 0 0 0',
+                  fontSize: '0.9rem'
+                }}>
+                  Configure how often campaigns are automatically processed
+                </p>
+              </div>
+            </div>
+
+            {/* Current Status */}
+            <div style={{
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+              borderRadius: '12px',
+              padding: '1rem',
+              marginBottom: '2rem'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                <div style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: autoProcessing.enabled ? '#10b981' : '#ef4444'
+                }} />
+                <strong style={{ color: '#10b981' }}>
+                  Status: {autoProcessing.enabled ? 'ACTIVE' : 'INACTIVE'}
+                </strong>
+              </div>
+              <div style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.8)' }}>
+                Current interval: {autoProcessing.interval} minutes
+                {autoProcessing.lastProcessed && (
+                  <> • Last processed: {new Date(autoProcessing.lastProcessed).toLocaleString()}</>
+                )}
+              </div>
+            </div>
+
+            {/* Interval Selection */}
+            <div style={{ marginBottom: '2rem' }}>
+              <label style={{ display: 'block', marginBottom: '1rem', fontWeight: 'bold', fontSize: '1.1rem' }}>
+                Processing Interval
+              </label>
+              
+              {/* Quick Options */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                gap: '0.75rem',
+                marginBottom: '1.5rem'
+              }}>
+                {[
+                  { label: '15 min', value: 15, desc: 'Very frequent' },
+                  { label: '30 min', value: 30, desc: 'Frequent' },
+                  { label: '1 hour', value: 60, desc: 'Recommended' },
+                  { label: '2 hours', value: 120, desc: 'Moderate' },
+                  { label: '4 hours', value: 240, desc: 'Conservative' },
+                  { label: '8 hours', value: 480, desc: 'Twice daily' },
+                  { label: '24 hours', value: 1440, desc: 'Daily' }
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => updateAutoInterval(option.value)}
+                    style={{
+                      padding: '0.75rem',
+                      backgroundColor: autoProcessing.interval === option.value ? '#10b981' : 'rgba(255,255,255,0.1)',
+                      color: 'white',
+                      border: autoProcessing.interval === option.value ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                      fontWeight: autoProcessing.interval === option.value ? 'bold' : 'normal',
+                      textAlign: 'center',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <div>{option.label}</div>
+                    <div style={{ fontSize: '0.7rem', opacity: 0.8, marginTop: '0.25rem' }}>
+                      {option.desc}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Interval */}
+              <div style={{
+                backgroundColor: 'rgba(255,255,255,0.05)',
+                borderRadius: '10px',
+                padding: '1rem',
+                border: '1px solid rgba(255,255,255,0.1)'
+              }}>
+                <label style={{ display: 'block', marginBottom: '0.75rem', fontWeight: 'bold' }}>
+                  Custom Interval (minutes)
+                </label>
+                <input
+                  type="number"
+                  min="5"
+                  max="10080"
+                  value={autoProcessing.interval}
+                  onChange={(e) => updateAutoInterval(Number(e.target.value))}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    border: '1px solid #475569',
+                    borderRadius: '8px',
+                    background: 'rgba(30, 41, 59, 0.8)',
+                    color: 'white',
+                    fontSize: '1rem'
+                  }}
+                />
+                <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', marginTop: '0.5rem' }}>
+                  Minimum: 5 minutes • Maximum: 1 week (10,080 minutes)
+                </div>
+              </div>
+            </div>
+
+            {/* Smart Recommendations */}
+            <div style={{
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              border: '1px solid rgba(59, 130, 246, 0.3)',
+              borderRadius: '12px',
+              padding: '1rem',
+              marginBottom: '2rem'
+            }}>
+              <h4 style={{ color: '#60a5fa', margin: '0 0 0.75rem 0', fontSize: '1rem' }}>
+                💡 Smart Recommendations
+              </h4>
+              <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)', lineHeight: '1.5' }}>
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <strong>• 1 hour:</strong> Best for active businesses with frequent customer activity
+                </div>
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <strong>• 4 hours:</strong> Good balance for most businesses
+                </div>
+                <div>
+                  <strong>• 24 hours:</strong> Perfect for birthday campaigns and weekly promotions
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{
+              display: 'flex',
+              gap: '1rem',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={() => setShowAutoSettings(false)}
+                style={{
+                  padding: '0.875rem 2rem',
+                  backgroundColor: '#6b7280',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: 'bold',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                Close
+              </button>
+              
+              <button
+                onClick={() => {
+                  // Apply settings and restart if needed
+                  if (autoProcessing.enabled) {
+                    stopAutoProcessing();
+                    setTimeout(() => {
+                      setAutoProcessing(prev => ({ ...prev, enabled: true }));
+                      startAutoProcessing();
+                    }, 100);
+                  }
+                  setShowAutoSettings(false);
+                }}
+                style={{
+                  padding: '0.875rem 2rem',
+                  backgroundColor: '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: 'bold',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                ✅ Apply Settings
               </button>
             </div>
           </div>
