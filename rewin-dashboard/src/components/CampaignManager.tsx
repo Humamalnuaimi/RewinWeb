@@ -186,23 +186,81 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
     }
   };
 
-  // 📱 SMS SERVICE INTEGRATION (Production-Ready with Console Logging)
+  // 📱 SMS SERVICE INTEGRATION (Production-Ready with Multi-Account Support)
   const sendSMSMessage = async (phoneNumber: string, message: string) => {
     try {
       console.log(`📱 SMS to ${phoneNumber}: ${message}`);
       
-      // 🚨 SMS is OPTIONAL for now - Use console logging
-      // Promotions work WITHOUT SMS - it's just an extra feature!
+      // Get the business ID for this user
+      const businessId = await getCurrentBusinessId();
       
-      // TODO: Integrate with SMS service later
-      // For now, just log to console - promotions will still work!
-      console.log(`✅ SMS would be sent to ${phoneNumber}: "${message}"`);
+      // Find the account and phone number to use for this business
+      const accountPhoneNumber = await getAccountPhoneNumberForBusiness(businessId);
       
-      // Simulate successful send
+      if (!accountPhoneNumber) {
+        console.log(`⚠️ No SMS phone number configured for business ${businessId} - SMS not sent`);
+        return Promise.resolve();
+      }
+      
+      // Send SMS using the multi-account system
+      const { handleSMSRequest } = await import('../api/send-sms');
+      
+      const result = await handleSMSRequest({
+        userId: user.uid,
+        accountId: businessId, // Use businessId as accountId for campaigns
+        phoneNumber: accountPhoneNumber,
+        message: message,
+        recipients: [phoneNumber]
+      });
+      
+      if (result.success) {
+        console.log(`✅ SMS sent successfully to ${phoneNumber} via ${accountPhoneNumber}`);
+        console.log(`💰 Cost: $${result.cost?.toFixed(4) || '0'}`);
+      } else {
+        console.error(`❌ Failed to send SMS to ${phoneNumber}: ${result.error}`);
+      }
+      
       return Promise.resolve();
     } catch (error) {
       console.error('❌ Error sending SMS:', error);
       // Don't throw error - SMS failure shouldn't break promotion creation
+      return Promise.resolve();
+    }
+  };
+
+  // 🔍 Get the phone number configured for a business account
+  const getAccountPhoneNumberForBusiness = async (businessId: string): Promise<string | null> => {
+    try {
+      // Look for phone numbers in the user's accounts that match this business
+      const accountsRef = collection(firestore, 'users', user.uid, 'accounts');
+      const accountsSnapshot = await getDocs(accountsRef);
+      
+      // Find the first account that matches the business ID or has a phone number
+      for (const accountDoc of accountsSnapshot.docs) {
+        const accountData = accountDoc.data();
+        
+        // Check if this account has phone numbers
+        const phoneNumbersRef = collection(firestore, 'users', user.uid, 'accounts', accountDoc.id, 'phone_numbers');
+        const phoneNumbersSnapshot = await getDocs(phoneNumbersRef);
+        
+        if (!phoneNumbersSnapshot.empty) {
+          // Get the first active phone number
+          const activePhoneNumber = phoneNumbersSnapshot.docs.find(doc => 
+            doc.data().isActive === true
+          );
+          
+          if (activePhoneNumber) {
+            console.log(`📱 Found phone number ${activePhoneNumber.data().phoneNumber} for business ${businessId}`);
+            return activePhoneNumber.data().phoneNumber;
+          }
+        }
+      }
+      
+      console.log(`⚠️ No phone numbers found for business ${businessId}`);
+      return null;
+    } catch (error) {
+      console.error('❌ Error getting account phone number:', error);
+      return null;
     }
   };
 

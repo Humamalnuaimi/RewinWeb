@@ -1,955 +1,1292 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, doc, updateDoc, deleteDoc, addDoc, getDocs } from 'firebase/firestore';
-import { firestore } from '../firebase/config';
-import Papa from 'papaparse';
-import { type User } from 'firebase/auth';
+import { auth, firestore, database } from '../firebase/config';
+import { signOut } from 'firebase/auth';
+import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
+import { ref, onValue, off } from 'firebase/database';
 
-interface CustomerData {
-  id: string;
-  name?: string;
-  fullName?: string;
-  firstName?: string;
-  phoneNumber?: string;
-  phone?: string;
-  points?: number;
-  outletId?: string;
-  dateJoined?: any;
-  createdAt?: any;
-  email?: string;
-  lastVisitDate?: any;
-  totalVisits?: number;
-}
-
-interface AdminDashboardProps {
-  user: User;
-  onClose: () => void;
-}
-
-const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onClose }) => {
-  const [activeTab, setActiveTab] = useState<'users' | 'csv' | 'outlets'>('users');
-  const [customers, setCustomers] = useState<CustomerData[]>([]);
-  const [outlets, setOutlets] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCustomers, setSelectedCustomers] = useState<Set<string>>(new Set());
-  const [editingCustomer, setEditingCustomer] = useState<CustomerData | null>(null);
-  const [csvData, setCsvData] = useState<any[]>([]);
-  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
-
-  // Icons
+// Icon components
   const UsersIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M16 4c0-1.11.89-2 2-2s2 .89 2 2-.89 2-2 2-2-.89-2-2zm4 18v-6h2.5l-2.54-7.63A2.98 2.98 0 0 0 17.14 7H16.5c-.8 0-1.54.37-2.01.99l-.49.71c-.81 1.17-2.13 1.98-3.61 2.23-.22-.91-.78-1.68-1.56-2.15A2.99 2.99 0 0 0 7 7H6.86c-1.31 0-2.43.83-2.82 2.02L1.5 16H4v6h2v-6h1.5l2-6H11v6h2v-6h1.5l2 6H18v6h2z"/>
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
     </svg>
   );
 
-  const CSVIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+const StarIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
     </svg>
   );
 
-  const StoreIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M18.36 9l.6 3H5.04l.6-3h12.72M20 4H4v2h16V4zm0 3H4l-1 5v2h1v6h10v-6h4v6h2v-6h1v-2l-1-5zM6 18v-4h6v4H6z"/>
+const DollarIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.67v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05.82 1.87 2.65 1.87 1.96 0 2.4-.98 2.4-1.59 0-.83-.44-1.61-2.67-2.14-2.48-.6-4.18-1.62-4.18-3.67 0-1.72 1.39-2.84 3.11-3.21V4h2.67v1.95c1.86.45 2.79 1.86 2.85 3.39H14.3c-.05-1.11-.64-1.87-2.22-1.87-1.5 0-2.4.68-2.4 1.64 0 .84.65 1.39 2.67 1.91s4.18 1.39 4.18 3.91c-.01 1.83-1.38 2.83-3.12 3.16z"/>
     </svg>
   );
 
-  const EditIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+const BookIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
     </svg>
   );
 
-  const DeleteIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+const PersonAddIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
     </svg>
   );
 
-  const DownloadIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+const BuildingIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10z"/>
     </svg>
   );
 
-  const UploadIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/>
+const CrownIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 8l3 4h2l-3 4-3-4H7l3-4z"/>
     </svg>
   );
 
-  // Fetch customers and outlets
+const AdminDashboard: React.FC = () => {
+  const [user, setUser] = useState<any>(null);
+  const [currentPage, setCurrentPage] = useState<'dashboard' | 'accounts' | 'userBusinesses'>('dashboard');
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [userBusinesses, setUserBusinesses] = useState<any[]>([]);
+  const [outlets, setOutlets] = useState<any[]>([]);
+  const [outletCount, setOutletCount] = useState(0);
+
   useEffect(() => {
-    const customersQuery = query(collection(firestore, `users/${user.uid}/web_customers`));
-    const outletsQuery = query(collection(firestore, `users/${user.uid}/outlets`));
-
-    const unsubscribeCustomers = onSnapshot(customersQuery, (snapshot) => {
-      const customersList = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as CustomerData[];
-      setCustomers(customersList);
-      setLoading(false);
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      setUser(user);
     });
 
-    const unsubscribeOutlets = onSnapshot(outletsQuery, (snapshot) => {
-      const outletsList = snapshot.docs.map(doc => ({
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (currentPage === 'accounts') {
+      loadUsers();
+    }
+    const unsubscribeOutlets = loadOutlets();
+
+    return () => {
+      if (unsubscribeOutlets) {
+      unsubscribeOutlets();
+      }
+    };
+  }, [currentPage]);
+
+  const loadOutlets = () => {
+    console.log('🏪 Loading outlets from Realtime Database...');
+    console.log('🔍 Using root /outlets path');
+    
+    // Use root outlets path instead of user-specific paths
+    const outletsRef = ref(database, 'outlets');
+    
+    const unsubscribe = onValue(outletsRef, (snapshot) => {
+      console.log('📊 Snapshot exists:', snapshot.exists());
+      console.log('📊 Snapshot key:', snapshot.key);
+      console.log('📊 Snapshot value:', snapshot.val());
+      
+      const outletsData = snapshot.val();
+      if (outletsData) {
+        console.log('✅ Raw outlets data:', outletsData);
+        const outletsList = Object.keys(outletsData).map(key => ({
+          id: key,
+          ...outletsData[key]
+        }));
+        setOutlets(outletsList);
+        setOutletCount(outletsList.length);
+        console.log('✅ Loaded all outlets:', outletsList);
+        console.log('📊 Total outlets count:', outletsList.length);
+        console.log('🏪 Outlet names:', outletsList.map(outlet => outlet.name || outlet.outletName || `Outlet ${outlet.id}`));
+    } else {
+        setOutlets([]);
+        setOutletCount(0);
+        console.log('❌ No outlets found in root /outlets path');
+        console.log('🔍 This could mean:');
+        console.log('   - The path /outlets does not exist');
+        console.log('   - The outlets are stored in a different path');
+        console.log('   - Security rules are blocking access');
+      }
+    }, (error) => {
+      console.error('❌ Error loading outlets:', error);
+      console.error('🔍 Error details:', error instanceof Error ? error.message : String(error));
+      setOutlets([]);
+      setOutletCount(0);
+    });
+    
+    return unsubscribe;
+  };
+
+  const loadUsers = async () => {
+    setLoading(true);
+    try {
+      console.log('🔄 Loading users...');
+      // For now, we'll use a combination of known users and try to fetch from Firebase
+      // In a real admin dashboard, you'd use Firebase Admin SDK to list all users
+      const knownUsers = [
+        {
+          uid: 'jW94RyPlFBfGiw06RBpvikfy6zQ2',
+          email: 'alnuaimi.humam@gmail.com',
+          displayName: 'Humam Al-Nuaimi',
+          createdAt: new Date('2025-07-19'),
+          lastSignIn: new Date('2025-07-23')
+        },
+        {
+          uid: 'TRaP0sWcL5eC4lbWqZKEklejlX93',
+          email: 'sicario0o0o@gmail.com',
+          displayName: 'sicario0o0o',
+          createdAt: new Date('2025-07-10'),
+          lastSignIn: new Date('2025-07-23')
+        },
+        {
+          uid: 'GsPOjjTOUAXWIRi5tUrnB9wH',
+          email: 'humam@gmail.com',
+          displayName: 'humam',
+          createdAt: new Date('2025-07-12'),
+          lastSignIn: new Date('2025-07-14')
+        }
+      ];
+      
+      // Try to get current user info to add to the list
+      const currentUser = auth.currentUser;
+      console.log('👤 Current user:', currentUser);
+      
+      if (currentUser && !knownUsers.find(u => u.uid === currentUser.uid)) {
+        console.log('➕ Adding current user to list');
+        knownUsers.push({
+          uid: currentUser.uid,
+          email: currentUser.email || '',
+          displayName: currentUser.displayName || currentUser.email || 'Unknown User',
+          createdAt: new Date(currentUser.metadata.creationTime || Date.now()),
+          lastSignIn: new Date(currentUser.metadata.lastSignInTime || Date.now())
+        });
+      }
+      
+      setUsers(knownUsers);
+      console.log('✅ Loaded users:', knownUsers);
+      console.log('📊 Total users count:', knownUsers.length);
+    } catch (error) {
+      console.error('❌ Error loading users:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadUserBusinesses = async (userId: string) => {
+    setLoading(true);
+    try {
+      console.log('🏪 Loading outlets for user:', userId);
+      console.log('🔍 Using Firestore path: /users/{userId}/outlets');
+      
+      // Get the selected user details
+      const selectedUser = users.find(user => user.uid === userId);
+      if (selectedUser) {
+        console.log('🔍 User email:', selectedUser.email);
+        console.log('🔍 User UID:', selectedUser.uid);
+        
+        // Try the debug function for ALL users, not just sicario0o0o@gmail.com
+        console.log('🔍 Checking multiple paths for user:', selectedUser.email);
+        const outletsList = await checkMultiplePathsForUser(selectedUser.email);
+        if (outletsList.length > 0) {
+          setUserBusinesses(outletsList);
+          console.log('✅ Loaded outlets from multiple path check:', outletsList);
+      return;
+        }
+      }
+      
+      // Fallback to standard Firestore path if debug didn't find anything
+      console.log('🔍 No outlets found via debug, trying standard Firestore path...');
+      const outletsRef = collection(firestore, 'users', userId, 'outlets');
+      
+      console.log('📊 Checking if collection exists...');
+      const querySnapshot = await getDocs(outletsRef);
+      
+      console.log('📊 Query snapshot size:', querySnapshot.size);
+      console.log('📊 Query snapshot empty:', querySnapshot.empty);
+      
+      const outletsList = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
-      setOutlets(outletsList);
-    });
-
-    return () => {
-      unsubscribeCustomers();
-      unsubscribeOutlets();
-    };
-  }, [user.uid]);
-
-  // Filter customers based on search
-  const filteredCustomers = customers.filter(customer => {
-    const searchLower = searchTerm.toLowerCase();
-    const name = customer.name || customer.fullName || customer.firstName || '';
-    const phone = customer.phoneNumber || customer.phone || '';
-    const email = customer.email || '';
-    
-    return name.toLowerCase().includes(searchLower) ||
-           phone.includes(searchLower) ||
-           email.toLowerCase().includes(searchLower);
-  });
-
-  // Toggle customer selection
-  const toggleCustomerSelection = (customerId: string) => {
-    const newSelected = new Set(selectedCustomers);
-    if (newSelected.has(customerId)) {
-      newSelected.delete(customerId);
-    } else {
-      newSelected.add(customerId);
-    }
-    setSelectedCustomers(newSelected);
-  };
-
-  // Select all customers
-  const selectAllCustomers = () => {
-    setSelectedCustomers(new Set(filteredCustomers.map(c => c.id)));
-  };
-
-  // Clear selection
-  const clearSelection = () => {
-    setSelectedCustomers(new Set());
-  };
-
-  // Edit customer
-  const handleEditCustomer = async (customer: CustomerData) => {
-    if (!editingCustomer) return;
-    
-    try {
-      const customerRef = doc(firestore, `users/${user.uid}/web_customers`, customer.id);
-      await updateDoc(customerRef, {
-        name: editingCustomer.name,
-        phoneNumber: editingCustomer.phoneNumber,
-        email: editingCustomer.email,
-        points: editingCustomer.points || 0,
-        outletId: editingCustomer.outletId
-      });
-      setEditingCustomer(null);
+      
+      console.log('📊 Raw outlets data:', outletsList);
+      console.log('📊 Number of outlets found:', outletsList.length);
+      
+      setUserBusinesses(outletsList);
+      console.log('✅ Loaded outlets from Firestore:', outletsList);
+      console.log('🏪 Outlet names:', outletsList.map(outlet => (outlet as any).name || (outlet as any).outletName || `Outlet ${outlet.id}`));
     } catch (error) {
-      console.error('Error updating customer:', error);
+      console.error('❌ Error loading outlets:', error);
+      console.error('🔍 Error details:', error instanceof Error ? error.message : String(error));
+      setUserBusinesses([]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Delete customer(s)
-  const handleDeleteCustomers = async (customerIds: string[]) => {
-    if (!confirm(`Delete ${customerIds.length} customer(s)? This action cannot be undone.`)) {
-      return;
-    }
+  const handleUserClick = async (user: any) => {
+    setSelectedUser(user);
+    await loadUserBusinesses(user.uid);
+    setCurrentPage('userBusinesses');
+  };
 
+  const handleSignOut = async () => {
     try {
-      await Promise.all(
-        customerIds.map(id => 
-          deleteDoc(doc(firestore, `users/${user.uid}/web_customers`, id))
-        )
-      );
-      setSelectedCustomers(new Set());
+      await signOut(auth);
     } catch (error) {
-      console.error('Error deleting customers:', error);
+      console.error('Error signing out:', error);
     }
   };
 
-  // Export customers to CSV
-  const exportToCSV = () => {
-    const dataToExport = selectedCustomers.size > 0 
-      ? customers.filter(c => selectedCustomers.has(c.id))
-      : customers;
-
-    const csvData = dataToExport.map(customer => ({
-      Name: customer.name || customer.fullName || customer.firstName || '',
-      Phone: customer.phoneNumber || customer.phone || '',
-      Email: customer.email || '',
-      Points: customer.points || 0,
-      OutletId: customer.outletId || '',
-      DateJoined: customer.dateJoined?.toDate?.()?.toISOString() || customer.createdAt?.toDate?.()?.toISOString() || '',
-      TotalVisits: customer.totalVisits || 0
-    }));
-
-    const csv = Papa.unparse(csvData);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `rewin-customers-${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleCardClick = (page: 'dashboard' | 'accounts' | 'userBusinesses') => {
+    setCurrentPage(page);
   };
 
-  // Handle CSV file upload
-  const handleCSVUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const checkFirebasePaths = () => {
+    console.log('🔍 Checking Firebase database structure...');
+    
+    // Check users level
+    const usersRef = ref(database, 'users');
+    onValue(usersRef, (snapshot) => {
+      console.log('📊 Users level data:', snapshot.val());
+    }, { onlyOnce: true });
+    
+    // Check outlets level (if it exists at root)
+    const outletsRef = ref(database, 'outlets');
+    onValue(outletsRef, (snapshot) => {
+      console.log('📊 Root outlets data:', snapshot.val());
+    }, { onlyOnce: true });
+  };
 
-    Papa.parse(file, {
-      header: true,
-      complete: (results) => {
-        setCsvData(results.data);
-        console.log('📄 CSV Data Preview:', results.data.slice(0, 5));
-      },
-      error: (error) => {
-        console.error('CSV Parse Error:', error);
-      }
+  const checkDatabaseStructure = () => {
+    console.log('🔍 Checking complete Firebase database structure...');
+    
+    // Check all possible paths
+    const pathsToCheck = [
+      'users',
+      'outlets', 
+      'customers',
+      'businesses',
+      'accounts',
+      'data',
+      'app',
+      'rewin'
+    ];
+    
+    pathsToCheck.forEach(path => {
+      const pathRef = ref(database, path);
+      onValue(pathRef, (snapshot) => {
+        console.log(`📊 Path "/${path}":`, {
+          exists: snapshot.exists(),
+          key: snapshot.key,
+          value: snapshot.val(),
+          hasChildren: snapshot.hasChildren()
+        });
+      }, { onlyOnce: true });
     });
   };
 
-  // Import CSV data to Firestore
-  const importCSVData = async () => {
-    if (csvData.length === 0) return;
-
-    setImportProgress({ current: 0, total: csvData.length });
-
-    try {
-      for (let i = 0; i < csvData.length; i++) {
-        const row = csvData[i];
+  const checkMultiplePathsForUser = async (email: string) => {
+    console.log('🔍 Checking multiple paths for user:', email);
+    
+    // Generate possible user IDs based on the email
+    const emailParts = email.split('@')[0]; // Get part before @
+    const possibleUserIds = [
+      // Try the actual user ID from the users list first
+      ...users.filter(user => user.email === email).map(user => user.uid),
+      // Try common variations based on email
+      emailParts,
+      emailParts.replace(/[^a-zA-Z0-9]/g, ''), // Remove special characters
+      emailParts.toLowerCase(),
+      emailParts.toUpperCase(),
+      // Try some common patterns
+      'user1',
+      'test',
+      'admin',
+      'demo'
+    ];
+    
+    console.log('🔍 Generated possible user IDs:', possibleUserIds);
+    
+    // FIRST: Check user-specific paths (highest priority)
+    const userSpecificPaths = [
+      // Standard user-specific paths
+      ...possibleUserIds.map(uid => `users/${uid}/outlets`),
+      // Alternative paths that might exist
+      ...possibleUserIds.map(uid => `users/${uid}/businesses`),
+      ...possibleUserIds.map(uid => `users/${uid}/stores`),
+      ...possibleUserIds.map(uid => `users/${uid}/locations`),
+      // Email-based paths
+      `users/${email}/outlets`,
+      `users/${email}/businesses`
+    ];
+    
+    console.log('🔍 Checking user-specific paths first:', userSpecificPaths);
+    
+    for (const path of userSpecificPaths) {
+      try {
+        console.log(`🔍 Checking user-specific path: ${path}`);
+        const pathParts = path.split('/') as [string, ...string[]];
+        const outletsRef = collection(firestore, ...pathParts);
+        const querySnapshot = await getDocs(outletsRef);
         
-        // Skip empty rows
-        if (!row.Name && !row.Phone && !row.Email) continue;
-
-        const customerData = {
-          name: row.Name || row.name || '',
-          phoneNumber: row.Phone || row.phone || row.phoneNumber || '',
-          email: row.Email || row.email || '',
-          points: parseInt(row.Points || row.points || '0') || 0,
-          outletId: row.OutletId || row.outletId || outlets[0]?.id || '',
-          dateJoined: new Date(),
-          createdAt: new Date(),
-          totalVisits: parseInt(row.TotalVisits || row.totalVisits || '0') || 0,
-          importedAt: new Date()
-        };
-
-        await addDoc(collection(firestore, `users/${user.uid}/web_customers`), customerData);
-        setImportProgress({ current: i + 1, total: csvData.length });
-      }
-
-      setCsvData([]);
-      setImportProgress(null);
-      alert(`Successfully imported ${csvData.length} customers!`);
+        console.log(`📊 User-specific path ${path}: ${querySnapshot.size} documents found`);
+        
+        if (querySnapshot.size > 0) {
+          console.log(`✅ Found user-specific outlets in path: ${path}`);
+          const outletsList = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          console.log('🏪 User-specific outlet names:', outletsList.map(outlet => (outlet as any).name || (outlet as any).outletName || (outlet as any).businessName || `Outlet ${outlet.id}`));
+          return outletsList;
+        }
     } catch (error) {
-      console.error('Error importing CSV:', error);
-      setImportProgress(null);
+        console.log(`❌ Error checking user-specific path ${path}:`, error instanceof Error ? error.message : String(error));
+      }
     }
+    
+            // SECOND: If no user-specific outlets found, try to filter businesses by owner
+        try {
+          console.log('🔍 No user-specific outlets found. Checking businesses collection and filtering by owner...');
+          const businessesRef = collection(firestore, 'businesses');
+          const querySnapshot = await getDocs(businessesRef);
+          
+          console.log(`📊 Total businesses found: ${querySnapshot.size}`);
+          
+          if (querySnapshot.size > 0) {
+            const allBusinesses = querySnapshot.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data()
+            }));
+            
+            // Log all businesses for debugging
+            console.log('🔍 All businesses data:', allBusinesses.map(business => ({
+              id: business.id,
+              name: (business as any).name,
+              ownerId: (business as any).ownerId,
+              email: (business as any).email,
+              type: (business as any).type,
+              outletName: (business as any).outletName,
+              businessName: (business as any).businessName,
+              isOutlet: (business as any).isOutlet,
+              category: (business as any).category,
+              status: (business as any).status
+            })));
+            
+            // Filter businesses that belong to this specific user
+            const userBusinesses = allBusinesses.filter(business => {
+              const ownerId = (business as any).ownerId;
+              const ownerEmail = (business as any).email;
+              
+              console.log(`🔍 Checking business ${business.id}: ownerId=${ownerId}, ownerEmail=${ownerEmail}`);
+              
+              // Check if this business belongs to the user
+              const isOwnerMatch = ownerId && possibleUserIds.includes(ownerId);
+              const isEmailMatch = ownerEmail && ownerEmail === email;
+              
+              console.log(`🔍 Business ${business.id}: isOwnerMatch=${isOwnerMatch}, isEmailMatch=${isEmailMatch}`);
+              
+              return isOwnerMatch || isEmailMatch;
+            });
+            
+            console.log(`📊 User-specific businesses found: ${userBusinesses.length}`);
+            
+            if (userBusinesses.length > 0) {
+              console.log('✅ Found user-specific businesses');
+              console.log('🏪 User business names:', userBusinesses.map(business => (business as any).name || `Business ${business.id}`));
+              
+              // Check if any of these businesses have specific outlet names
+              const businessesWithSpecificNames = userBusinesses.filter(business => {
+                const name = (business as any).name;
+                const outletName = (business as any).outletName;
+                const businessName = (business as any).businessName;
+                
+                // Check if this business has a specific name (not generic)
+                const hasSpecificName = (name && name !== 'sicario0o0o\'s Business') ||
+                                      (outletName && outletName !== 'sicario0o0o\'s Business') ||
+                                      (businessName && businessName !== 'sicario0o0o\'s Business');
+                
+                console.log(`🔍 Business ${business.id}: hasSpecificName=${hasSpecificName}, name=${name}, outletName=${outletName}, businessName=${businessName}`);
+                
+                return hasSpecificName;
+              });
+              
+              if (businessesWithSpecificNames.length > 0) {
+                console.log('✅ Found businesses with specific names');
+                console.log('🏪 Specific business names:', businessesWithSpecificNames.map(business => (business as any).name || (business as any).outletName || (business as any).businessName || `Business ${business.id}`));
+                return businessesWithSpecificNames;
+              }
+              
+              // If no specific names found, continue to check alternative collections
+              console.log('⚠️ No specific names found in businesses, continuing to check alternative collections...');
+            }
+          }
+        } catch (error) {
+          console.log(`❌ Error checking businesses collection:`, error instanceof Error ? error.message : String(error));
+        }
+        
+        // THIRD: Try to find outlets in a different collection or path
+        try {
+          console.log('🔍 Trying alternative outlet paths...');
+          
+          // Try different possible collections for outlets
+          const alternativePaths = [
+            'outlets',
+            'stores', 
+            'locations',
+            'restaurants',
+            'businesses'
+          ];
+          
+          for (const collectionName of alternativePaths) {
+            try {
+              console.log(`🔍 Checking collection: ${collectionName}`);
+              const altRef = collection(firestore, collectionName);
+              const altSnapshot = await getDocs(altRef);
+              
+              console.log(`📊 ${collectionName} collection: ${altSnapshot.size} documents found`);
+              
+              if (altSnapshot.size > 0) {
+                const altDocs = altSnapshot.docs.map(doc => ({
+                  id: doc.id,
+                  ...doc.data()
+                }));
+                
+                // Log first few documents to see structure
+                console.log(`🔍 First 3 ${collectionName} documents:`, altDocs.slice(0, 3).map(doc => ({
+                  id: doc.id,
+                  name: (doc as any).name,
+                  outletName: (doc as any).outletName,
+                  businessName: (doc as any).businessName,
+                  ownerId: (doc as any).ownerId,
+                  email: (doc as any).email,
+                  type: (doc as any).type
+                })));
+                
+                // Filter by user
+                const userDocs = altDocs.filter(doc => {
+                  const ownerId = (doc as any).ownerId;
+                  const ownerEmail = (doc as any).email;
+                  const isOwnerMatch = ownerId && possibleUserIds.includes(ownerId);
+                  const isEmailMatch = ownerEmail && ownerEmail === email;
+                  return isOwnerMatch || isEmailMatch;
+                });
+                
+                console.log(`📊 User-specific ${collectionName} found: ${userDocs.length}`);
+                
+                if (userDocs.length > 0) {
+                  console.log(`✅ Found user-specific ${collectionName}`);
+                  console.log(`🏪 ${collectionName} names:`, userDocs.map(doc => (doc as any).name || (doc as any).outletName || (doc as any).businessName || `${collectionName} ${doc.id}`));
+                  return userDocs;
+                }
+              }
+            } catch (error) {
+              console.log(`❌ Error checking ${collectionName} collection:`, error instanceof Error ? error.message : String(error));
+            }
+          }
+        } catch (error) {
+          console.log(`❌ Error checking alternative paths:`, error instanceof Error ? error.message : String(error));
+        }
+    
+    console.log('❌ No user-specific outlets found');
+    return [];
   };
 
-  const tabButtonStyle = (isActive: boolean) => ({
-    padding: '12px 24px',
-    background: isActive ? 'rgba(255,255,255,0.2)' : 'transparent',
-    color: 'white',
-    border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    transition: 'all 0.2s ease',
-    fontSize: '14px',
-    fontWeight: '500'
-  });
-
+  if (currentPage === 'userBusinesses') {
   return (
     <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
+        minHeight: '100vh',
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      zIndex: 1000,
-      overflow: 'auto'
+        padding: '20px'
     }}>
       {/* Header */}
       <div style={{
-        background: 'rgba(0,0,0,0.1)',
-        padding: '20px',
-        borderBottom: '1px solid rgba(255,255,255,0.1)'
-      }}>
-        <div style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          maxWidth: '1200px',
-          margin: '0 auto'
-        }}>
-          <div>
-            <h1 style={{
+          marginBottom: '40px',
+        padding: '20px',
+          background: 'rgba(255, 255, 255, 0.1)',
+          backdropFilter: 'blur(10px)',
+          borderRadius: '12px',
+          border: '1px solid rgba(255, 255, 255, 0.2)'
+      }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{
+              width: '40px',
+              height: '40px',
+              background: '#dc2626',
+              borderRadius: '8px',
+          display: 'flex',
+          alignItems: 'center',
+              justifyContent: 'center',
               color: 'white',
-              margin: 0,
-              fontSize: '24px',
-              fontWeight: '600'
+              fontWeight: 'bold',
+              fontSize: '18px'
             }}>
-              👑 Admin Dashboard
-            </h1>
-            <p style={{
-              color: 'rgba(255,255,255,0.8)',
-              margin: '4px 0 0 0',
-              fontSize: '14px'
-            }}>
-              User Management & Data Operations
-            </p>
+              R
+            </div>
+            <div>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'white' }}>
+                Rewin Dashboard
+              </div>
+              <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                Loyalty Program Management
+              </div>
+            </div>
           </div>
           
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <button
-            onClick={onClose}
+              onClick={() => handleCardClick('accounts')}
             style={{
-              background: 'rgba(255,255,255,0.2)',
+                padding: '8px 16px',
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                borderRadius: '6px',
               color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              padding: '12px 20px',
               cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: '500'
+                fontSize: '14px'
             }}
           >
-            Back to Dashboard
+              ← Back to Users
+          </button>
+            <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.8)' }}>
+              Welcome back, {user?.email}
+        </div>
+          <button
+              onClick={handleSignOut}
+              style={{
+                padding: '8px 16px',
+                background: 'rgba(220, 38, 38, 0.8)',
+                border: 'none',
+                borderRadius: '6px',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              Sign Out
           </button>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
+        {/* User Businesses Page Content */}
       <div style={{
-        background: 'rgba(0,0,0,0.1)',
-        padding: '20px',
-        borderBottom: '1px solid rgba(255,255,255,0.1)'
-      }}>
-        <div style={{
-          display: 'flex',
-          gap: '12px',
-          maxWidth: '1200px',
-          margin: '0 auto'
-        }}>
-          <button
-            onClick={() => setActiveTab('users')}
-            style={tabButtonStyle(activeTab === 'users')}
-          >
-            <UsersIcon />
-            User Management
-          </button>
-          <button
-            onClick={() => setActiveTab('csv')}
-            style={tabButtonStyle(activeTab === 'csv')}
-          >
-            <CSVIcon />
-            CSV Operations
-          </button>
-          <button
-            onClick={() => setActiveTab('outlets')}
-            style={tabButtonStyle(activeTab === 'outlets')}
-          >
-            <StoreIcon />
-            Outlet Management
-          </button>
-        </div>
-      </div>
-
-      {/* Content Area */}
-      <div style={{
-        padding: '20px',
+          background: 'rgba(255, 255, 255, 0.1)',
+          backdropFilter: 'blur(10px)',
+          borderRadius: '12px',
+          padding: '32px',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
         maxWidth: '1200px',
         margin: '0 auto'
       }}>
-        {activeTab === 'users' && (
-          <UserManagementTab
-            customers={filteredCustomers}
-            outlets={outlets}
-            searchTerm={searchTerm}
-            setSearchTerm={setSearchTerm}
-            selectedCustomers={selectedCustomers}
-            toggleCustomerSelection={toggleCustomerSelection}
-            selectAllCustomers={selectAllCustomers}
-            clearSelection={clearSelection}
-            editingCustomer={editingCustomer}
-            setEditingCustomer={setEditingCustomer}
-            handleEditCustomer={handleEditCustomer}
-            handleDeleteCustomers={handleDeleteCustomers}
-            exportToCSV={exportToCSV}
-            EditIcon={EditIcon}
-            DeleteIcon={DeleteIcon}
-            DownloadIcon={DownloadIcon}
-          />
-        )}
+          <div style={{ marginBottom: '32px' }}>
+            <h1 style={{ fontSize: '32px', fontWeight: 'bold', color: 'white', marginBottom: '8px' }}>
+              {selectedUser?.displayName || selectedUser?.email}'s Outlets
+            </h1>
+            <p style={{ fontSize: '16px', color: 'rgba(255, 255, 255, 0.7)' }}>
+              Manage all outlet accounts for this user
+            </p>
+          </div>
 
-        {activeTab === 'csv' && (
-          <CSVOperationsTab
-            csvData={csvData}
-            handleCSVUpload={handleCSVUpload}
-            importCSVData={importCSVData}
-            importProgress={importProgress}
-            exportToCSV={exportToCSV}
-            UploadIcon={UploadIcon}
-            DownloadIcon={DownloadIcon}
-          />
-        )}
-
-        {activeTab === 'outlets' && (
-          <OutletManagementTab
-            outlets={outlets}
-            user={user}
-          />
-        )}
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <div style={{ color: 'white', fontSize: '18px' }}>Loading businesses...</div>
       </div>
+          ) : (
+            <div>
+              {/* User Info */}
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.1)',
+                borderRadius: '12px',
+                padding: '24px',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                marginBottom: '24px'
+              }}>
+                <h3 style={{ color: 'white', marginBottom: '16px', fontSize: '20px' }}>
+                  User Information
+                </h3>
+                <div style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '16px', marginBottom: '8px' }}>
+                  <strong style={{ color: 'white' }}>Email:</strong> {selectedUser?.email}
     </div>
-  );
-};
+                <div style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '16px', marginBottom: '8px' }}>
+                  <strong style={{ color: 'white' }}>User ID:</strong> {selectedUser?.uid}
+                </div>
+                <div style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '16px', marginBottom: '8px' }}>
+                  <strong style={{ color: 'white' }}>Total Outlets:</strong> {userBusinesses.length}
+                </div>
+                <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '14px' }}>
+                  Showing all outlets in the system
+                </div>
+              </div>
 
-// User Management Tab Component
-const UserManagementTab: React.FC<any> = ({
-  customers,
-  outlets,
-  searchTerm,
-  setSearchTerm,
-  selectedCustomers,
-  toggleCustomerSelection,
-  selectAllCustomers,
-  clearSelection,
-  editingCustomer,
-  setEditingCustomer,
-  handleEditCustomer,
-  handleDeleteCustomers,
-  exportToCSV,
-  EditIcon,
-  DeleteIcon,
-  DownloadIcon
-}) => (
-  <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: '12px', padding: '24px' }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-      <h2 style={{ margin: 0, color: '#333', fontSize: '20px' }}>
-        Customer Management ({customers.length} total)
-      </h2>
-      <div style={{ display: 'flex', gap: '12px' }}>
-        <button
-          onClick={exportToCSV}
-          style={{
-            background: '#10b981',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            padding: '10px 16px',
+              {/* Businesses List */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+                gap: '20px'
+              }}>
+                {userBusinesses.map((business) => (
+                  <div key={business.id} style={{
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    borderRadius: '12px',
+                    padding: '24px',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
             cursor: 'pointer',
+                    transition: 'all 0.3s ease'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                      <div>
+                        <h4 style={{ color: 'white', marginBottom: '8px', fontSize: '18px', fontWeight: 'bold' }}>
+                          {business.name || business.outletName || 'Unnamed Outlet'}
+                        </h4>
+                        <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '14px', marginBottom: '4px' }}>
+                          Outlet ID: {business.id}
+                        </div>
+                        <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '14px', marginBottom: '4px' }}>
+                          Type: {business.type || 'Unknown'}
+                        </div>
+                        <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '14px' }}>
+                          Status: {business.isActive ? 'Active' : 'Inactive'}
+                        </div>
+                      </div>
+                      <div style={{
+                        width: '40px',
+                        height: '40px',
+                        background: business.isActive ? '#10b981' : '#6b7280',
+                        borderRadius: '50%',
             display: 'flex',
             alignItems: 'center',
-            gap: '6px',
-            fontSize: '14px'
-          }}
-        >
-          <DownloadIcon />
-          Export Selected
-        </button>
+                        justifyContent: 'center',
+                        color: 'white',
+                        fontSize: '12px',
+                        fontWeight: 'bold'
+                      }}>
+                        {business.isActive ? '✓' : '○'}
       </div>
     </div>
 
-    {/* Search and Actions */}
+                    <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{
+                          background: 'rgba(255, 255, 255, 0.1)',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          color: 'rgba(255, 255, 255, 0.8)'
+                        }}>
+                          Created: {business.createdAt ? 
+                            (business.createdAt.toDate ? 
+                              business.createdAt.toDate().toLocaleDateString() : 
+                              new Date(business.createdAt).toLocaleDateString()
+                            ) : 'Unknown'}
+                        </span>
+                        {business.settings && (
+                          <span style={{
+                            background: 'rgba(255, 255, 255, 0.1)',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            color: 'rgba(255, 255, 255, 0.8)'
+                          }}>
+                            Has Settings
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {userBusinesses.length === 0 && (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '40px',
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  fontSize: '16px'
+                }}>
+                  This user has no outlet accounts yet.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (currentPage === 'accounts') {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        padding: '20px'
+      }}>
+        {/* Header */}
     <div style={{ 
       display: 'flex', 
       justifyContent: 'space-between', 
       alignItems: 'center', 
-      marginBottom: '20px',
-      gap: '12px'
-    }}>
-      <input
-        type="text"
-        placeholder="Search customers..."
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        style={{
-          flex: 1,
-          padding: '12px',
-          border: '1px solid #ddd',
+          marginBottom: '40px',
+          padding: '20px',
+          background: 'rgba(255, 255, 255, 0.1)',
+          backdropFilter: 'blur(10px)',
+          borderRadius: '12px',
+          border: '1px solid rgba(255, 255, 255, 0.2)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              background: '#dc2626',
           borderRadius: '8px',
-          fontSize: '14px'
-        }}
-      />
-      
-      <div style={{ display: 'flex', gap: '8px' }}>
-        <button
-          onClick={selectAllCustomers}
-          style={{
-            background: '#3b82f6',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            padding: '8px 12px',
-            cursor: 'pointer',
-            fontSize: '12px'
-          }}
-        >
-          Select All
-        </button>
-        <button
-          onClick={clearSelection}
-          style={{
-            background: '#6b7280',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            padding: '8px 12px',
-            cursor: 'pointer',
-            fontSize: '12px'
-          }}
-        >
-          Clear
-        </button>
-        {selectedCustomers.size > 0 && (
-          <button
-            onClick={() => handleDeleteCustomers(Array.from(selectedCustomers))}
-            style={{
-              background: '#ef4444',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '8px 12px',
-              cursor: 'pointer',
-              fontSize: '12px',
               display: 'flex',
               alignItems: 'center',
-              gap: '4px'
+              justifyContent: 'center',
+              color: 'white',
+              fontWeight: 'bold',
+              fontSize: '18px'
+            }}>
+              R
+            </div>
+            <div>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'white' }}>
+                Rewin Dashboard
+              </div>
+              <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                Loyalty Program Management
+              </div>
+            </div>
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <button
+              onClick={() => handleCardClick('dashboard')}
+          style={{
+                padding: '8px 16px',
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderRadius: '6px',
+            color: 'white',
+            cursor: 'pointer',
+                fontSize: '14px'
+          }}
+        >
+              ← Back to Dashboard
+        </button>
+            <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.8)' }}>
+              Welcome back, {user?.email}
+            </div>
+          <button
+              onClick={handleSignOut}
+            style={{
+                padding: '8px 16px',
+                background: 'rgba(220, 38, 38, 0.8)',
+              border: 'none',
+              borderRadius: '6px',
+                color: 'white',
+              cursor: 'pointer',
+                fontSize: '14px'
             }}
           >
-            <DeleteIcon />
-            Delete ({selectedCustomers.size})
+              Sign Out
           </button>
-        )}
       </div>
     </div>
 
-    {/* Customer Table */}
+        {/* Users Page Content */}
     <div style={{ 
-      border: '1px solid #e5e7eb',
-      borderRadius: '8px',
-      overflow: 'hidden',
-      maxHeight: '500px',
-      overflowY: 'auto'
-    }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead style={{ background: '#f9fafb', position: 'sticky', top: 0 }}>
-          <tr>
-            <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>
-              <input
-                type="checkbox"
-                checked={selectedCustomers.size === customers.length && customers.length > 0}
-                onChange={selectedCustomers.size === customers.length ? clearSelection : selectAllCustomers}
-              />
-            </th>
-            <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Name</th>
-            <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Phone</th>
-            <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Points</th>
-            <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Outlet</th>
-            <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {customers.map((customer) => (
-            <tr key={customer.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-              <td style={{ padding: '12px' }}>
-                <input
-                  type="checkbox"
-                  checked={selectedCustomers.has(customer.id)}
-                  onChange={() => toggleCustomerSelection(customer.id)}
-                />
-              </td>
-              <td style={{ padding: '12px' }}>
-                {customer.name || customer.fullName || customer.firstName || 'No Name'}
-              </td>
-              <td style={{ padding: '12px' }}>
-                {customer.phoneNumber || customer.phone || 'No Phone'}
-              </td>
-              <td style={{ padding: '12px', fontWeight: '600', color: '#10b981' }}>
-                {customer.points || 0} pts
-              </td>
-              <td style={{ padding: '12px' }}>
-                {outlets.find(o => o.id === customer.outletId)?.name || 'Unknown'}
-              </td>
-              <td style={{ padding: '12px' }}>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
-                    onClick={() => setEditingCustomer(customer)}
-                    style={{
-                      background: '#3b82f6',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      padding: '6px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <EditIcon />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteCustomers([customer.id])}
-                    style={{
-                      background: '#ef4444',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      padding: '6px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <DeleteIcon />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          background: 'rgba(255, 255, 255, 0.1)',
+          backdropFilter: 'blur(10px)',
+          borderRadius: '12px',
+          padding: '32px',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          maxWidth: '1200px',
+          margin: '0 auto'
+        }}>
+          <div style={{ marginBottom: '32px' }}>
+            <h1 style={{ fontSize: '32px', fontWeight: 'bold', color: 'white', marginBottom: '8px' }}>
+              User Accounts (Updated: {new Date().toLocaleTimeString()})
+            </h1>
+            <p style={{ fontSize: '16px', color: 'rgba(255, 255, 255, 0.7)' }}>
+              Manage all user accounts and their associated businesses
+            </p>
+          </div>
 
-    {/* Edit Customer Modal */}
-    {editingCustomer && (
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <div style={{ color: 'white', fontSize: '18px' }}>Loading users...</div>
+            </div>
+          ) : (
+            <div>
+              {/* Users Summary */}
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.1)',
+                borderRadius: '12px',
+                padding: '24px',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                marginBottom: '24px'
+              }}>
+                <h3 style={{ color: 'white', marginBottom: '16px', fontSize: '20px' }}>
+                  Users Overview
+                </h3>
+                <div style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '16px' }}>
+                  Total Users: <strong style={{ color: 'white' }}>{users.length}</strong>
+                </div>
+                <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '14px', marginTop: '8px' }}>
+                  Note: This shows known users. New users will appear here after they sign in.
+                </div>
+                <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '14px', marginTop: '4px' }}>
+                  Current user: {auth.currentUser?.email || 'Not signed in'}
+                </div>
+              </div>
+
+              {/* Users List */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+                gap: '20px'
+              }}>
+                {users.map((user) => (
+                  <div 
+                    key={user.uid} 
+                    onClick={() => handleUserClick(user)}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      borderRadius: '12px',
+                      padding: '24px',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                      <div>
+                        <h4 style={{ color: 'white', marginBottom: '8px', fontSize: '18px', fontWeight: 'bold' }}>
+                          {user.displayName || user.email}
+                          {user.uid === auth.currentUser?.uid && (
+                            <span style={{ 
+                              marginLeft: '8px', 
+                              background: '#dc2626', 
+                      color: 'white',
+                              padding: '2px 6px', 
+                      borderRadius: '4px',
+                              fontSize: '12px' 
+                            }}>
+                              YOU
+                            </span>
+                          )}
+                        </h4>
+                        <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '14px', marginBottom: '4px' }}>
+                          Email: {user.email}
+                </div>
+                        <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '14px', marginBottom: '4px' }}>
+                          User ID: {user.uid}
+    </div>
+                        <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '14px', marginBottom: '4px' }}>
+                          Created: {user.createdAt.toLocaleDateString()}
+                        </div>
+                        <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '14px' }}>
+                          Last Sign In: {user.lastSignIn.toLocaleDateString()}
+                        </div>
+                      </div>
       <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(0,0,0,0.5)',
+                        width: '40px',
+                        height: '40px',
+                        background: '#10b981',
+                        borderRadius: '50%',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 2000
-      }}>
-        <div style={{
-          background: 'white',
-          borderRadius: '12px',
-          padding: '24px',
-          width: '400px',
-          maxWidth: '90vw'
-        }}>
-          <h3 style={{ margin: '0 0 20px 0', color: '#333' }}>Edit Customer</h3>
-          
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', color: '#666', fontSize: '14px' }}>
-              Name
-            </label>
-            <input
-              type="text"
-              value={editingCustomer.name || ''}
-              onChange={(e) => setEditingCustomer({ ...editingCustomer, name: e.target.value })}
-              style={{
-                width: '100%',
-                padding: '10px',
-                border: '1px solid #ddd',
-                borderRadius: '6px',
-                fontSize: '14px',
-                boxSizing: 'border-box'
-              }}
-            />
+                        color: 'white',
+                        fontSize: '12px',
+                        fontWeight: 'bold'
+                      }}>
+                        ✓
+                      </div>
+                    </div>
+                    
+                    <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{
+                          background: 'rgba(255, 255, 255, 0.1)',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          color: 'rgba(255, 255, 255, 0.8)'
+                        }}>
+                          Click to view businesses →
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {users.length === 0 && (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '40px',
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  fontSize: '16px'
+                }}>
+                  No users found in the database.
           </div>
-
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', color: '#666', fontSize: '14px' }}>
-              Phone
-            </label>
-            <input
-              type="text"
-              value={editingCustomer.phoneNumber || ''}
-              onChange={(e) => setEditingCustomer({ ...editingCustomer, phoneNumber: e.target.value })}
-              style={{
-                width: '100%',
-                padding: '10px',
-                border: '1px solid #ddd',
-                borderRadius: '6px',
-                fontSize: '14px',
-                boxSizing: 'border-box'
-              }}
-            />
-          </div>
-
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', color: '#666', fontSize: '14px' }}>
-              Points
-            </label>
-            <input
-              type="number"
-              value={editingCustomer.points || 0}
-              onChange={(e) => setEditingCustomer({ ...editingCustomer, points: parseInt(e.target.value) || 0 })}
-              style={{
-                width: '100%',
-                padding: '10px',
-                border: '1px solid #ddd',
-                borderRadius: '6px',
-                fontSize: '14px',
-                boxSizing: 'border-box'
-              }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-            <button
-              onClick={() => setEditingCustomer(null)}
-              style={{
-                background: '#6b7280',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '10px 16px',
-                cursor: 'pointer',
-                fontSize: '14px'
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => handleEditCustomer(editingCustomer)}
-              style={{
-                background: '#10b981',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '10px 16px',
-                cursor: 'pointer',
-                fontSize: '14px'
-              }}
-            >
-              Save Changes
-            </button>
-          </div>
-        </div>
-      </div>
-    )}
-  </div>
-);
-
-// CSV Operations Tab Component
-const CSVOperationsTab: React.FC<any> = ({
-  csvData,
-  handleCSVUpload,
-  importCSVData,
-  importProgress,
-  exportToCSV,
-  UploadIcon,
-  DownloadIcon
-}) => (
-  <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: '12px', padding: '24px' }}>
-    <h2 style={{ margin: '0 0 20px 0', color: '#333', fontSize: '20px' }}>
-      CSV Import/Export Operations
-    </h2>
-
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-      {/* Import Section */}
-      <div style={{
-        border: '2px dashed #d1d5db',
-        borderRadius: '12px',
-        padding: '24px',
-        textAlign: 'center'
-      }}>
-        <div style={{ marginBottom: '16px' }}>
-          <UploadIcon />
-        </div>
-        <h3 style={{ margin: '0 0 12px 0', color: '#333', fontSize: '18px' }}>Import Customers</h3>
-        <p style={{ margin: '0 0 20px 0', color: '#666', fontSize: '14px' }}>
-          Upload a CSV file to import customers. Expected columns: Name, Phone, Email, Points, OutletId
-        </p>
-        
-        <input
-          type="file"
-          accept=".csv"
-          onChange={handleCSVUpload}
-          style={{ marginBottom: '16px' }}
-        />
-
-        {csvData.length > 0 && (
-          <div style={{ marginTop: '16px' }}>
-            <p style={{ color: '#10b981', fontWeight: '600', margin: '0 0 12px 0' }}>
-              ✅ {csvData.length} rows loaded
-            </p>
-            <button
-              onClick={importCSVData}
-              disabled={importProgress !== null}
-              style={{
-                background: importProgress ? '#6b7280' : '#10b981',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '12px 24px',
-                cursor: importProgress ? 'not-allowed' : 'pointer',
-                fontSize: '14px',
-                fontWeight: '600'
-              }}
-            >
-              {importProgress ? 
-                `Importing... ${importProgress.current}/${importProgress.total}` :
-                'Import to Database'
-              }
-            </button>
-          </div>
-        )}
-
-        {importProgress && (
-          <div style={{ marginTop: '16px' }}>
-            <div style={{
-              background: '#e5e7eb',
-              borderRadius: '8px',
-              height: '8px',
-              overflow: 'hidden'
-            }}>
-              <div style={{
-                background: '#10b981',
-                height: '100%',
-                width: `${(importProgress.current / importProgress.total) * 100}%`,
-                transition: 'width 0.3s ease'
-              }} />
+              )}
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* Export Section */}
-      <div style={{
-        border: '2px solid #e5e7eb',
-        borderRadius: '12px',
-        padding: '24px',
-        textAlign: 'center'
-      }}>
-        <div style={{ marginBottom: '16px' }}>
-          <DownloadIcon />
+          )}
         </div>
-        <h3 style={{ margin: '0 0 12px 0', color: '#333', fontSize: '18px' }}>Export Customers</h3>
-        <p style={{ margin: '0 0 20px 0', color: '#666', fontSize: '14px' }}>
-          Download all customer data as CSV file for backup or migration purposes
-        </p>
-        
-        <button
-          onClick={exportToCSV}
-          style={{
-            background: '#3b82f6',
-            color: 'white',
-            border: 'none',
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      padding: '20px'
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '40px',
+        padding: '20px',
+        background: 'rgba(255, 255, 255, 0.1)',
+        backdropFilter: 'blur(10px)',
+        borderRadius: '12px',
+        border: '1px solid rgba(255, 255, 255, 0.2)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            background: '#dc2626',
             borderRadius: '8px',
-            padding: '12px 24px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: '600',
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
-            margin: '0 auto'
-          }}
-        >
-          <DownloadIcon />
-          Export All Data
-        </button>
-      </div>
-    </div>
+            justifyContent: 'center',
+            color: 'white',
+            fontWeight: 'bold',
+            fontSize: '18px'
+          }}>
+            R
+          </div>
+          <div>
+            <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'white' }}>
+              Rewin Dashboard
+            </div>
+            <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.7)' }}>
+              Loyalty Program Management
+            </div>
+          </div>
+          </div>
 
-    {/* CSV Preview */}
-    {csvData.length > 0 && (
-      <div style={{ marginTop: '24px' }}>
-        <h3 style={{ margin: '0 0 16px 0', color: '#333' }}>CSV Preview (First 5 rows)</h3>
-        <div style={{ 
-          border: '1px solid #e5e7eb',
-          borderRadius: '8px',
-          overflow: 'auto',
-          maxHeight: '300px'
-        }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-            <thead style={{ background: '#f9fafb' }}>
-              <tr>
-                {Object.keys(csvData[0] || {}).map(key => (
-                  <th key={key} style={{ 
-                    padding: '12px', 
-                    textAlign: 'left', 
-                    borderBottom: '1px solid #e5e7eb',
-                    fontWeight: '600'
-                  }}>
-                    {key}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {csvData.slice(0, 5).map((row, index) => (
-                <tr key={index} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                  {Object.values(row).map((value: any, i) => (
-                    <td key={i} style={{ padding: '12px' }}>
-                      {String(value || '')}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{
+            padding: '8px 16px',
+            background: 'rgba(255, 255, 255, 0.1)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+                borderRadius: '6px',
+            color: 'white',
+                fontSize: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <span>🏠</span>
+            All Outlets ({outletCount})
+            <span>▼</span>
+          </div>
+          <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.8)' }}>
+            Welcome back, {user?.email}
+          </div>
+            <button
+            onClick={handleSignOut}
+              style={{
+              padding: '8px 16px',
+              background: 'rgba(220, 38, 38, 0.8)',
+                border: 'none',
+                borderRadius: '6px',
+              color: 'white',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+            Sign Out
+            </button>
         </div>
       </div>
-    )}
-  </div>
-);
 
-// Outlet Management Tab Component
-const OutletManagementTab: React.FC<any> = ({ outlets, user }) => (
-  <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: '12px', padding: '24px' }}>
-    <h2 style={{ margin: '0 0 20px 0', color: '#333', fontSize: '20px' }}>
-      Outlet Management ({outlets.length} outlets)
-    </h2>
-
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-      {outlets.map(outlet => (
-        <div key={outlet.id} style={{
-          border: '1px solid #e5e7eb',
-          borderRadius: '8px',
-          padding: '16px',
-          background: 'white'
-        }}>
-          <h3 style={{ margin: '0 0 8px 0', color: '#333', fontSize: '16px' }}>
-            {outlet.name || 'Unnamed Outlet'}
-          </h3>
-          <p style={{ margin: '0 0 8px 0', color: '#666', fontSize: '14px' }}>
-            ID: {outlet.id}
+      {/* Main Content */}
+      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+        <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+          <h1 style={{ fontSize: '32px', fontWeight: 'bold', color: 'white', marginBottom: '8px' }}>
+            All Outlets (Admin View)
+          </h1>
+          <p style={{ fontSize: '16px', color: 'rgba(255, 255, 255, 0.7)' }}>
+            View all outlet accounts in the system
           </p>
-          {outlet.address && (
-            <p style={{ margin: '0 0 8px 0', color: '#666', fontSize: '14px' }}>
-              📍 {outlet.address}
-            </p>
-          )}
-          {outlet.phone && (
-            <p style={{ margin: '0', color: '#666', fontSize: '14px' }}>
-              📞 {outlet.phone}
-            </p>
-          )}
         </div>
-      ))}
+
+        {/* Metric Cards Grid */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '20px',
+          maxWidth: '400px',
+          marginBottom: '24px'
+        }}>
+          {/* Accounts */}
+          <div 
+            onClick={() => handleCardClick('accounts')}
+              style={{
+              background: 'rgba(255, 255, 255, 0.1)',
+              backdropFilter: 'blur(10px)',
+              borderRadius: '12px',
+              padding: '24px',
+              border: '2px solid #dc2626',
+              boxShadow: '0 0 20px rgba(220, 38, 38, 0.3)',
+                cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              width: '100%'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#dc2626', marginBottom: '8px' }}>
+                  USERS
+          </div>
+                <div style={{ fontSize: '32px', fontWeight: 'bold', color: 'white', marginBottom: '8px' }}>
+                  {users.length}
+        </div>
+                <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)' }}>
+                  User accounts • Click to manage →
+      </div>
+  </div>
+              <div style={{ color: '#dc2626' }}>
+                <UsersIcon />
+              </div>
+            </div>
+          </div>
+
+          {/* Total Points */}
+      <div style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(10px)',
+        borderRadius: '12px',
+        padding: '24px',
+            border: '2px solid #f59e0b',
+            boxShadow: '0 0 20px rgba(245, 158, 11, 0.3)',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            width: '100%'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#f59e0b', marginBottom: '8px' }}>
+                  TOTAL POINTS
+        </div>
+                <div style={{ fontSize: '32px', fontWeight: 'bold', color: 'white', marginBottom: '8px' }}>
+                  0
+          </div>
+                <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)' }}>
+                  All outlets • Click to view details →
+                </div>
+              </div>
+              <div style={{ color: '#f59e0b' }}>
+                <StarIcon />
+              </div>
+            </div>
+          </div>
+
+          {/* Total Revenue */}
+            <div style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(10px)',
+            borderRadius: '12px',
+            padding: '24px',
+            border: '2px solid #10b981',
+            boxShadow: '0 0 20px rgba(16, 185, 129, 0.3)',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            width: '100%'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#10b981', marginBottom: '8px' }}>
+                  TOTAL REVENUE
+            </div>
+                <div style={{ fontSize: '32px', fontWeight: 'bold', color: 'white', marginBottom: '8px' }}>
+                  $0
+          </div>
+                <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)' }}>
+                  All outlets
+                </div>
+              </div>
+              <div style={{ color: '#10b981' }}>
+                <DollarIcon />
+              </div>
+            </div>
+      </div>
+
+          {/* Check-ins Today */}
+      <div style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(10px)',
+        borderRadius: '12px',
+        padding: '24px',
+            border: '2px solid #8b5cf6',
+            boxShadow: '0 0 20px rgba(139, 92, 246, 0.3)',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            width: '100%'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#8b5cf6', marginBottom: '8px' }}>
+                  CHECK-INS TODAY
+        </div>
+                <div style={{ fontSize: '32px', fontWeight: 'bold', color: 'white', marginBottom: '8px' }}>
+                  0
+                </div>
+                <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)' }}>
+                  All outlets • Click to view details →
+                </div>
+              </div>
+              <div style={{ color: '#8b5cf6' }}>
+                <BookIcon />
+              </div>
+            </div>
+          </div>
+
+          {/* New Signups Today */}
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(10px)',
+            borderRadius: '12px',
+            padding: '24px',
+            border: '2px solid #ec4899',
+            boxShadow: '0 0 20px rgba(236, 72, 153, 0.3)',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            width: '100%'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#ec4899', marginBottom: '8px' }}>
+                  NEW SIGNUPS TODAY
+                </div>
+                <div style={{ fontSize: '32px', fontWeight: 'bold', color: 'white', marginBottom: '8px' }}>
+                  0
+                </div>
+                <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)' }}>
+                  All outlets • Click to view details →
+                </div>
+              </div>
+              <div style={{ color: '#ec4899' }}>
+                <PersonAddIcon />
+              </div>
+      </div>
     </div>
 
-    {outlets.length === 0 && (
-      <div style={{
-        textAlign: 'center',
-        padding: '40px',
-        color: '#666'
-      }}>
-        <p>No outlets found. Outlets will appear here once you add them to your system.</p>
+          {/* Active Outlets */}
+        <div style={{ 
+            background: 'rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(10px)',
+            borderRadius: '12px',
+            padding: '24px',
+            border: '2px solid #06b6d4',
+            boxShadow: '0 0 20px rgba(6, 182, 212, 0.3)',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            width: '100%'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#06b6d4', marginBottom: '8px' }}>
+                  ACTIVE OUTLETS
+        </div>
+                <div style={{ fontSize: '32px', fontWeight: 'bold', color: 'white', marginBottom: '8px' }}>
+                  {outletCount}
       </div>
-    )}
+                <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)' }}>
+                  Click to manage outlets →
+  </div>
+              </div>
+              <div style={{ color: '#06b6d4' }}>
+                <BuildingIcon />
+              </div>
+            </div>
+          </div>
+
+          {/* Rewards System */}
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(10px)',
+            borderRadius: '12px',
+            padding: '24px',
+            border: '2px solid #10b981',
+            boxShadow: '0 0 20px rgba(16, 185, 129, 0.3)',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            width: '100%'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#10b981', marginBottom: '8px' }}>
+                  3-TIER
+        </div>
+                <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)' }}>
+                  Campaigns • Promotions • Points →
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></div>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3b82f6' }}></div>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f59e0b' }}></div>
+              </div>
+            </div>
+    </div>
+
+          {/* Admin Panel */}
+      <div style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(10px)',
+            borderRadius: '12px',
+            padding: '24px',
+            border: '2px solid #f59e0b',
+            boxShadow: '0 0 20px rgba(245, 158, 11, 0.3)',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            width: '100%'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#f59e0b', marginBottom: '8px' }}>
+                  ADMIN
+      </div>
+                <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)' }}>
+                  Manage users & settings →
+                </div>
+              </div>
+              <div style={{ color: '#f59e0b' }}>
+                <CrownIcon />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
   </div>
 );
+};
 
 export default AdminDashboard; 
