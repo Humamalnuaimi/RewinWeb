@@ -66,7 +66,9 @@ const UsersPage: React.FC = () => {
   };
 
   const handleViewUser = (user: User) => {
-                    navigate(`/users/${user.uid}/analytics`);
+    console.log('View user clicked:', user);
+    console.log('Navigating to:', `/users/${user.uid}/analytics`);
+    navigate(`/users/${user.uid}/analytics`);
   };
 
   const handleEditUser = (user: User) => {

@@ -124,6 +124,9 @@ type ChartType = 'line' | 'bar' | 'pie';
 const UserAnalyticsPage: React.FC = () => {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
+  
+  console.log('UserAnalyticsPage rendered with userId:', userId);
+  
   const [user, setUser] = useState<User | null>(null);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -153,18 +156,22 @@ const UserAnalyticsPage: React.FC = () => {
 
   const fetchUserData = async () => {
     try {
+      console.log('Fetching user data for userId:', userId);
       setLoading(true);
       
       // Fetch user data
       const userResponse = await usersAPI.getById(userId!);
+      console.log('User response:', userResponse);
       setUser(userResponse);
 
       // Fetch user's businesses
       const businessesResponse = await outletsAPI.getByUser(userId!);
+      console.log('Businesses response:', businessesResponse);
       setBusinesses(businessesResponse);
 
       // Fetch user's customers
       const customersResponse = await customersAPI.getByUser(userId!);
+      console.log('Customers response:', customersResponse);
       setCustomers(customersResponse);
 
     } catch (error) {
