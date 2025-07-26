@@ -712,7 +712,7 @@ const UserAnalyticsPage: React.FC = () => {
               fontWeight: '700',
               color: 'white'
             }}>
-              {user.displayName?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
+              {user.displayName?.[0]?.toUpperCase() || (user.email?.[0]?.toUpperCase() || '?')}
             </div>
             <div style={{ flex: 1 }}>
               <h2 style={{
