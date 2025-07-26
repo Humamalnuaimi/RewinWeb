@@ -10,6 +10,7 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import SystemPage from './pages/SystemPage';
 import Layout from './components/Layout';
 import UserDetailPage from './pages/UserDetailPage';
+import UserAnalyticsPage from './pages/UserAnalyticsPage';
 import CustomerDetailPage from './pages/CustomerDetailPage';
 import OutletDetailPage from './pages/OutletDetailPage';
 import OutletsPage from './pages/OutletsPage';
@@ -136,6 +137,18 @@ const AppContent: React.FC = () => {
               </ProtectedRoute>
             }
           />
+          
+          <Route
+            path="/users/:userId/analytics"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <UserAnalyticsPage />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
           <Route
             path="/customers/:customerId"
             element={

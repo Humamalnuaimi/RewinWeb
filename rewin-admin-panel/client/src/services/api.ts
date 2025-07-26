@@ -81,8 +81,11 @@ export const analyticsAPI = {
     return apiCall(`/analytics/debug/outlets/${email}`);
   },
 
-  getUserAnalytics: async (userId: string, timePeriod: string = 'all') => {
-    return apiCall(`/analytics/users/${userId}/analytics?timePeriod=${timePeriod}`);
+  getUserAnalytics: async (userId: string, params?: string) => {
+    const url = params 
+      ? `/analytics/users/${userId}/analytics?${params}`
+      : `/analytics/users/${userId}/analytics`;
+    return apiCall(url);
   },
 };
 

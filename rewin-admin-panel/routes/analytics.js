@@ -76,7 +76,7 @@ router.get('/outlets', async (req, res) => {
 router.get('/users/:userId/analytics', async (req, res) => {
   try {
     const { userId } = req.params;
-    const { timePeriod = 'all' } = req.query;
+    const { timePeriod = 'all', selectedDate, outletId } = req.query;
     
     // Get user's businesses
     const businessesSnapshot = await admin.firestore()
@@ -123,12 +123,23 @@ router.get('/users/:userId/analytics', async (req, res) => {
 
     averageRating = totalRatings > 0 ? averageRating / totalRatings : 0;
 
-    // Generate daily stats for the last 30 days
+    // Generate daily stats for the last 30 days with outlet breakdown
     const dailyStats = [];
     const today = new Date();
     for (let i = 29; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(date.getDate() - i);
+      
+      const outletBreakdown = {};
+      businesses.forEach(business => {
+        outletBreakdown[business.id] = {
+          name: business.name,
+          earnedPoints: Math.floor(Math.random() * 50) + 5,
+          redeemedPoints: Math.floor(Math.random() * 25) + 2,
+          checkIns: Math.floor(Math.random() * 10) + 1,
+          revenue: Math.floor(Math.random() * 250) + 25
+        };
+      });
       
       // Simulate daily data (in real app, this would come from actual transactions)
       const dayStats = {
@@ -137,7 +148,8 @@ router.get('/users/:userId/analytics', async (req, res) => {
         redeemedPoints: Math.floor(Math.random() * 50) + 5,
         checkIns: Math.floor(Math.random() * 20) + 1,
         revenue: Math.floor(Math.random() * 500) + 50,
-        newCustomers: Math.floor(Math.random() * 5) + 0
+        newCustomers: Math.floor(Math.random() * 5) + 0,
+        outletBreakdown
       };
       
       dailyStats.push(dayStats);
@@ -171,6 +183,52 @@ router.get('/users/:userId/analytics', async (req, res) => {
         return statDate >= startDate && statDate <= now;
       });
     }
+
+    // Filter by specific date if provided
+    if (selectedDate) {
+      filteredDailyStats = filteredDailyStats.filter(stat => stat.date === selectedDate);
+    }
+
+    // Filter by specific outlet if provided
+    if (outletId && outletId !== 'all') {
+      filteredDailyStats = filteredDailyStats.map(stat => ({
+        ...stat,
+        earnedPoints: stat.outletBreakdown[outletId]?.earnedPoints || 0,
+        redeemedPoints: stat.outletBreakdown[outletId]?.redeemedPoints || 0,
+        checkIns: stat.outletBreakdown[outletId]?.checkIns || 0,
+        revenue: stat.outletBreakdown[outletId]?.revenue || 0
+      }));
+    }
+
+    // Generate outlet performance data
+    const outletPerformance = {};
+    businesses.forEach(business => {
+      const businessCustomers = customers.filter(customer => 
+        customer.businessId === business.id
+      );
+      
+      const businessStats = dailyStats.filter(stat => 
+        stat.outletBreakdown[business.id]
+      );
+      
+      outletPerformance[business.id] = {
+        name: business.name,
+        totalCustomers: businessCustomers.length,
+        totalRevenue: businessStats.reduce((sum, stat) => 
+          sum + (stat.outletBreakdown[business.id]?.revenue || 0), 0
+        ),
+        totalPointsEarned: businessStats.reduce((sum, stat) => 
+          sum + (stat.outletBreakdown[business.id]?.earnedPoints || 0), 0
+        ),
+        totalPointsRedeemed: businessStats.reduce((sum, stat) => 
+          sum + (stat.outletBreakdown[business.id]?.redeemedPoints || 0), 0
+        ),
+        totalCheckIns: businessStats.reduce((sum, stat) => 
+          sum + (stat.outletBreakdown[business.id]?.checkIns || 0), 0
+        ),
+        dailyStats: businessStats
+      };
+    });
 
     // Generate recent activity with time-based filtering
     const generateRecentActivity = (period) => {
