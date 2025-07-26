@@ -210,7 +210,20 @@ const UsersPage: React.FC = () => {
                 </thead>
                 <tbody>
                   {filteredUsers.map((user) => (
-                    <tr key={user.uid}>
+                    <tr 
+                      key={user.uid}
+                      style={{ 
+                        cursor: 'pointer',
+                        transition: 'background-color 0.2s ease'
+                      }}
+                      onClick={() => handleViewUser(user)}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
                       <td>
                         <div style={{
                           display: 'flex',
@@ -313,7 +326,7 @@ const UsersPage: React.FC = () => {
                           }}
                           onClick={() => {
                             console.log('Customer count clicked for user:', user.uid);
-                            navigate(`/customers?userId=${user.uid}`);
+                            navigate(`/users/${user.uid}/analytics`);
                           }}
                           onMouseEnter={(e) => {
                             e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
