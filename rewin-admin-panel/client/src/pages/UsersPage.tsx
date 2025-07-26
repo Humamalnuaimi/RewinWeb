@@ -68,7 +68,14 @@ const UsersPage: React.FC = () => {
   const handleViewUser = (user: User) => {
     console.log('View user clicked:', user);
     console.log('Navigating to:', `/users/${user.uid}/analytics`);
-    navigate(`/users/${user.uid}/analytics`);
+    console.log('Current location:', window.location.href);
+    
+    try {
+      navigate(`/users/${user.uid}/analytics`);
+      console.log('Navigation called successfully');
+    } catch (error) {
+      console.error('Navigation error:', error);
+    }
   };
 
   const handleEditUser = (user: User) => {
@@ -123,6 +130,16 @@ const UsersPage: React.FC = () => {
         <button className="btn btn-primary" onClick={handleAddUser}>
           <UserPlus size={16} />
           Add User
+        </button>
+        <button 
+          className="btn btn-secondary" 
+          onClick={() => {
+            console.log('Test navigation clicked');
+            navigate('/dashboard');
+          }}
+          style={{ marginLeft: '10px' }}
+        >
+          Test Navigation
         </button>
       </div>
 
