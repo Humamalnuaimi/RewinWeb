@@ -1221,10 +1221,17 @@ const UserAnalyticsPage: React.FC = () => {
                   <div style={{
                     padding: '8px',
                     borderRadius: '8px',
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    background: activity.type === 'earned' 
+                      ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                      : activity.type === 'redeemed'
+                      ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+                      : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                     color: 'white'
                   }}>
-                    <Activity size={16} />
+                    {activity.type === 'earned' && <Gift size={16} />}
+                    {activity.type === 'redeemed' && <Zap size={16} />}
+                    {activity.type === 'checkin' && <MapPin size={16} />}
+                    {activity.type === 'transaction' && <Activity size={16} />}
                   </div>
                   <div style={{ flex: 1 }}>
                     <p style={{
