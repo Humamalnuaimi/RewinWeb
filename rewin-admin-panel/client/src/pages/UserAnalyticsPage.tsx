@@ -298,6 +298,11 @@ const UserAnalyticsPage: React.FC = () => {
     const redeemedPoints = data.map(stat => stat.redeemedPoints);
     const checkIns = data.map(stat => stat.checkIns);
 
+    // Calculate max values for scaling
+    const maxEarned = Math.max(...earnedPoints, 1);
+    const maxRedeemed = Math.max(...redeemedPoints, 1);
+    const maxCheckIns = Math.max(...checkIns, 1);
+
     return (
       <div style={{
         background: 'rgba(255, 255, 255, 0.1)',
@@ -335,7 +340,7 @@ const UserAnalyticsPage: React.FC = () => {
                   background: chartType === type 
                     ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
                     : 'rgba(255, 255, 255, 0.1)',
-                  color: chartType === type ? 'white' : '#6b7280',
+                  color: chartType === type ? 'white' : 'rgba(255, 255, 255, 0.8)',
                   cursor: 'pointer',
                   fontSize: '14px',
                   transition: 'all 0.3s ease'
@@ -351,18 +356,151 @@ const UserAnalyticsPage: React.FC = () => {
 
         <div style={{
           height: '300px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
           background: 'rgba(255, 255, 255, 0.05)',
           borderRadius: '12px',
-          border: '1px solid rgba(255, 255, 255, 0.1)'
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          padding: '20px',
+          position: 'relative'
         }}>
-          <div style={{ textAlign: 'center', color: '#6b7280' }}>
-            <BarChart3 size={48} style={{ marginBottom: '16px' }} />
-            <p>Chart visualization would be implemented here</p>
-            <p style={{ fontSize: '12px' }}>Data: {data.length} data points</p>
-          </div>
+          {chartType === 'bar' && (
+            <div style={{ height: '100%', display: 'flex', alignItems: 'end', gap: '4px', justifyContent: 'center' }}>
+              {data.slice(-7).map((stat, index) => (
+                <div key={index} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '2px', height: '200px', alignItems: 'end' }}>
+                    <div style={{
+                      width: '20px',
+                      height: `${(stat.earnedPoints / maxEarned) * 200}px`,
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      borderRadius: '4px 4px 0 0',
+                      minHeight: '4px'
+                    }} />
+                    <div style={{
+                      width: '20px',
+                      height: `${(stat.redeemedPoints / maxRedeemed) * 200}px`,
+                      background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                      borderRadius: '4px 4px 0 0',
+                      minHeight: '4px'
+                    }} />
+                  </div>
+                  <span style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.6)' }}>
+                    {new Date(stat.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {chartType === 'line' && (
+            <div style={{ height: '100%', position: 'relative' }}>
+              <svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }}>
+                <defs>
+                  <linearGradient id="earnedGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="#10b981" />
+                    <stop offset="100%" stopColor="#059669" />
+                  </linearGradient>
+                  <linearGradient id="redeemedGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="#ef4444" />
+                    <stop offset="100%" stopColor="#dc2626" />
+                  </linearGradient>
+                </defs>
+                
+                {/* Grid lines */}
+                {[0, 25, 50, 75, 100].map((percent, i) => (
+                  <line
+                    key={i}
+                    x1="0"
+                    y1={`${percent}%`}
+                    x2="100%"
+                    y2={`${percent}%`}
+                    stroke="rgba(255, 255, 255, 0.1)"
+                    strokeWidth="1"
+                  />
+                ))}
+
+                {/* Line for earned points */}
+                <polyline
+                  fill="none"
+                  stroke="url(#earnedGradient)"
+                  strokeWidth="3"
+                  points={data.slice(-7).map((stat, index) => {
+                    const x = (index / 6) * 100;
+                    const y = 100 - ((stat.earnedPoints / maxEarned) * 100);
+                    return `${x}%,${y}%`;
+                  }).join(' ')}
+                />
+
+                {/* Line for redeemed points */}
+                <polyline
+                  fill="none"
+                  stroke="url(#redeemedGradient)"
+                  strokeWidth="3"
+                  points={data.slice(-7).map((stat, index) => {
+                    const x = (index / 6) * 100;
+                    const y = 100 - ((stat.redeemedPoints / maxRedeemed) * 100);
+                    return `${x}%,${y}%`;
+                  }).join(' ')}
+                />
+              </svg>
+              
+              {/* Legend */}
+              <div style={{ position: 'absolute', bottom: '10px', left: '10px', display: 'flex', gap: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '12px', height: '12px', background: '#10b981', borderRadius: '2px' }} />
+                  <span style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.8)' }}>Earned</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '12px', height: '12px', background: '#ef4444', borderRadius: '2px' }} />
+                  <span style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.8)' }}>Redeemed</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {chartType === 'pie' && (
+            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{
+                  width: '150px',
+                  height: '150px',
+                  borderRadius: '50%',
+                  background: 'conic-gradient(from 0deg, #10b981 0deg, #10b981 180deg, #ef4444 180deg, #ef4444 360deg)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 16px'
+                }}>
+                  <div style={{
+                    width: '80px',
+                    height: '80px',
+                    borderRadius: '50%',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontSize: '14px',
+                    fontWeight: '600'
+                  }}>
+                    {analytics.totalPointsEarned + analytics.totalPointsRedeemed}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '18px', fontWeight: '600', color: '#10b981' }}>
+                      {formatNumber(analytics.totalPointsEarned)}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)' }}>Earned</div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '18px', fontWeight: '600', color: '#ef4444' }}>
+                      {formatNumber(analytics.totalPointsRedeemed)}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)' }}>Redeemed</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
