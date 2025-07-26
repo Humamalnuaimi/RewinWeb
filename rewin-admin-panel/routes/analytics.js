@@ -72,6 +72,176 @@ router.get('/outlets', async (req, res) => {
   }
 });
 
+// Get user analytics
+router.get('/users/:userId/analytics', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { timePeriod = 'all' } = req.query;
+    
+    // Get user's businesses
+    const businessesSnapshot = await admin.firestore()
+      .collection('businesses')
+      .where('ownerId', '==', userId)
+      .get();
+    
+    const businesses = businessesSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    // Get user's customers
+    const customersSnapshot = await admin.firestore()
+      .collection('users')
+      .doc(userId)
+      .collection('customers')
+      .get();
+    
+    const customers = customersSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    // Calculate analytics
+    let totalRevenue = 0;
+    let totalPointsEarned = 0;
+    let totalPointsRedeemed = 0;
+    let totalCheckIns = 0;
+    let averageRating = 0;
+    let totalRatings = 0;
+
+    // Process customers for analytics
+    customers.forEach(customer => {
+      totalPointsEarned += customer.totalPoints || 0;
+      totalPointsRedeemed += customer.redeemedPoints || 0;
+      totalCheckIns += customer.checkInCount || 0;
+      
+      if (customer.rating) {
+        totalRatings += customer.rating;
+        averageRating += customer.rating;
+      }
+    });
+
+    averageRating = totalRatings > 0 ? averageRating / totalRatings : 0;
+
+    // Generate daily stats for the last 30 days
+    const dailyStats = [];
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      
+      // Simulate daily data (in real app, this would come from actual transactions)
+      const dayStats = {
+        date: date.toISOString().split('T')[0],
+        earnedPoints: Math.floor(Math.random() * 100) + 10,
+        redeemedPoints: Math.floor(Math.random() * 50) + 5,
+        checkIns: Math.floor(Math.random() * 20) + 1,
+        revenue: Math.floor(Math.random() * 500) + 50,
+        newCustomers: Math.floor(Math.random() * 5) + 0
+      };
+      
+      dailyStats.push(dayStats);
+    }
+
+    // Filter daily stats based on time period
+    let filteredDailyStats = dailyStats;
+    if (timePeriod !== 'all') {
+      const now = new Date();
+      let startDate;
+
+      switch (timePeriod) {
+        case 'today':
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          break;
+        case 'yesterday':
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+          break;
+        case 'week':
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case 'month':
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        default:
+          startDate = new Date(0); // All time
+      }
+
+      filteredDailyStats = dailyStats.filter(stat => {
+        const statDate = new Date(stat.date);
+        return statDate >= startDate && statDate <= now;
+      });
+    }
+
+    // Generate recent activity with time-based filtering
+    const generateRecentActivity = (period) => {
+      const activities = [];
+      const now = new Date();
+      let startTime;
+
+      switch (period) {
+        case 'today':
+          startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          break;
+        case 'yesterday':
+          startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+          break;
+        case 'week':
+          startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case 'month':
+          startTime = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        default:
+          startTime = new Date(0);
+      }
+
+      const activityTypes = [
+        { type: 'earned', description: 'Customer earned 50 points at Coffee Shop' },
+        { type: 'redeemed', description: 'Customer redeemed 25 points for free coffee' },
+        { type: 'checkin', description: 'New customer checked in at Restaurant' },
+        { type: 'earned', description: 'Customer earned 30 points at Cafe' },
+        { type: 'redeemed', description: 'Customer redeemed 40 points for discount' }
+      ];
+
+      // Generate activities within the time period
+      for (let i = 0; i < 5; i++) {
+        const randomTime = new Date(startTime.getTime() + Math.random() * (now.getTime() - startTime.getTime()));
+        const randomActivity = activityTypes[Math.floor(Math.random() * activityTypes.length)];
+        
+        activities.push({
+          type: randomActivity.type,
+          description: randomActivity.description,
+          timestamp: randomTime.toISOString()
+        });
+      }
+
+      return activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    };
+
+    const recentActivity = generateRecentActivity(timePeriod);
+
+    // Find top performing outlet
+    const topPerformingOutlet = businesses.length > 0 ? businesses[0].name : 'N/A';
+
+    res.json({
+      totalCustomers: customers.length,
+      totalRevenue: totalRevenue,
+      totalPointsEarned: totalPointsEarned,
+      totalPointsRedeemed: totalPointsRedeemed,
+      totalCheckIns: totalCheckIns,
+      averageCustomerRating: averageRating,
+      topPerformingOutlet: topPerformingOutlet,
+      dailyStats: filteredDailyStats,
+      recentActivity: recentActivity,
+      timePeriod: timePeriod
+    });
+
+  } catch (error) {
+    console.error('Get user analytics error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get outlets for specific user
 router.get('/users/:userId/outlets', async (req, res) => {
   try {

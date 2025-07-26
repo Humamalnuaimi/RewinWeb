@@ -1,161 +1,159 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
 import { 
-  LayoutDashboard, 
-  Users, 
-  UserCheck, 
   BarChart3, 
+  Users, 
+  Store, 
+  PieChart, 
   Settings, 
-  LogOut, 
-  Menu, 
-  X,
-  Bell,
-  Search,
-  ChevronDown,
-  Building2
+  LogOut,
+  User,
+  Building2,
+  TrendingUp
 } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
 
-interface LayoutProps {
-  children: React.ReactNode;
-}
-
-const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth();
   const location = useLocation();
 
-  const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Users', href: '/users', icon: Users },
-    { name: 'Customers', href: '/customers', icon: UserCheck },
-    { name: 'Outlets', href: '/outlets', icon: Building2 },
-    { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-    { name: 'System', href: '/system', icon: Settings },
+  const navItems = [
+    { path: '/dashboard', icon: BarChart3, label: 'Dashboard' },
+    { path: '/users', icon: Users, label: 'Users' },
+    { path: '/outlets', icon: Store, label: 'Outlets' },
+    { path: '/customers', icon: User, label: 'Customers' },
+    { path: '/analytics', icon: TrendingUp, label: 'Analytics' },
+    { path: '/system', icon: Settings, label: 'System' },
   ];
 
-  const isActive = (href: string) => {
-    return location.pathname === href;
-  };
-
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   return (
-    <div className="admin-layout">
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <div 
-          className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
+    <div className="admin-container">
       {/* Sidebar */}
-      <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+      <div className="sidebar">
         <div className="sidebar-header">
           <div className="sidebar-logo">
-            <LayoutDashboard size={20} />
+            <div style={{
+              width: '40px',
+              height: '40px',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              fontWeight: '600',
+              fontSize: '1.25rem'
+            }}>
+              R
+            </div>
+            <span>Rewin Admin</span>
           </div>
-          <div className="sidebar-title">Rewin Admin</div>
         </div>
 
-        <nav className="nav-menu">
-          {navigation.map((item) => {
+        <nav className="sidebar-nav">
+          {navItems.map((item) => {
             const Icon = item.icon;
+            const isActive = location.pathname === item.path;
+            
             return (
               <Link
-                key={item.name}
-                to={item.href}
-                className={`nav-item ${isActive(item.href) ? 'active' : ''}`}
-                onClick={() => setSidebarOpen(false)}
+                key={item.path}
+                to={item.path}
+                className={`nav-item ${isActive ? 'active' : ''}`}
               >
-                <Icon className="nav-icon" />
-                {item.name}
+                <Icon size={20} />
+                <span>{item.label}</span>
               </Link>
             );
           })}
         </nav>
 
-        {/* User info and logout */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <div className="w-8 h-8 bg-gradient-to-r from-primary-color to-secondary-color rounded-full flex items-center justify-center mr-3">
-                <span className="text-white text-sm font-medium">
-                  {user?.email?.charAt(0).toUpperCase()}
-                </span>
+        {/* User Section */}
+        <div style={{
+          padding: '1rem 2rem',
+          borderTop: '1px solid rgba(255, 255, 255, 0.2)',
+          marginTop: 'auto'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1rem',
+            marginBottom: '1rem'
+          }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              fontWeight: '600',
+              fontSize: '1rem'
+            }}>
+              {user?.email?.charAt(0).toUpperCase() || 'A'}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{
+                color: 'white',
+                fontSize: '0.875rem',
+                fontWeight: '500'
+              }}>
+                {user?.email || 'Administrator'}
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {user?.email}
-                </p>
-                <p className="text-xs text-gray-500">Administrator</p>
+              <div style={{
+                color: 'rgba(255, 255, 255, 0.7)',
+                fontSize: '0.75rem'
+              }}>
+                Administrator
               </div>
             </div>
-            <button
-              onClick={handleLogout}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Logout"
-            >
-              <LogOut size={16} />
-            </button>
           </div>
+          
+          <button
+            onClick={handleLogout}
+            style={{
+              width: '100%',
+              padding: '0.75rem',
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              borderRadius: '12px',
+              color: 'rgba(255, 255, 255, 0.8)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              transition: 'all 0.3s ease',
+              fontSize: '0.875rem'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+              e.currentTarget.style.color = 'white';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+              e.currentTarget.style.color = 'rgba(255, 255, 255, 0.8)';
+            }}
+          >
+            <LogOut size={16} />
+            Sign Out
+          </button>
         </div>
       </div>
 
-      {/* Main content */}
+      {/* Main Content */}
       <div className="main-content">
-        {/* Header */}
-        <header className="header">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <Menu size={20} />
-            </button>
-            
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-color focus:border-transparent"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="header-actions">
-            <button className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
-              <Bell size={20} />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-            </button>
-            
-            <div className="flex items-center gap-3">
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-900">Admin User</p>
-                <p className="text-xs text-gray-500">Administrator</p>
-              </div>
-              <div className="w-8 h-8 bg-gradient-to-r from-primary-color to-secondary-color rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-medium">
-                  {user?.email?.charAt(0).toUpperCase()}
-                </span>
-              </div>
-              <button className="p-1 text-gray-400 hover:text-gray-600 transition-colors">
-                <ChevronDown size={16} />
-              </button>
-            </div>
-          </div>
-        </header>
-
-        {/* Page content */}
-        <main className="content-area">
-          {children}
-        </main>
+        {children}
       </div>
     </div>
   );
