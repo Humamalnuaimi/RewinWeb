@@ -160,11 +160,11 @@ const UserAnalyticsPage: React.FC = () => {
       setUser(userResponse);
 
       // Fetch user's businesses
-      const businessesResponse = await outletsAPI.getByUserId(userId!);
+      const businessesResponse = await outletsAPI.getByUser(userId!);
       setBusinesses(businessesResponse);
 
       // Fetch user's customers
-      const customersResponse = await customersAPI.getByUserId(userId!);
+      const customersResponse = await customersAPI.getByUser(userId!);
       setCustomers(customersResponse);
 
     } catch (error) {
@@ -1131,12 +1131,13 @@ const UserAnalyticsPage: React.FC = () => {
         </Modal>
 
         {/* Toast */}
-        <Toast
-          isOpen={showToast}
-          message={toastMessage}
-          type={toastType}
-          onClose={() => setShowToast(false)}
-        />
+        {showToast && (
+          <Toast
+            message={toastMessage}
+            type={toastType}
+            onClose={() => setShowToast(false)}
+          />
+        )}
       </div>
     </div>
   );
