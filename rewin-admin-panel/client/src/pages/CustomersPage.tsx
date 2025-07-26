@@ -1,67 +1,65 @@
 import React, { useState, useEffect } from 'react';
-import { UserCheck, Search, Plus, Filter, MoreVertical, Edit, Trash2, Eye, Mail, Phone } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { UserCheck, Search, Plus, Filter, MoreVertical, Edit, Trash2, Eye, Mail, Phone, ArrowLeft } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { customersAPI, usersAPI } from '../services/api';
 
 interface Customer {
   id: string;
   name: string;
-  email: string;
+  email?: string;
   phone?: string;
-  businessId: string;
-  businessName: string;
+  businessId?: string;
+  businessName?: string;
   createdAt: string;
   status: 'active' | 'inactive';
+  totalPoints?: number;
+  redeemedPoints?: number;
+  lastVisit?: string;
+  checkInCount?: number;
 }
 
 const CustomersPage: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [user, setUser] = useState<any>(null);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const userId = searchParams.get('userId');
 
   useEffect(() => {
-    // Simulate loading customers data
-    setTimeout(() => {
-      setCustomers([
-        {
-          id: '1',
-          name: 'John Doe',
-          email: 'john.doe@example.com',
-          phone: '+1 (555) 123-4567',
-          businessId: 'business1',
-          businessName: 'Restaurant A',
-          createdAt: '2024-01-15',
-          status: 'active'
-        },
-        {
-          id: '2',
-          name: 'Jane Smith',
-          email: 'jane.smith@example.com',
-          phone: '+1 (555) 987-6543',
-          businessId: 'business2',
-          businessName: 'Cafe B',
-          createdAt: '2024-01-20',
-          status: 'active'
-        },
-        {
-          id: '3',
-          name: 'Mike Johnson',
-          email: 'mike.johnson@example.com',
-          phone: '+1 (555) 456-7890',
-          businessId: 'business1',
-          businessName: 'Restaurant A',
-          createdAt: '2024-01-25',
-          status: 'inactive'
+    const fetchCustomers = async () => {
+      try {
+        setLoading(true);
+        
+        if (userId) {
+          // Fetch customers for specific user
+          const customersResponse = await customersAPI.getByUser(userId);
+          setCustomers(customersResponse);
+          
+          // Fetch user info
+          const userResponse = await usersAPI.getById(userId);
+          setUser(userResponse);
+        } else {
+          // Fetch all customers
+          const customersResponse = await customersAPI.getAll();
+          setCustomers(customersResponse);
         }
-      ]);
-      setLoading(false);
-    }, 1000);
-  }, []);
+      } catch (error) {
+        console.error('Error fetching customers:', error);
+        setCustomers([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCustomers();
+  }, [userId]);
 
   const filteredCustomers = customers.filter(customer =>
     customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.businessName.toLowerCase().includes(searchTerm.toLowerCase())
+    customer.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    customer.businessName?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (loading) {
@@ -76,10 +74,45 @@ const CustomersPage: React.FC = () => {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="page-header">
-        <h1 className="page-title">Customers Management</h1>
-        <p className="page-subtitle">
-          View and manage all customer data across all businesses and users.
-        </p>
+        <div>
+          {userId && user && (
+            <div style={{ marginBottom: '8px' }}>
+              <button
+                onClick={() => navigate('/users')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '8px',
+                  padding: '8px 12px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                }}
+              >
+                <ArrowLeft size={16} />
+                Back to Users
+              </button>
+            </div>
+          )}
+          <h1 className="page-title">
+            {userId && user ? `Customers for ${user.displayName || user.email}` : 'Customers Management'}
+          </h1>
+          <p className="page-subtitle">
+            {userId && user 
+              ? `View and manage customers for ${user.displayName || user.email}`
+              : 'View and manage all customer data across all businesses and users.'
+            }
+          </p>
+        </div>
       </div>
 
       {/* Actions Bar */}
@@ -119,64 +152,143 @@ const CustomersPage: React.FC = () => {
                 <tr>
                   <th>Customer</th>
                   <th>Contact</th>
-                  <th>Business</th>
+                  <th>Points</th>
+                  <th>Check-ins</th>
+                  <th>Last Visit</th>
                   <th>Status</th>
-                  <th>Created</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredCustomers.map((customer) => (
-                  <tr key={customer.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/customers/${customer.id}`)}>
+                  <tr 
+                    key={customer.id} 
+                    style={{ 
+                      cursor: 'pointer',
+                      transition: 'background-color 0.2s ease'
+                    }} 
+                    onClick={() => navigate(`/customers/${customer.id}`)}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                  >
                     <td>
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
-                          <span className="text-white text-sm font-medium">
-                            {customer.name.charAt(0).toUpperCase()}
-                          </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{
+                          width: '40px',
+                          height: '40px',
+                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'white',
+                          fontWeight: '600',
+                          fontSize: '0.875rem'
+                        }}>
+                          {customer.name.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-900">{customer.name}</p>
-                          <p className="text-xs text-gray-500">ID: {customer.id}</p>
+                          <div style={{ color: 'white', fontWeight: '500', fontSize: '0.875rem' }}>
+                            {customer.name}
+                          </div>
+                          <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.75rem' }}>
+                            ID: {customer.id}
+                          </div>
                         </div>
                       </div>
                     </td>
                     <td>
                       <div>
-                        <div className="flex items-center gap-1 mb-1">
-                          <Mail size={12} className="text-gray-400" />
-                          <p className="text-sm text-gray-900">{customer.email}</p>
-                        </div>
+                        {customer.email && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                            <Mail size={12} style={{ color: 'rgba(255, 255, 255, 0.5)' }} />
+                            <span style={{ color: 'rgba(255, 255, 255, 0.9)', fontSize: '0.875rem' }}>
+                              {customer.email}
+                            </span>
+                          </div>
+                        )}
                         {customer.phone && (
-                          <div className="flex items-center gap-1">
-                            <Phone size={12} className="text-gray-400" />
-                            <p className="text-xs text-gray-500">{customer.phone}</p>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Phone size={12} style={{ color: 'rgba(255, 255, 255, 0.5)' }} />
+                            <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.75rem' }}>
+                              {customer.phone}
+                            </span>
                           </div>
                         )}
                       </div>
                     </td>
                     <td>
-                      <span className="text-sm text-gray-900">{customer.businessName}</span>
+                      <div>
+                        <div style={{ color: 'white', fontWeight: '500', fontSize: '0.875rem' }}>
+                          {customer.totalPoints || 0} pts
+                        </div>
+                        <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.75rem' }}>
+                          Redeemed: {customer.redeemedPoints || 0}
+                        </div>
+                      </div>
                     </td>
                     <td>
-                      <span className={`badge ${customer.status === 'active' ? 'badge-success' : 'badge-warning'}`}>{customer.status === 'active' ? 'Active' : 'Inactive'}</span>
+                      <div style={{ color: 'rgba(255, 255, 255, 0.9)', fontSize: '0.875rem' }}>
+                        {customer.checkInCount || 0}
+                      </div>
                     </td>
                     <td>
-                      <span className="text-sm text-gray-500">{new Date(customer.createdAt).toLocaleDateString()}</span>
+                      <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                        {customer.lastVisit ? new Date(customer.lastVisit).toLocaleDateString() : 'Never'}
+                      </div>
                     </td>
                     <td>
-                      <div className="flex items-center gap-2">
-                        <button className="p-1 text-gray-400 hover:text-blue-600 transition-colors" title="View" onClick={e => { e.stopPropagation(); navigate(`/customers/${customer.id}`); }}>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
+                        <div style={{
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          backgroundColor: customer.status === 'active' ? '#10b981' : '#f59e0b'
+                        }} />
+                        <span style={{ 
+                          color: customer.status === 'active' ? '#10b981' : '#f59e0b',
+                          fontSize: '0.875rem'
+                        }}>
+                          {customer.status === 'active' ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{
+                        display: 'flex',
+                        gap: '0.5rem',
+                        alignItems: 'center'
+                      }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/customers/${customer.id}`);
+                          }}
+                          style={{
+                            padding: '0.5rem',
+                            background: 'rgba(59, 130, 246, 0.1)',
+                            border: '1px solid rgba(59, 130, 246, 0.2)',
+                            borderRadius: '8px',
+                            color: '#3b82f6',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
+                          }}
+                        >
                           <Eye size={16} />
-                        </button>
-                        <button className="p-1 text-gray-400 hover:text-green-600 transition-colors" title="Edit">
-                          <Edit size={16} />
-                        </button>
-                        <button className="p-1 text-gray-400 hover:text-red-600 transition-colors" title="Delete">
-                          <Trash2 size={16} />
-                        </button>
-                        <button className="p-1 text-gray-400 hover:text-gray-600 transition-colors" title="More">
-                          <MoreVertical size={16} />
                         </button>
                       </div>
                     </td>

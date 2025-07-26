@@ -301,11 +301,27 @@ const UsersPage: React.FC = () => {
                       </td>
                       
                       <td>
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.5rem'
-                        }}>
+                        <div 
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            cursor: 'pointer',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            transition: 'background-color 0.2s ease'
+                          }}
+                          onClick={() => {
+                            console.log('Customer count clicked for user:', user.uid);
+                            navigate(`/customers?userId=${user.uid}`);
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'transparent';
+                          }}
+                        >
                           <Users size={14} style={{ color: 'rgba(255, 255, 255, 0.5)' }} />
                           <span style={{ color: 'rgba(255, 255, 255, 0.9)' }}>
                             {user.customerCount}
