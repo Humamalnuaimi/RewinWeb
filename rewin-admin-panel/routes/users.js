@@ -216,6 +216,39 @@ router.delete('/:userId', async (req, res) => {
   }
 });
 
+// Update user
+router.put('/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { displayName, email, disabled } = req.body;
+    
+    const updateData = {};
+    
+    if (displayName !== undefined) {
+      updateData.displayName = displayName;
+    }
+    
+    if (email !== undefined) {
+      updateData.email = email;
+    }
+    
+    if (disabled !== undefined) {
+      updateData.disabled = disabled;
+    }
+    
+    await admin.auth().updateUser(userId, updateData);
+    
+    res.json({
+      success: true,
+      message: 'User updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
 // Update user status (enable/disable)
 router.patch('/:userId/status', async (req, res) => {
   try {
