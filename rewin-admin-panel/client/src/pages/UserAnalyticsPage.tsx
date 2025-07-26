@@ -127,6 +127,15 @@ const UserAnalyticsPage: React.FC = () => {
   
   console.log('UserAnalyticsPage rendered with userId:', userId);
   
+  // Redirect if no userId
+  useEffect(() => {
+    if (!userId) {
+      console.error('No userId provided, redirecting to users page');
+      navigate('/users');
+      return;
+    }
+  }, [userId, navigate]);
+  
   const [user, setUser] = useState<User | null>(null);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -179,6 +188,19 @@ const UserAnalyticsPage: React.FC = () => {
       setToastMessage('Error loading user data');
       setToastType('error');
       setShowToast(true);
+      
+      // Set fallback data to prevent blank page
+      setUser({
+        uid: userId!,
+        email: 'Loading...',
+        displayName: 'Loading...',
+        emailVerified: false,
+        disabled: false,
+        createdAt: '',
+        lastSignIn: ''
+      });
+      setBusinesses([]);
+      setCustomers([]);
     } finally {
       setLoading(false);
     }

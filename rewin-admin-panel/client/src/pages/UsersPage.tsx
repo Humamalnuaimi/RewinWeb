@@ -347,7 +347,10 @@ const UsersPage: React.FC = () => {
                               borderRadius: '8px',
                               color: '#3b82f6',
                               cursor: 'pointer',
-                              transition: 'all 0.2s ease'
+                              transition: 'all 0.2s ease',
+                              pointerEvents: 'auto',
+                              zIndex: 10,
+                              position: 'relative'
                             }}
                             onMouseEnter={(e) => {
                               e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
