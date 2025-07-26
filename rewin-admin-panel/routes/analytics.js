@@ -101,7 +101,19 @@ router.get('/users/:userId/analytics', async (req, res) => {
       ...doc.data()
     }));
 
-    // Calculate analytics
+    // Get real transactions for this user
+    const transactionsSnapshot = await admin.firestore()
+      .collection('users')
+      .doc(userId)
+      .collection('transactions')
+      .get();
+    
+    const transactions = transactionsSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    // Calculate real analytics from actual data
     let totalRevenue = 0;
     let totalPointsEarned = 0;
     let totalPointsRedeemed = 0;
@@ -121,34 +133,140 @@ router.get('/users/:userId/analytics', async (req, res) => {
       }
     });
 
+    // Process transactions for revenue
+    transactions.forEach(transaction => {
+      if (transaction.amount) {
+        totalRevenue += parseFloat(transaction.amount) || 0;
+      }
+    });
+
     averageRating = totalRatings > 0 ? averageRating / totalRatings : 0;
 
-    // Generate daily stats for the last 30 days with outlet breakdown
+    // Generate real daily stats from actual transactions
     const dailyStats = [];
     const today = new Date();
+    
+    // Get transactions for the last 30 days
+    const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+    
     for (let i = 29; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(date.getDate() - i);
+      const dateString = date.toISOString().split('T')[0];
       
+      // Filter transactions for this specific date
+      const dayTransactions = transactions.filter(transaction => {
+        const transactionDate = transaction.date || transaction.createdAt;
+        if (typeof transactionDate === 'string') {
+          return transactionDate.startsWith(dateString);
+        } else if (transactionDate && transactionDate.toDate) {
+          // Handle Firestore timestamp
+          const timestampDate = transactionDate.toDate();
+          return timestampDate.toISOString().split('T')[0] === dateString;
+        }
+        return false;
+      });
+
+      // Calculate real daily stats
+      let dayEarnedPoints = 0;
+      let dayRedeemedPoints = 0;
+      let dayCheckIns = 0;
+      let dayRevenue = 0;
+      let dayNewCustomers = 0;
+
+      dayTransactions.forEach(transaction => {
+        if (transaction.type === 'earn') {
+          dayEarnedPoints += transaction.points || 0;
+        } else if (transaction.type === 'redeem') {
+          dayRedeemedPoints += transaction.points || 0;
+        }
+        
+        if (transaction.amount) {
+          dayRevenue += parseFloat(transaction.amount) || 0;
+        }
+      });
+
+      // Count check-ins for this day
+      const dayCheckInsCount = customers.filter(customer => {
+        const lastVisit = customer.lastVisit;
+        if (typeof lastVisit === 'string') {
+          return lastVisit.startsWith(dateString);
+        } else if (lastVisit && lastVisit.toDate) {
+          const visitDate = lastVisit.toDate();
+          return visitDate.toISOString().split('T')[0] === dateString;
+        }
+        return false;
+      }).length;
+
+      dayCheckIns = dayCheckInsCount;
+
+      // Count new customers for this day
+      const dayNewCustomersCount = customers.filter(customer => {
+        const createdAt = customer.createdAt;
+        if (typeof createdAt === 'string') {
+          return createdAt.startsWith(dateString);
+        } else if (createdAt && createdAt.toDate) {
+          const createdDate = createdAt.toDate();
+          return createdDate.toISOString().split('T')[0] === dateString;
+        }
+        return false;
+      }).length;
+
+      dayNewCustomers = dayNewCustomersCount;
+
+      // Calculate outlet breakdown for this day
       const outletBreakdown = {};
       businesses.forEach(business => {
+        const businessTransactions = dayTransactions.filter(transaction => 
+          transaction.businessId === business.id
+        );
+
+        let businessEarnedPoints = 0;
+        let businessRedeemedPoints = 0;
+        let businessRevenue = 0;
+
+        businessTransactions.forEach(transaction => {
+          if (transaction.type === 'earn') {
+            businessEarnedPoints += transaction.points || 0;
+          } else if (transaction.type === 'redeem') {
+            businessRedeemedPoints += transaction.points || 0;
+          }
+          
+          if (transaction.amount) {
+            businessRevenue += parseFloat(transaction.amount) || 0;
+          }
+        });
+
+        // Count check-ins for this business on this day
+        const businessCheckIns = customers.filter(customer => {
+          if (customer.businessId !== business.id) return false;
+          
+          const lastVisit = customer.lastVisit;
+          if (typeof lastVisit === 'string') {
+            return lastVisit.startsWith(dateString);
+          } else if (lastVisit && lastVisit.toDate) {
+            const visitDate = lastVisit.toDate();
+            return visitDate.toISOString().split('T')[0] === dateString;
+          }
+          return false;
+        }).length;
+
         outletBreakdown[business.id] = {
           name: business.name,
-          earnedPoints: Math.floor(Math.random() * 50) + 5,
-          redeemedPoints: Math.floor(Math.random() * 25) + 2,
-          checkIns: Math.floor(Math.random() * 10) + 1,
-          revenue: Math.floor(Math.random() * 250) + 25
+          earnedPoints: businessEarnedPoints,
+          redeemedPoints: businessRedeemedPoints,
+          checkIns: businessCheckIns,
+          revenue: businessRevenue
         };
       });
-      
-      // Simulate daily data (in real app, this would come from actual transactions)
+
       const dayStats = {
-        date: date.toISOString().split('T')[0],
-        earnedPoints: Math.floor(Math.random() * 100) + 10,
-        redeemedPoints: Math.floor(Math.random() * 50) + 5,
-        checkIns: Math.floor(Math.random() * 20) + 1,
-        revenue: Math.floor(Math.random() * 500) + 50,
-        newCustomers: Math.floor(Math.random() * 5) + 0,
+        date: dateString,
+        earnedPoints: dayEarnedPoints,
+        redeemedPoints: dayRedeemedPoints,
+        checkIns: dayCheckIns,
+        revenue: dayRevenue,
+        newCustomers: dayNewCustomers,
         outletBreakdown
       };
       
@@ -230,7 +348,7 @@ router.get('/users/:userId/analytics', async (req, res) => {
       };
     });
 
-    // Generate recent activity with time-based filtering
+    // Generate recent activity with real transaction data
     const generateRecentActivity = (period) => {
       const activities = [];
       const now = new Date();
@@ -253,27 +371,104 @@ router.get('/users/:userId/analytics', async (req, res) => {
           startTime = new Date(0);
       }
 
-      const activityTypes = [
-        { type: 'earned', description: 'Customer earned 50 points at Coffee Shop' },
-        { type: 'redeemed', description: 'Customer redeemed 25 points for free coffee' },
-        { type: 'checkin', description: 'New customer checked in at Restaurant' },
-        { type: 'earned', description: 'Customer earned 30 points at Cafe' },
-        { type: 'redeemed', description: 'Customer redeemed 40 points for discount' }
-      ];
+      // Filter transactions within the time period
+      const filteredTransactions = transactions.filter(transaction => {
+        const transactionDate = transaction.date || transaction.createdAt;
+        let transactionTime;
+        
+        if (typeof transactionDate === 'string') {
+          transactionTime = new Date(transactionDate);
+        } else if (transactionDate && transactionDate.toDate) {
+          transactionTime = transactionDate.toDate();
+        } else {
+          return false;
+        }
+        
+        return transactionTime >= startTime && transactionTime <= now;
+      });
 
-      // Generate activities within the time period
-      for (let i = 0; i < 5; i++) {
-        const randomTime = new Date(startTime.getTime() + Math.random() * (now.getTime() - startTime.getTime()));
-        const randomActivity = activityTypes[Math.floor(Math.random() * activityTypes.length)];
+      // Convert transactions to activities
+      filteredTransactions.forEach(transaction => {
+        const business = businesses.find(b => b.id === transaction.businessId);
+        const businessName = business ? business.name : 'Unknown Outlet';
+        
+        let activityType = 'transaction';
+        let description = '';
+        
+        if (transaction.type === 'earn') {
+          activityType = 'earned';
+          description = `Customer earned ${transaction.points || 0} points at ${businessName}`;
+        } else if (transaction.type === 'redeem') {
+          activityType = 'redeemed';
+          description = `Customer redeemed ${transaction.points || 0} points at ${businessName}`;
+        } else if (transaction.type === 'checkin') {
+          activityType = 'checkin';
+          description = `Customer checked in at ${businessName}`;
+        } else {
+          description = `Transaction at ${businessName}`;
+        }
         
         activities.push({
-          type: randomActivity.type,
-          description: randomActivity.description,
-          timestamp: randomTime.toISOString()
+          type: activityType,
+          description: description,
+          timestamp: transaction.date || transaction.createdAt,
+          amount: transaction.amount,
+          points: transaction.points,
+          businessName: businessName
         });
-      }
+      });
 
-      return activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      // Also add customer check-ins as activities
+      customers.forEach(customer => {
+        if (customer.lastVisit) {
+          let visitTime;
+          
+          if (typeof customer.lastVisit === 'string') {
+            visitTime = new Date(customer.lastVisit);
+          } else if (customer.lastVisit && customer.lastVisit.toDate) {
+            visitTime = customer.lastVisit.toDate();
+          } else {
+            return;
+          }
+          
+          if (visitTime >= startTime && visitTime <= now) {
+            const business = businesses.find(b => b.id === customer.businessId);
+            const businessName = business ? business.name : 'Unknown Outlet';
+            
+            activities.push({
+              type: 'checkin',
+              description: `${customer.name || 'Customer'} checked in at ${businessName}`,
+              timestamp: customer.lastVisit,
+              customerName: customer.name,
+              businessName: businessName
+            });
+          }
+        }
+      });
+
+      return activities
+        .sort((a, b) => {
+          let timeA, timeB;
+          
+          if (typeof a.timestamp === 'string') {
+            timeA = new Date(a.timestamp);
+          } else if (a.timestamp && a.timestamp.toDate) {
+            timeA = a.timestamp.toDate();
+          } else {
+            timeA = new Date(0);
+          }
+          
+          if (typeof b.timestamp === 'string') {
+            timeB = new Date(b.timestamp);
+          } else if (b.timestamp && b.timestamp.toDate) {
+            timeB = b.timestamp.toDate();
+          } else {
+            timeB = new Date(0);
+          }
+          
+          return timeB - timeA;
+        })
+        .slice(0, 10); // Limit to 10 most recent activities
     };
 
     const recentActivity = generateRecentActivity(timePeriod);
