@@ -109,16 +109,67 @@ router.get('/outlets', async (req, res) => {
           .collection('outlets')
           .get();
         
-        outletsSnapshot.docs.forEach(outletDoc => {
+        // Get all customers for this user to calculate customer counts
+        let userCustomers = [];
+        try {
+          const customersSnapshot = await admin.firestore()
+            .collection('users')
+            .doc(userId)
+            .collection('customers')
+            .get();
+          
+          userCustomers = customersSnapshot.docs.map(doc => ({
+            ...doc.data(),
+            id: doc.id
+          }));
+        } catch (error) {
+          console.log(`Could not fetch customers for user ${userId}:`, error.message);
+        }
+        
+        // Process outlets with async operations
+        for (const outletDoc of outletsSnapshot.docs) {
           const outletData = outletDoc.data();
+          const outletId = outletDoc.id;
+          
+          // Count customers for this specific outlet (using outletId only)
+          const outletCustomers = userCustomers.filter(customer => 
+            customer.outletId === outletId
+          );
+          
+          // Calculate total revenue for this outlet
+          let outletRevenue = 0;
+          try {
+            const transactionsSnapshot = await admin.firestore()
+              .collection('users')
+              .doc(userId)
+              .collection('transactions')
+              .where('outletId', '==', outletId)
+              .get();
+            
+            // Calculate revenue from transactions
+            transactionsSnapshot.docs.forEach(transactionDoc => {
+              const transaction = transactionDoc.data();
+              // Note: Since the current app doesn't store 'amount' field, 
+              // we'll use pointsChanged as a proxy for revenue calculation
+              // You may need to adjust this based on your business logic
+              outletRevenue += Math.abs(parseInt(transaction.pointsChanged) || 0) * 0.01; // $0.01 per point
+            });
+          } catch (error) {
+            console.log(`Could not fetch transactions for outlet ${outletId}:`, error.message);
+          }
+          
           allOutlets.push({
             ...outletData,
             id: outletDoc.id,
             userId: userId,
             userEmail: userEmail,
-            userName: userName
+            userName: userName,
+            customerCount: outletCustomers.length,
+            totalRevenue: outletRevenue,
+            // Normalize display name to uppercase for consistency
+            displayName: outletData.name ? outletData.name.toUpperCase() : outletData.name
           });
-        });
+        }
       } catch (error) {
         console.log(`Could not fetch outlets for user ${userId}:`, error.message);
       }
@@ -454,6 +505,29 @@ router.get('/customers', async (req, res) => {
     res.json(allCustomers);
   } catch (error) {
     console.error('Get customers error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get customers for specific user
+router.get('/users/:userId/customers', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const customersSnapshot = await admin.firestore()
+      .collection('users')
+      .doc(userId)
+      .collection('customers')
+      .get();
+    
+    const customers = customersSnapshot.docs.map(doc => ({
+      ...doc.data(),
+      id: doc.id
+    }));
+    
+    res.json(customers);
+  } catch (error) {
+    console.error('Get user customers error:', error);
     res.status(500).json({ error: error.message });
   }
 });
