@@ -51,18 +51,18 @@ interface User {
   disabled: boolean;
   createdAt: string;
   lastSignIn: string;
-  businessCount?: number;
+  outletCount?: number;
   customerCount?: number;
 }
 
-interface Business {
+interface Outlet {
   id: string;
   name: string;
   address?: string;
-  type: string;
-  isActive: boolean;
+  type?: string;
+  isActive?: boolean;
   createdAt: any;
-  ownerId: string;
+  userId: string;
 }
 
 interface Customer {
@@ -137,7 +137,7 @@ const UserAnalyticsPage: React.FC = () => {
   }, [userId, navigate]);
   
   const [user, setUser] = useState<User | null>(null);
-  const [businesses, setBusinesses] = useState<Business[]>([]);
+  const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [analytics, setAnalytics] = useState<UserAnalytics | null>(null);
   const [timePeriod, setTimePeriod] = useState<TimePeriod>('week');
@@ -147,6 +147,12 @@ const UserAnalyticsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({
+    displayName: '',
+    email: '',
+    disabled: false
+  });
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
@@ -173,10 +179,10 @@ const UserAnalyticsPage: React.FC = () => {
       console.log('User response:', userResponse);
       setUser(userResponse);
 
-      // Fetch user's businesses
-      const businessesResponse = await outletsAPI.getByUser(userId!);
-      console.log('Businesses response:', businessesResponse);
-      setBusinesses(businessesResponse);
+      // Fetch user's outlets
+      const outletsResponse = await outletsAPI.getByUser(userId!);
+      console.log('Outlets response:', outletsResponse);
+      setOutlets(outletsResponse);
 
       // Fetch user's customers
       const customersResponse = await customersAPI.getByUser(userId!);
@@ -199,7 +205,7 @@ const UserAnalyticsPage: React.FC = () => {
         createdAt: '',
         lastSignIn: ''
       });
-      setBusinesses([]);
+      setOutlets([]);
       setCustomers([]);
     } finally {
       setLoading(false);
@@ -237,6 +243,33 @@ const UserAnalyticsPage: React.FC = () => {
       case 'month': return 'This Month';
       case 'all': return 'All Time';
       default: return 'This Week';
+    }
+  };
+
+  const handleEdit = () => {
+    if (user) {
+      setEditForm({
+        displayName: user.displayName || '',
+        email: user.email || '',
+        disabled: user.disabled || false
+      });
+      setShowEditModal(true);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    try {
+      await usersAPI.update(userId!, editForm);
+      setToastMessage('User updated successfully');
+      setToastType('success');
+      setShowToast(true);
+      setShowEditModal(false);
+      fetchUserData(); // Refresh user data
+    } catch (error) {
+      console.error('Error updating user:', error);
+      setToastMessage('Error updating user');
+      setToastType('error');
+      setShowToast(true);
     }
   };
 
@@ -770,7 +803,7 @@ const UserAnalyticsPage: React.FC = () => {
 
           <div style={{ display: 'flex', gap: '12px' }}>
             <button
-              onClick={() => navigate(`/users/${userId}/edit`)}
+              onClick={handleEdit}
               style={{
                 background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                 border: 'none',
@@ -1038,7 +1071,7 @@ const UserAnalyticsPage: React.FC = () => {
                 }}>
                   <Users size={20} />
                 </div>
-                {getProgressIcon(analytics.totalCustomers, analytics.totalCustomers - 5)}
+                {analytics ? getProgressIcon(analytics.totalCustomers, analytics.totalCustomers - 5) : null}
               </div>
               <h3 style={{
                 fontSize: '28px',
@@ -1046,7 +1079,7 @@ const UserAnalyticsPage: React.FC = () => {
                 color: 'white',
                 margin: '0 0 8px 0'
               }}>
-                {formatNumber(analytics.totalCustomers)}
+                {analytics ? formatNumber(analytics.totalCustomers) : formatNumber(customers.length)}
               </h3>
               <p style={{
                 fontSize: '14px',
@@ -1079,7 +1112,7 @@ const UserAnalyticsPage: React.FC = () => {
                 }}>
                   <DollarSign size={20} />
                 </div>
-                {getProgressIcon(analytics.totalRevenue, analytics.totalRevenue - 100)}
+                {analytics ? getProgressIcon(analytics.totalRevenue, analytics.totalRevenue - 100) : null}
               </div>
               <h3 style={{
                 fontSize: '28px',
@@ -1087,7 +1120,7 @@ const UserAnalyticsPage: React.FC = () => {
                 color: 'white',
                 margin: '0 0 8px 0'
               }}>
-                {formatCurrency(analytics.totalRevenue)}
+                {analytics ? formatCurrency(analytics.totalRevenue) : '$0.00'}
               </h3>
               <p style={{
                 fontSize: '14px',
@@ -1120,7 +1153,7 @@ const UserAnalyticsPage: React.FC = () => {
                 }}>
                   <Gift size={20} />
                 </div>
-                {getProgressIcon(analytics.totalPointsEarned, analytics.totalPointsEarned - 50)}
+                {analytics ? getProgressIcon(analytics.totalPointsEarned, analytics.totalPointsEarned - 50) : null}
               </div>
               <h3 style={{
                 fontSize: '28px',
@@ -1128,7 +1161,7 @@ const UserAnalyticsPage: React.FC = () => {
                 color: 'white',
                 margin: '0 0 8px 0'
               }}>
-                {formatNumber(analytics.totalPointsEarned)}
+                {analytics ? formatNumber(analytics.totalPointsEarned) : '0'}
               </h3>
               <p style={{
                 fontSize: '14px',
@@ -1161,7 +1194,7 @@ const UserAnalyticsPage: React.FC = () => {
                 }}>
                   <Zap size={20} />
                 </div>
-                {getProgressIcon(analytics.totalPointsRedeemed, analytics.totalPointsRedeemed - 25)}
+                {analytics ? getProgressIcon(analytics.totalPointsRedeemed, analytics.totalPointsRedeemed - 25) : null}
               </div>
               <h3 style={{
                 fontSize: '28px',
@@ -1169,7 +1202,7 @@ const UserAnalyticsPage: React.FC = () => {
                 color: 'white',
                 margin: '0 0 8px 0'
               }}>
-                {formatNumber(analytics.totalPointsRedeemed)}
+                {analytics ? formatNumber(analytics.totalPointsRedeemed) : '0'}
               </h3>
               <p style={{
                 fontSize: '14px',
@@ -1255,7 +1288,116 @@ const UserAnalyticsPage: React.FC = () => {
           </div>
         )}
 
-        {/* Modals */}
+        {/* Edit Modal */}
+        <Modal
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          title="Edit User"
+        >
+          <div style={{ padding: '20px' }}>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontWeight: '500',
+                color: '#374151'
+              }}>
+                Display Name
+              </label>
+              <input
+                type="text"
+                value={editForm.displayName}
+                onChange={(e) => setEditForm({ ...editForm, displayName: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: '1px solid #d1d5db',
+                  fontSize: '14px'
+                }}
+                placeholder="Enter display name"
+              />
+            </div>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontWeight: '500',
+                color: '#374151'
+              }}>
+                Email
+              </label>
+              <input
+                type="email"
+                value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: '1px solid #d1d5db',
+                  fontSize: '14px'
+                }}
+                placeholder="Enter email"
+              />
+            </div>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontWeight: '500',
+                color: '#374151'
+              }}>
+                <input
+                  type="checkbox"
+                  checked={editForm.disabled}
+                  onChange={(e) => setEditForm({ ...editForm, disabled: e.target.checked })}
+                  style={{ margin: 0 }}
+                />
+                Disabled Account
+              </label>
+            </div>
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={() => setShowEditModal(false)}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '8px',
+                  border: '1px solid #d1d5db',
+                  background: 'white',
+                  color: '#374151',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500'
+                }}
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Delete Modal */}
         <Modal
           isOpen={showDeleteModal}
           onClose={() => setShowDeleteModal(false)}

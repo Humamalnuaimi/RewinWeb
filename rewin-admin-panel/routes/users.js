@@ -157,19 +157,43 @@ router.get('/:userId', async (req, res) => {
 
     const userRecord = await admin.auth().getUser(userId);
 
-    // Get user's businesses
-    const businessesSnapshot = await admin.firestore()
-      .collection('businesses')
-      .where('ownerId', '==', userId)
-      .get();
+    // Get user's outlets
+    let outlets = [];
+    try {
+      const outletsSnapshot = await admin.firestore()
+        .collection('users')
+        .doc(userId)
+        .collection('outlets')
+        .get();
 
-    const businesses = [];
-    businessesSnapshot.forEach(doc => {
-      businesses.push({
-        id: doc.id,
-        ...doc.data()
+      outletsSnapshot.forEach(doc => {
+        outlets.push({
+          id: doc.id,
+          ...doc.data()
+        });
       });
-    });
+    } catch (error) {
+      console.log(`Could not fetch outlets for user ${userId}:`, error.message);
+    }
+
+    // Get user's customers
+    let customers = [];
+    try {
+      const customersSnapshot = await admin.firestore()
+        .collection('users')
+        .doc(userId)
+        .collection('customers')
+        .get();
+
+      customersSnapshot.forEach(doc => {
+        customers.push({
+          id: doc.id,
+          ...doc.data()
+        });
+      });
+    } catch (error) {
+      console.log(`Could not fetch customers for user ${userId}:`, error.message);
+    }
 
     // Get user's data from Firestore
     const userDataSnapshot = await admin.firestore()
@@ -192,8 +216,10 @@ router.get('/:userId', async (req, res) => {
         lastSignIn: userRecord.metadata.lastSignInTime,
         lastRefreshTime: userRecord.metadata.lastRefreshTime,
         customData: userData,
-        businessCount: businesses.length,
-        businesses: businesses
+        outletCount: outlets.length,
+        customerCount: customers.length,
+        outlets: outlets,
+        customers: customers
       }
     });
 
