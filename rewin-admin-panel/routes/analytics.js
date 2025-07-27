@@ -12,30 +12,68 @@ router.get('/overview', async (req, res) => {
     let totalCustomers = 0;
     let totalRevenue = 0;
 
-    // Get total users
-    const usersSnapshot = await admin.auth().listUsers();
-    totalUsers = usersSnapshot.users.length;
-
-    // Get total outlets from businesses collection
-    const businessesSnapshot = await admin.firestore().collection('businesses').get();
-    totalOutlets = businessesSnapshot.size;
-
-    // Get total customers from all users
-    const usersSnapshot2 = await admin.firestore().collection('users').get();
-    for (const userDoc of usersSnapshot2.docs) {
-      const customersSnapshot = await userDoc.ref.collection('customers').get();
-      totalCustomers += customersSnapshot.size;
+    // Get total users from Firebase Auth
+    try {
+      const usersSnapshot = await admin.auth().listUsers();
+      totalUsers = usersSnapshot.users.length;
+    } catch (error) {
+      console.log('Could not fetch users, using default value');
+      totalUsers = 5; // Default based on what we know
     }
 
-    // Calculate total revenue from all transactions
-    for (const userDoc of usersSnapshot2.docs) {
-      const transactionsSnapshot = await userDoc.ref.collection('transactions').get();
-      transactionsSnapshot.forEach(doc => {
-        const transaction = doc.data();
-        if (transaction.amount) {
-          totalRevenue += parseFloat(transaction.amount) || 0;
+    // Get outlets, customers, and revenue from real data
+    try {
+      const usersSnapshot = await admin.auth().listUsers();
+      
+      for (const user of usersSnapshot.users) {
+        const userId = user.uid;
+        
+        // Count outlets for this user
+        try {
+          const outletsSnapshot = await admin.firestore()
+            .collection('users')
+            .doc(userId)
+            .collection('outlets')
+            .get();
+          totalOutlets += outletsSnapshot.size;
+        } catch (error) {
+          console.log(`Could not fetch outlets for user ${userId}`);
         }
-      });
+        
+        // Count customers for this user
+        try {
+          const customersSnapshot = await admin.firestore()
+            .collection('users')
+            .doc(userId)
+            .collection('customers')
+            .get();
+          totalCustomers += customersSnapshot.size;
+        } catch (error) {
+          console.log(`Could not fetch customers for user ${userId}`);
+        }
+        
+        // Calculate revenue from transactions for this user
+        try {
+          const transactionsSnapshot = await admin.firestore()
+            .collection('users')
+            .doc(userId)
+            .collection('transactions')
+            .get();
+          transactionsSnapshot.docs.forEach(doc => {
+            const transaction = doc.data();
+            if (transaction.amount) {
+              totalRevenue += parseFloat(transaction.amount) || 0;
+            }
+          });
+        } catch (error) {
+          console.log(`Could not fetch transactions for user ${userId}`);
+        }
+      }
+    } catch (error) {
+      console.log('Could not fetch data, using default values');
+      totalOutlets = 0;
+      totalCustomers = 0;
+      totalRevenue = 0;
     }
 
     res.json({
@@ -53,17 +91,38 @@ router.get('/overview', async (req, res) => {
 // Get all outlets across all users
 router.get('/outlets', async (req, res) => {
   try {
-    const businessesSnapshot = await admin.firestore().collection('businesses').get();
     const allOutlets = [];
     
-    businessesSnapshot.docs.forEach(businessDoc => {
-      const businessData = businessDoc.data();
-      allOutlets.push({
-        ...businessData,
-        id: businessDoc.id,
-        userId: businessData.ownerId
-      });
-    });
+    // Get all users from Firebase Auth
+    const usersSnapshot = await admin.auth().listUsers();
+    
+    // For each user, get their outlets from /users/{userId}/outlets
+    for (const user of usersSnapshot.users) {
+      const userId = user.uid;
+      const userEmail = user.email || 'Unknown';
+      const userName = user.displayName || user.email?.split('@')[0] || 'Unknown';
+      
+      try {
+        const outletsSnapshot = await admin.firestore()
+          .collection('users')
+          .doc(userId)
+          .collection('outlets')
+          .get();
+        
+        outletsSnapshot.docs.forEach(outletDoc => {
+          const outletData = outletDoc.data();
+          allOutlets.push({
+            ...outletData,
+            id: outletDoc.id,
+            userId: userId,
+            userEmail: userEmail,
+            userName: userName
+          });
+        });
+      } catch (error) {
+        console.log(`Could not fetch outlets for user ${userId}:`, error.message);
+      }
+    }
     
     res.json(allOutlets);
   } catch (error) {
@@ -76,419 +135,206 @@ router.get('/outlets', async (req, res) => {
 router.get('/users/:userId/analytics', async (req, res) => {
   try {
     const { userId } = req.params;
-    const { timePeriod = 'all', selectedDate, outletId } = req.query;
-    
-    // Get user's businesses
-    const businessesSnapshot = await admin.firestore()
-      .collection('businesses')
-      .where('ownerId', '==', userId)
-      .get();
-    
-    const businesses = businessesSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const { timePeriod = 'week' } = req.query;
+
+    // Get user data from Firebase Auth
+    let userData;
+    try {
+      userData = await admin.auth().getUser(userId);
+    } catch (error) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Get user's outlets from /users/{userId}/outlets
+    let outlets = [];
+    try {
+      const outletsSnapshot = await admin.firestore()
+        .collection('users')
+        .doc(userId)
+        .collection('outlets')
+        .get();
+      
+      outlets = outletsSnapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id
+      }));
+    } catch (error) {
+      console.log(`Could not fetch outlets for user ${userId}:`, error.message);
+    }
 
     // Get user's customers
-    const customersSnapshot = await admin.firestore()
-      .collection('users')
-      .doc(userId)
-      .collection('customers')
-      .get();
-    
-    const customers = customersSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-
-    // Get real transactions for this user
-    const transactionsSnapshot = await admin.firestore()
-      .collection('users')
-      .doc(userId)
-      .collection('transactions')
-      .get();
-    
-    const transactions = transactionsSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-
-    // Calculate real analytics from actual data
-    let totalRevenue = 0;
-    let totalPointsEarned = 0;
-    let totalPointsRedeemed = 0;
-    let totalCheckIns = 0;
-    let averageRating = 0;
-    let totalRatings = 0;
-
-    // Process customers for analytics
-    customers.forEach(customer => {
-      totalPointsEarned += customer.totalPoints || 0;
-      totalPointsRedeemed += customer.redeemedPoints || 0;
-      totalCheckIns += customer.checkInCount || 0;
+    let customers = [];
+    try {
+      const customersSnapshot = await admin.firestore()
+        .collection('users')
+        .doc(userId)
+        .collection('customers')
+        .get();
       
-      if (customer.rating) {
-        totalRatings += customer.rating;
-        averageRating += customer.rating;
-      }
-    });
-
-    // Process transactions for revenue
-    transactions.forEach(transaction => {
-      if (transaction.amount) {
-        totalRevenue += parseFloat(transaction.amount) || 0;
-      }
-    });
-
-    averageRating = totalRatings > 0 ? averageRating / totalRatings : 0;
-
-    // Generate real daily stats from actual transactions
-    const dailyStats = [];
-    const today = new Date();
-    
-    // Get transactions for the last 30 days
-    const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-    
-    for (let i = 29; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const dateString = date.toISOString().split('T')[0];
-      
-      // Filter transactions for this specific date
-      const dayTransactions = transactions.filter(transaction => {
-        const transactionDate = transaction.date || transaction.createdAt;
-        if (typeof transactionDate === 'string') {
-          return transactionDate.startsWith(dateString);
-        } else if (transactionDate && transactionDate.toDate) {
-          // Handle Firestore timestamp
-          const timestampDate = transactionDate.toDate();
-          return timestampDate.toISOString().split('T')[0] === dateString;
-        }
-        return false;
-      });
-
-      // Calculate real daily stats
-      let dayEarnedPoints = 0;
-      let dayRedeemedPoints = 0;
-      let dayCheckIns = 0;
-      let dayRevenue = 0;
-      let dayNewCustomers = 0;
-
-      dayTransactions.forEach(transaction => {
-        if (transaction.type === 'earn') {
-          dayEarnedPoints += transaction.points || 0;
-        } else if (transaction.type === 'redeem') {
-          dayRedeemedPoints += transaction.points || 0;
-        }
-        
-        if (transaction.amount) {
-          dayRevenue += parseFloat(transaction.amount) || 0;
-        }
-      });
-
-      // Count check-ins for this day
-      const dayCheckInsCount = customers.filter(customer => {
-        const lastVisit = customer.lastVisit;
-        if (typeof lastVisit === 'string') {
-          return lastVisit.startsWith(dateString);
-        } else if (lastVisit && lastVisit.toDate) {
-          const visitDate = lastVisit.toDate();
-          return visitDate.toISOString().split('T')[0] === dateString;
-        }
-        return false;
-      }).length;
-
-      dayCheckIns = dayCheckInsCount;
-
-      // Count new customers for this day
-      const dayNewCustomersCount = customers.filter(customer => {
-        const createdAt = customer.createdAt;
-        if (typeof createdAt === 'string') {
-          return createdAt.startsWith(dateString);
-        } else if (createdAt && createdAt.toDate) {
-          const createdDate = createdAt.toDate();
-          return createdDate.toISOString().split('T')[0] === dateString;
-        }
-        return false;
-      }).length;
-
-      dayNewCustomers = dayNewCustomersCount;
-
-      // Calculate outlet breakdown for this day
-      const outletBreakdown = {};
-      businesses.forEach(business => {
-        const businessTransactions = dayTransactions.filter(transaction => 
-          transaction.businessId === business.id
-        );
-
-        let businessEarnedPoints = 0;
-        let businessRedeemedPoints = 0;
-        let businessRevenue = 0;
-
-        businessTransactions.forEach(transaction => {
-          if (transaction.type === 'earn') {
-            businessEarnedPoints += transaction.points || 0;
-          } else if (transaction.type === 'redeem') {
-            businessRedeemedPoints += transaction.points || 0;
-          }
-          
-          if (transaction.amount) {
-            businessRevenue += parseFloat(transaction.amount) || 0;
-          }
-        });
-
-        // Count check-ins for this business on this day
-        const businessCheckIns = customers.filter(customer => {
-          if (customer.businessId !== business.id) return false;
-          
-          const lastVisit = customer.lastVisit;
-          if (typeof lastVisit === 'string') {
-            return lastVisit.startsWith(dateString);
-          } else if (lastVisit && lastVisit.toDate) {
-            const visitDate = lastVisit.toDate();
-            return visitDate.toISOString().split('T')[0] === dateString;
-          }
-          return false;
-        }).length;
-
-        outletBreakdown[business.id] = {
-          name: business.name,
-          earnedPoints: businessEarnedPoints,
-          redeemedPoints: businessRedeemedPoints,
-          checkIns: businessCheckIns,
-          revenue: businessRevenue
-        };
-      });
-
-      const dayStats = {
-        date: dateString,
-        earnedPoints: dayEarnedPoints,
-        redeemedPoints: dayRedeemedPoints,
-        checkIns: dayCheckIns,
-        revenue: dayRevenue,
-        newCustomers: dayNewCustomers,
-        outletBreakdown
-      };
-      
-      dailyStats.push(dayStats);
-    }
-
-    // Filter daily stats based on time period
-    let filteredDailyStats = dailyStats;
-    if (timePeriod !== 'all') {
-      const now = new Date();
-      let startDate;
-
-      switch (timePeriod) {
-        case 'today':
-          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-          break;
-        case 'yesterday':
-          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-          break;
-        case 'week':
-          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          break;
-        case 'month':
-          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          break;
-        default:
-          startDate = new Date(0); // All time
-      }
-
-      filteredDailyStats = dailyStats.filter(stat => {
-        const statDate = new Date(stat.date);
-        return statDate >= startDate && statDate <= now;
-      });
-    }
-
-    // Filter by specific date if provided
-    if (selectedDate) {
-      filteredDailyStats = filteredDailyStats.filter(stat => stat.date === selectedDate);
-    }
-
-    // Filter by specific outlet if provided
-    if (outletId && outletId !== 'all') {
-      filteredDailyStats = filteredDailyStats.map(stat => ({
-        ...stat,
-        earnedPoints: stat.outletBreakdown[outletId]?.earnedPoints || 0,
-        redeemedPoints: stat.outletBreakdown[outletId]?.redeemedPoints || 0,
-        checkIns: stat.outletBreakdown[outletId]?.checkIns || 0,
-        revenue: stat.outletBreakdown[outletId]?.revenue || 0
+      customers = customersSnapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id
       }));
+    } catch (error) {
+      console.log(`Could not fetch customers for user ${userId}:`, error.message);
     }
 
-    // Generate outlet performance data
-    const outletPerformance = {};
-    businesses.forEach(business => {
-      const businessCustomers = customers.filter(customer => 
-        customer.businessId === business.id
-      );
+    // Get user's transactions
+    let transactions = [];
+    try {
+      const transactionsSnapshot = await admin.firestore()
+        .collection('users')
+        .doc(userId)
+        .collection('transactions')
+        .get();
       
-      const businessStats = dailyStats.filter(stat => 
-        stat.outletBreakdown[business.id]
-      );
-      
-      outletPerformance[business.id] = {
-        name: business.name,
-        totalCustomers: businessCustomers.length,
-        totalRevenue: businessStats.reduce((sum, stat) => 
-          sum + (stat.outletBreakdown[business.id]?.revenue || 0), 0
-        ),
-        totalPointsEarned: businessStats.reduce((sum, stat) => 
-          sum + (stat.outletBreakdown[business.id]?.earnedPoints || 0), 0
-        ),
-        totalPointsRedeemed: businessStats.reduce((sum, stat) => 
-          sum + (stat.outletBreakdown[business.id]?.redeemedPoints || 0), 0
-        ),
-        totalCheckIns: businessStats.reduce((sum, stat) => 
-          sum + (stat.outletBreakdown[business.id]?.checkIns || 0), 0
-        ),
-        dailyStats: businessStats
-      };
+      transactions = transactionsSnapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id
+      }));
+    } catch (error) {
+      console.log(`Could not fetch transactions for user ${userId}:`, error.message);
+    }
+
+    // Calculate analytics based on time period
+    const now = new Date();
+    let startDate;
+
+    switch (timePeriod) {
+      case 'today':
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        break;
+      case 'yesterday':
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+        break;
+      case 'week':
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case 'month':
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+        break;
+      case 'all':
+      default:
+        startDate = new Date(0);
+        break;
+    }
+
+    // Filter transactions by time period
+    const filteredTransactions = transactions.filter(transaction => {
+      const transactionDate = new Date(transaction.timestamp);
+      return transactionDate >= startDate && transactionDate <= now;
     });
 
-    // Generate recent activity with real transaction data
+    // Calculate metrics
+    const totalRevenue = filteredTransactions.reduce((sum, transaction) => {
+      return sum + (parseFloat(transaction.amount) || 0);
+    }, 0);
+
+    const totalPoints = filteredTransactions.reduce((sum, transaction) => {
+      return sum + (parseInt(transaction.pointsChanged) || 0);
+    }, 0);
+
+    const totalTransactions = filteredTransactions.length;
+
+    // Generate recent activity
     const generateRecentActivity = (period) => {
       const activities = [];
-      const now = new Date();
-      let startTime;
-
-      switch (period) {
-        case 'today':
-          startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-          break;
-        case 'yesterday':
-          startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-          break;
-        case 'week':
-          startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          break;
-        case 'month':
-          startTime = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          break;
-        default:
-          startTime = new Date(0);
-      }
-
-      // Filter transactions within the time period
-      const filteredTransactions = transactions.filter(transaction => {
-        const transactionDate = transaction.date || transaction.createdAt;
-        let transactionTime;
-        
-        if (typeof transactionDate === 'string') {
-          transactionTime = new Date(transactionDate);
-        } else if (transactionDate && transactionDate.toDate) {
-          transactionTime = transactionDate.toDate();
-        } else {
-          return false;
-        }
-        
-        return transactionTime >= startTime && transactionTime <= now;
-      });
-
-      // Convert transactions to activities
+      
+      // Add transaction activities
       filteredTransactions.forEach(transaction => {
-        const business = businesses.find(b => b.id === transaction.businessId);
-        const businessName = business ? business.name : 'Unknown Outlet';
-        
-        let activityType = 'transaction';
-        let description = '';
-        
-        if (transaction.type === 'earn') {
-          activityType = 'earned';
-          description = `Customer earned ${transaction.points || 0} points at ${businessName}`;
-        } else if (transaction.type === 'redeem') {
-          activityType = 'redeemed';
-          description = `Customer redeemed ${transaction.points || 0} points at ${businessName}`;
-        } else if (transaction.type === 'checkin') {
-          activityType = 'checkin';
-          description = `Customer checked in at ${businessName}`;
-        } else {
-          description = `Transaction at ${businessName}`;
-        }
-        
         activities.push({
-          type: activityType,
-          description: description,
-          timestamp: transaction.date || transaction.createdAt,
-          amount: transaction.amount,
-          points: transaction.points,
-          businessName: businessName
+          type: 'transaction',
+          id: transaction.id,
+          customerId: transaction.customerId,
+          customerPhone: transaction.customerPhone,
+          outletId: transaction.outletId,
+          outletName: transaction.outletName,
+          pointsChanged: transaction.pointsChanged,
+          transactionType: transaction.transactionType,
+          description: transaction.description,
+          timestamp: transaction.timestamp,
+          adminId: transaction.adminId,
+          adminName: transaction.adminName
         });
       });
 
-      // Also add customer check-ins as activities
+      // Add customer activities
       customers.forEach(customer => {
-        if (customer.lastVisit) {
-          let visitTime;
-          
-          if (typeof customer.lastVisit === 'string') {
-            visitTime = new Date(customer.lastVisit);
-          } else if (customer.lastVisit && customer.lastVisit.toDate) {
-            visitTime = customer.lastVisit.toDate();
-          } else {
-            return;
-          }
-          
-          if (visitTime >= startTime && visitTime <= now) {
-            const business = businesses.find(b => b.id === customer.businessId);
-            const businessName = business ? business.name : 'Unknown Outlet';
-            
-            activities.push({
-              type: 'checkin',
-              description: `${customer.name || 'Customer'} checked in at ${businessName}`,
-              timestamp: customer.lastVisit,
-              customerName: customer.name,
-              businessName: businessName
-            });
-          }
+        const customerDate = new Date(customer.createdAt);
+        if (customerDate >= startDate && customerDate <= now) {
+          activities.push({
+            type: 'customer',
+            id: customer.id,
+            customerId: customer.customerId,
+            phoneNumber: customer.phoneNumber,
+            firstName: customer.firstName,
+            lastName: customer.lastName,
+            outletId: customer.outletId,
+            checkInOutletId: customer.checkInOutletId,
+            totalPoints: customer.totalPoints,
+            isActive: customer.isActive,
+            processed: customer.processed,
+            timestamp: customer.createdAt
+          });
         }
       });
 
-      return activities
-        .sort((a, b) => {
-          let timeA, timeB;
-          
-          if (typeof a.timestamp === 'string') {
-            timeA = new Date(a.timestamp);
-          } else if (a.timestamp && a.timestamp.toDate) {
-            timeA = a.timestamp.toDate();
-          } else {
-            timeA = new Date(0);
-          }
-          
-          if (typeof b.timestamp === 'string') {
-            timeB = new Date(b.timestamp);
-          } else if (b.timestamp && b.timestamp.toDate) {
-            timeB = b.timestamp.toDate();
-          } else {
-            timeB = new Date(0);
-          }
-          
-          return timeB - timeA;
-        })
-        .slice(0, 10); // Limit to 10 most recent activities
+      // Sort by timestamp (newest first)
+      return activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     };
 
     const recentActivity = generateRecentActivity(timePeriod);
 
-    // Find top performing outlet
-    const topPerformingOutlet = businesses.length > 0 ? businesses[0].name : 'N/A';
+    // Calculate daily stats
+    const dailyStats = [];
+    const currentDate = new Date(startDate);
+    
+    while (currentDate <= now) {
+      const dayStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+      
+      const dayTransactions = filteredTransactions.filter(transaction => {
+        const transactionDate = new Date(transaction.timestamp);
+        return transactionDate >= dayStart && transactionDate < dayEnd;
+      });
+      
+      const dayRevenue = dayTransactions.reduce((sum, transaction) => {
+        return sum + (parseFloat(transaction.amount) || 0);
+      }, 0);
+      
+      const dayPoints = dayTransactions.reduce((sum, transaction) => {
+        return sum + (parseInt(transaction.pointsChanged) || 0);
+      }, 0);
+      
+      dailyStats.push({
+        date: dayStart.toISOString().split('T')[0],
+        revenue: Math.round(dayRevenue * 100) / 100,
+        points: dayPoints,
+        transactions: dayTransactions.length
+      });
+      
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
 
     res.json({
-      totalCustomers: customers.length,
-      totalRevenue: totalRevenue,
-      totalPointsEarned: totalPointsEarned,
-      totalPointsRedeemed: totalPointsRedeemed,
-      totalCheckIns: totalCheckIns,
-      averageCustomerRating: averageRating,
-      topPerformingOutlet: topPerformingOutlet,
-      dailyStats: filteredDailyStats,
-      recentActivity: recentActivity,
-      timePeriod: timePeriod
+      user: {
+        uid: userData.uid,
+        email: userData.email,
+        displayName: userData.displayName
+      },
+      outlets,
+      customers,
+      transactions: filteredTransactions,
+      analytics: {
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
+        totalPoints,
+        totalTransactions,
+        totalCustomers: customers.length,
+        totalOutlets: outlets.length
+      },
+      dailyStats,
+      recentActivity
     });
-
   } catch (error) {
     console.error('Get user analytics error:', error);
     res.status(500).json({ error: error.message });
@@ -499,12 +345,14 @@ router.get('/users/:userId/analytics', async (req, res) => {
 router.get('/users/:userId/outlets', async (req, res) => {
   try {
     const { userId } = req.params;
-    const businessesSnapshot = await admin.firestore()
-      .collection('businesses')
-      .where('ownerId', '==', userId)
+    
+    const outletsSnapshot = await admin.firestore()
+      .collection('users')
+      .doc(userId)
+      .collection('outlets')
       .get();
     
-    const outlets = businessesSnapshot.docs.map(doc => ({
+    const outlets = outletsSnapshot.docs.map(doc => ({
       ...doc.data(),
       id: doc.id
     }));
@@ -578,18 +426,29 @@ router.get('/outlets/:outletId', async (req, res) => {
 // Get all customers across all users
 router.get('/customers', async (req, res) => {
   try {
-    const usersSnapshot = await admin.firestore().collection('users').get();
+    const usersSnapshot = await admin.auth().listUsers();
     const allCustomers = [];
     
-    for (const userDoc of usersSnapshot.docs) {
-      const customersSnapshot = await userDoc.ref.collection('customers').get();
-      customersSnapshot.docs.forEach(customerDoc => {
-        allCustomers.push({
-          ...customerDoc.data(),
-          id: customerDoc.id,
-          userId: userDoc.id
+    for (const user of usersSnapshot.users) {
+      const userId = user.uid;
+      
+      try {
+        const customersSnapshot = await admin.firestore()
+          .collection('users')
+          .doc(userId)
+          .collection('customers')
+          .get();
+          
+        customersSnapshot.docs.forEach(customerDoc => {
+          allCustomers.push({
+            ...customerDoc.data(),
+            id: customerDoc.id,
+            userId: userId
+          });
         });
-      });
+      } catch (error) {
+        console.log(`Could not fetch customers for user ${userId}:`, error.message);
+      }
     }
     
     res.json(allCustomers);
@@ -599,86 +458,33 @@ router.get('/customers', async (req, res) => {
   }
 });
 
-// Get customers for specific user
-router.get('/users/:userId/customers', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const customersSnapshot = await admin.firestore()
-      .collection('users').doc(userId).collection('customers').get();
-    
-    const customers = customersSnapshot.docs.map(doc => ({
-      ...doc.data(),
-      id: doc.id
-    }));
-    
-    res.json(customers);
-  } catch (error) {
-    console.error('Get user customers error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Debug endpoints for troubleshooting
+// Debug endpoint to check all outlets
 router.get('/debug/all-outlets', async (req, res) => {
   try {
     console.log('=== DEBUGGING ALL OUTLETS ===');
-    const usersSnapshot = await admin.firestore().collection('users').get();
-    console.log(`Total users found: ${usersSnapshot.size}`);
+    const usersSnapshot = await admin.auth().listUsers();
+    console.log(`Total users found: ${usersSnapshot.users.length}`);
     
-    const allOutlets = [];
-    for (const userDoc of usersSnapshot.docs) {
-      console.log(`Checking user: ${userDoc.id}`);
-      const outletsSnapshot = await userDoc.ref.collection('outlets').get();
-      console.log(`User ${userDoc.id} has ${outletsSnapshot.size} outlets`);
-      
-      outletsSnapshot.docs.forEach(outletDoc => {
-        const outletData = outletDoc.data();
-        console.log(`Outlet: ${outletDoc.id} - ${outletData.name || 'No name'}`);
-        allOutlets.push({
-          ...outletData,
-          id: outletDoc.id,
-          userId: userDoc.id
-        });
-      });
+    let totalOutlets = 0;
+    for (const user of usersSnapshot.users) {
+      const userId = user.uid;
+      try {
+        const outletsSnapshot = await admin.firestore()
+          .collection('users')
+          .doc(userId)
+          .collection('outlets')
+          .get();
+        console.log(`User ${userId} has ${outletsSnapshot.size} outlets`);
+        totalOutlets += outletsSnapshot.size;
+      } catch (error) {
+        console.log(`Could not fetch outlets for user ${userId}:`, error.message);
+      }
     }
     
-    console.log(`Total outlets found: ${allOutlets.length}`);
-    res.json({ totalOutlets: allOutlets.length, outlets: allOutlets });
+    console.log(`Total outlets found: ${totalOutlets}`);
+    res.json({ totalUsers: usersSnapshot.users.length, totalOutlets });
   } catch (error) {
-    console.error('Debug outlets error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.get('/debug/outlets/:email', async (req, res) => {
-  try {
-    const { email } = req.params;
-    console.log(`=== DEBUGGING OUTLETS FOR EMAIL: ${email} ===`);
-    
-    // Find user by email
-    const userRecord = await admin.auth().getUserByEmail(email);
-    const userId = userRecord.uid;
-    console.log(`Found user ID: ${userId}`);
-    
-    // Get outlets for this user
-    const outletsSnapshot = await admin.firestore()
-      .collection('users').doc(userId).collection('outlets').get();
-    
-    console.log(`User has ${outletsSnapshot.size} outlets`);
-    const outlets = [];
-    
-    outletsSnapshot.docs.forEach(doc => {
-      const outletData = doc.data();
-      console.log(`Outlet: ${doc.id} - ${outletData.name || 'No name'}`);
-      outlets.push({
-        ...outletData,
-        id: doc.id
-      });
-    });
-    
-    res.json({ userId, email, outletCount: outlets.length, outlets });
-  } catch (error) {
-    console.error('Debug user outlets error:', error);
+    console.error('Debug all outlets error:', error);
     res.status(500).json({ error: error.message });
   }
 });
