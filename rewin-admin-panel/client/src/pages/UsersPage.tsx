@@ -12,7 +12,7 @@ import {
   UserPlus,
   Mail,
   Calendar,
-  Shield,
+  Building2,
   CheckCircle,
   XCircle
 } from 'lucide-react';
@@ -28,7 +28,7 @@ interface User {
   lastSignIn: string;
   disabled: boolean;
   emailVerified: boolean;
-  businessCount: number;
+  outletCount: number;
   customerCount: number;
 }
 
@@ -201,7 +201,7 @@ const UsersPage: React.FC = () => {
                     <th>User</th>
                     <th>Email</th>
                     <th>Status</th>
-                    <th>Businesses</th>
+                    <th>Outlets</th>
                     <th>Customers</th>
                     <th>Created</th>
                     <th>Last Active</th>
@@ -306,9 +306,9 @@ const UsersPage: React.FC = () => {
                           alignItems: 'center',
                           gap: '0.5rem'
                         }}>
-                          <Shield size={14} style={{ color: 'rgba(255, 255, 255, 0.5)' }} />
+                          <Building2 size={14} style={{ color: 'rgba(255, 255, 255, 0.5)' }} />
                           <span style={{ color: 'rgba(255, 255, 255, 0.9)' }}>
-                            {user.businessCount}
+                            {user.outletCount}
                           </span>
                         </div>
                       </td>

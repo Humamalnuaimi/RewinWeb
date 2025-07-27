@@ -72,11 +72,19 @@ router.get('/', [
     // Format user data with business counts
     const formattedUsers = await Promise.all(paginatedUsers.map(async (user) => {
       try {
-        // Get user's businesses count
-        const businessesSnapshot = await admin.firestore()
-          .collection('businesses')
-          .where('ownerId', '==', user.uid)
-          .get();
+        // Get user's outlets count
+        let outletCount = 0;
+        try {
+          const outletsSnapshot = await admin.firestore()
+            .collection('users')
+            .doc(user.uid)
+            .collection('outlets')
+            .get();
+          outletCount = outletsSnapshot.size;
+        } catch (error) {
+          // User might not have a document in users collection
+          console.log(`No outlets collection for user ${user.uid}:`, error.message);
+        }
         
         // Get user's customers count (from user subcollection)
         let customerCount = 0;
@@ -102,7 +110,7 @@ router.get('/', [
           createdAt: user.metadata.creationTime,
           lastSignIn: user.metadata.lastSignInTime,
           lastRefreshTime: user.metadata.lastRefreshTime,
-          businessCount: businessesSnapshot.size,
+          outletCount: outletCount,
           customerCount: customerCount
         };
       } catch (error) {
@@ -117,7 +125,7 @@ router.get('/', [
           createdAt: user.metadata.creationTime,
           lastSignIn: user.metadata.lastSignInTime,
           lastRefreshTime: user.metadata.lastRefreshTime,
-          businessCount: 0,
+          outletCount: 0,
           customerCount: 0
         };
       }
