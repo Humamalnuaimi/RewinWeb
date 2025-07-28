@@ -3,18 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Users, 
   Search, 
-  Filter, 
-  Plus, 
-  Eye, 
   Edit, 
   Trash2, 
-  MoreHorizontal,
   UserPlus,
   Mail,
   Calendar,
   Building2,
   CheckCircle,
-  XCircle
+  XCircle,
+  Eye
 } from 'lucide-react';
 import { usersAPI } from '../services/api';
 import Modal from '../components/Modal';
@@ -41,6 +38,13 @@ const UsersPage: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [addUserForm, setAddUserForm] = useState({
+    email: '',
+    displayName: '',
+    password: '',
+    confirmPassword: ''
+  });
+  const [addUserLoading, setAddUserLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; onClose: () => void } | null>(null);
   const navigate = useNavigate();
 
@@ -89,7 +93,55 @@ const UsersPage: React.FC = () => {
   };
 
   const handleAddUser = () => {
+    setAddUserForm({
+      email: '',
+      displayName: '',
+      password: '',
+      confirmPassword: ''
+    });
     setShowAddModal(true);
+  };
+
+  const handleCreateUser = async () => {
+    try {
+      setAddUserLoading(true);
+      
+      // Validate form
+      if (!addUserForm.email || !addUserForm.displayName || !addUserForm.password) {
+        setToast({ message: 'Please fill in all required fields', type: 'error', onClose: () => setToast(null) });
+        return;
+      }
+      
+      if (addUserForm.password !== addUserForm.confirmPassword) {
+        setToast({ message: 'Passwords do not match', type: 'error', onClose: () => setToast(null) });
+        return;
+      }
+      
+      if (addUserForm.password.length < 6) {
+        setToast({ message: 'Password must be at least 6 characters', type: 'error', onClose: () => setToast(null) });
+        return;
+      }
+      
+      // Create user
+      const response = await usersAPI.create({
+        email: addUserForm.email,
+        displayName: addUserForm.displayName,
+        password: addUserForm.password
+      });
+      
+      if (response.success) {
+        setToast({ message: 'User created successfully', type: 'success', onClose: () => setToast(null) });
+        setShowAddModal(false);
+        fetchUsers(); // Refresh the users list
+      } else {
+        setToast({ message: response.error || 'Failed to create user', type: 'error', onClose: () => setToast(null) });
+      }
+    } catch (error) {
+      console.error('Error creating user:', error);
+      setToast({ message: 'Error creating user', type: 'error', onClose: () => setToast(null) });
+    } finally {
+      setAddUserLoading(false);
+    }
   };
 
   const filteredUsers = users.filter(user => {
@@ -130,16 +182,6 @@ const UsersPage: React.FC = () => {
         <button className="btn btn-primary" onClick={handleAddUser}>
           <UserPlus size={16} />
           Add User
-        </button>
-        <button 
-          className="btn btn-secondary" 
-          onClick={() => {
-            console.log('Test navigation clicked');
-            navigate('/dashboard');
-          }}
-          style={{ marginLeft: '10px' }}
-        >
-          Test Navigation
         </button>
       </div>
 
@@ -455,9 +497,249 @@ const UsersPage: React.FC = () => {
           isOpen={showAddModal}
           onClose={() => setShowAddModal(false)}
           title="Add New User"
+          actions={
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => setShowAddModal(false)}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(102, 126, 234, 0.3)',
+                  background: 'rgba(102, 126, 234, 0.1)',
+                  color: '#667eea',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(102, 126, 234, 0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(102, 126, 234, 0.1)';
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateUser}
+                disabled={addUserLoading}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: addUserLoading 
+                    ? 'rgba(102, 126, 234, 0.5)' 
+                    : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  cursor: addUserLoading ? 'not-allowed' : 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                  opacity: addUserLoading ? 0.7 : 1
+                }}
+                onMouseEnter={(e) => {
+                  if (!addUserLoading) {
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.3)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                {addUserLoading ? 'Creating...' : 'Create User'}
+              </button>
+            </div>
+          }
         >
-          <div style={{ color: 'rgba(255, 255, 255, 0.9)' }}>
-            <p>Add user functionality will be implemented here.</p>
+          <div style={{ display: 'grid', gap: '20px' }}>
+            {/* Help Text */}
+            <div style={{
+              background: 'rgba(102, 126, 234, 0.05)',
+              border: '1px solid rgba(102, 126, 234, 0.2)',
+              borderRadius: '8px',
+              padding: '12px',
+              marginBottom: '16px'
+            }}>
+              <p style={{
+                fontSize: '12px',
+                color: '#374151',
+                margin: 0,
+                fontWeight: '500'
+              }}>
+                💡 Fill in the information below to create a new user account. The user will be able to access the system immediately.
+              </p>
+            </div>
+
+            {/* Email Field */}
+            <div>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontWeight: '600',
+                color: '#1f2937',
+                fontSize: '14px'
+              }}>
+                Email Address *
+              </label>
+              <input
+                type="email"
+                value={addUserForm.email}
+                onChange={(e) => setAddUserForm({ ...addUserForm, email: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  border: '2px solid rgba(102, 126, 234, 0.2)',
+                  fontSize: '14px',
+                  transition: 'all 0.2s ease',
+                  boxSizing: 'border-box' as const,
+                  background: 'white',
+                  color: '#1f2937'
+                }}
+                placeholder="Enter email address"
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#667eea';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = 'rgba(102, 126, 234, 0.2)';
+                  e.target.style.boxShadow = 'none';
+                }}
+              />
+            </div>
+
+            {/* Display Name Field */}
+            <div>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontWeight: '600',
+                color: '#1f2937',
+                fontSize: '14px'
+              }}>
+                Display Name *
+              </label>
+              <input
+                type="text"
+                value={addUserForm.displayName}
+                onChange={(e) => setAddUserForm({ ...addUserForm, displayName: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  border: '2px solid rgba(102, 126, 234, 0.2)',
+                  fontSize: '14px',
+                  transition: 'all 0.2s ease',
+                  boxSizing: 'border-box' as const,
+                  background: 'white',
+                  color: '#1f2937'
+                }}
+                placeholder="Enter display name"
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#667eea';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = 'rgba(102, 126, 234, 0.2)';
+                  e.target.style.boxShadow = 'none';
+                }}
+              />
+            </div>
+
+            {/* Password Field */}
+            <div>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontWeight: '600',
+                color: '#1f2937',
+                fontSize: '14px'
+              }}>
+                Password *
+              </label>
+              <input
+                type="password"
+                value={addUserForm.password}
+                onChange={(e) => setAddUserForm({ ...addUserForm, password: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  border: '2px solid rgba(102, 126, 234, 0.2)',
+                  fontSize: '14px',
+                  transition: 'all 0.2s ease',
+                  boxSizing: 'border-box' as const,
+                  background: 'white',
+                  color: '#1f2937'
+                }}
+                placeholder="Enter password (min 6 characters)"
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#667eea';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = 'rgba(102, 126, 234, 0.2)';
+                  e.target.style.boxShadow = 'none';
+                }}
+              />
+              <p style={{
+                fontSize: '11px',
+                color: '#6b7280',
+                margin: '4px 0 0 0'
+              }}>
+                Minimum 6 characters required
+              </p>
+            </div>
+
+            {/* Confirm Password Field */}
+            <div>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontWeight: '600',
+                color: '#1f2937',
+                fontSize: '14px'
+              }}>
+                Confirm Password *
+              </label>
+              <input
+                type="password"
+                value={addUserForm.confirmPassword}
+                onChange={(e) => setAddUserForm({ ...addUserForm, confirmPassword: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  border: '2px solid rgba(102, 126, 234, 0.2)',
+                  fontSize: '14px',
+                  transition: 'all 0.2s ease',
+                  boxSizing: 'border-box' as const,
+                  background: 'white',
+                  color: '#1f2937'
+                }}
+                placeholder="Confirm password"
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#667eea';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = 'rgba(102, 126, 234, 0.2)';
+                  e.target.style.boxShadow = 'none';
+                }}
+              />
+              {addUserForm.password && addUserForm.confirmPassword && addUserForm.password !== addUserForm.confirmPassword && (
+                <p style={{
+                  fontSize: '11px',
+                  color: '#ef4444',
+                  margin: '4px 0 0 0'
+                }}>
+                  Passwords do not match
+                </p>
+              )}
+            </div>
           </div>
         </Modal>
       )}

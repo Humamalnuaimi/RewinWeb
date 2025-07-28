@@ -125,7 +125,7 @@ const UserAnalyticsPage: React.FC = () => {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
   
-  console.log('UserAnalyticsPage rendered with userId:', userId);
+
   
   // Redirect if no userId
   useEffect(() => {
@@ -159,6 +159,16 @@ const UserAnalyticsPage: React.FC = () => {
 
   useEffect(() => {
     if (userId) {
+      // Check authentication status
+      const token = localStorage.getItem('adminToken');
+      if (!token) {
+        setToastMessage('Please log in to access this page');
+        setToastType('error');
+        setShowToast(true);
+        // Optionally redirect to login
+        // navigate('/login');
+      }
+      
       fetchUserData();
     }
   }, [userId]);
@@ -169,26 +179,26 @@ const UserAnalyticsPage: React.FC = () => {
     }
   }, [userId, timePeriod, selectedDate]);
 
-  const fetchUserData = async () => {
+    const fetchUserData = async () => {
     try {
-      console.log('Fetching user data for userId:', userId);
+      // Use the actual user ID from user data if available, otherwise use URL parameter
+      const actualUserId = user?.uid || userId;
       setLoading(true);
       
       // Fetch user data
-      const userResponse = await usersAPI.getById(userId!);
-      console.log('User response:', userResponse);
-      setUser(userResponse);
-
+      const userResponse = await usersAPI.getById(actualUserId!);
+      // Extract user data from response (API returns {success: true, user: {...}})
+      const userData = userResponse.user || userResponse;
+      setUser(userData);
+  
       // Fetch user's outlets
-      const outletsResponse = await outletsAPI.getByUser(userId!);
-      console.log('Outlets response:', outletsResponse);
+      const outletsResponse = await outletsAPI.getByUser(actualUserId!);
       setOutlets(outletsResponse);
-
+  
       // Fetch user's customers
-      const customersResponse = await customersAPI.getByUser(userId!);
-      console.log('Customers response:', customersResponse);
+      const customersResponse = await customersAPI.getByUser(actualUserId!);
       setCustomers(customersResponse);
-
+  
     } catch (error) {
       console.error('Error fetching user data:', error);
       setToastMessage('Error loading user data');
@@ -248,26 +258,98 @@ const UserAnalyticsPage: React.FC = () => {
 
   const handleEdit = () => {
     if (user) {
-      setEditForm({
+      const formData = {
         displayName: user.displayName || '',
         email: user.email || '',
         disabled: user.disabled || false
-      });
+      };
+      setEditForm(formData);
       setShowEditModal(true);
+    } else {
+      setToastMessage('User data not available');
+      setToastType('error');
+      setShowToast(true);
     }
   };
 
-  const handleSaveEdit = async () => {
+    const handleSaveEdit = async () => {
     try {
-      await usersAPI.update(userId!, editForm);
+      // Use the user ID from the loaded user data instead of URL parameter
+      const actualUserId = user?.uid || userId;
+      
+      // Check if user is authenticated
+      const token = localStorage.getItem('adminToken');
+      if (!token) {
+        setToastMessage('Please log in first to make changes');
+        setToastType('error');
+        setShowToast(true);
+        return;
+      }
+      
+      // Validate form data - check if any changes were made
+      const originalDisplayName = user?.displayName || '';
+      const originalEmail = user?.email || '';
+      const originalDisabled = user?.disabled || false;
+      
+      const hasChanges = editForm.displayName !== originalDisplayName || 
+                        editForm.email !== originalEmail || 
+                        editForm.disabled !== originalDisabled;
+      
+      if (!hasChanges) {
+        setToastMessage('No changes detected');
+        setToastType('error');
+        setShowToast(true);
+        return;
+      }
+      
+      // Only require displayName if it's being set to empty when it was previously set
+      if (editForm.displayName === '' && originalDisplayName !== '') {
+        setToastMessage('Display name cannot be empty');
+        setToastType('error');
+        setShowToast(true);
+        return;
+      }
+      
+      // Email is optional, but if provided, it should be valid
+      if (editForm.email && !editForm.email.includes('@')) {
+        setToastMessage('Please enter a valid email address');
+        setToastType('error');
+        setShowToast(true);
+        return;
+      }
+      
+      // Prepare update data - only include fields that have changed
+      const updateData: any = {};
+      
+      if (editForm.displayName !== originalDisplayName) {
+        updateData.displayName = editForm.displayName;
+      }
+      
+      if (editForm.email !== originalEmail) {
+        updateData.email = editForm.email;
+      }
+      
+      if (editForm.disabled !== originalDisabled) {
+        updateData.disabled = editForm.disabled;
+      }
+      
+      // Call the API to update user using the actual user ID
+      const response = await usersAPI.update(actualUserId!, updateData);
+      
       setToastMessage('User updated successfully');
       setToastType('success');
       setShowToast(true);
       setShowEditModal(false);
-      fetchUserData(); // Refresh user data
+      
+      // Refresh user data immediately
+      await fetchUserData();
+      
+      // Also refresh analytics data to ensure everything is up to date
+      await fetchAnalytics();
+      
     } catch (error) {
       console.error('Error updating user:', error);
-      setToastMessage('Error updating user');
+      setToastMessage('Error updating user: ' + (error as any).message);
       setToastType('error');
       setShowToast(true);
     }
@@ -290,13 +372,25 @@ const UserAnalyticsPage: React.FC = () => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    try {
+      if (!dateString || dateString === 'Invalid Date') {
+        return 'Unknown Date';
+      }
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return 'Invalid Date';
+      }
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      console.error('Error formatting date:', dateString, error);
+      return 'Invalid Date';
+    }
   };
 
   const formatCurrency = (amount: number) => {
@@ -752,6 +846,88 @@ const UserAnalyticsPage: React.FC = () => {
         maxWidth: '1400px',
         margin: '0 auto'
       }}>
+        {/* Authentication Status */}
+        {(() => {
+          const token = localStorage.getItem('adminToken');
+          if (!token) {
+            return (
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: '12px',
+                padding: '16px',
+                marginBottom: '16px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <div>
+                  <h3 style={{ color: '#dc2626', margin: '0 0 8px 0', fontSize: '16px', fontWeight: '600' }}>
+                    Authentication Required
+                  </h3>
+                  <p style={{ color: '#6b7280', margin: 0, fontSize: '14px' }}>
+                    You need to log in to make changes to user data.
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/login')}
+                  style={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '10px 16px',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '600'
+                  }}
+                >
+                  Go to Login
+                </button>
+              </div>
+            );
+          }
+          return null;
+        })()}
+
+        {/* Account Status Warning */}
+        {user?.disabled && (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: '12px',
+            padding: '16px',
+            marginBottom: '16px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <div>
+              <h3 style={{ color: '#dc2626', margin: '0 0 8px 0', fontSize: '16px', fontWeight: '600' }}>
+                Account Disabled
+              </h3>
+              <p style={{ color: '#6b7280', margin: 0, fontSize: '14px' }}>
+                This user account is currently disabled. Some features may not work properly.
+              </p>
+            </div>
+            <button
+              onClick={handleEdit}
+              style={{
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '10px 16px',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: '600'
+              }}
+            >
+              Enable Account
+            </button>
+          </div>
+        )}
+
         {/* Header */}
         <div style={{
           display: 'flex',
@@ -805,7 +981,7 @@ const UserAnalyticsPage: React.FC = () => {
             <button
               onClick={handleEdit}
               style={{
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                 border: 'none',
                 borderRadius: '8px',
                 padding: '12px 20px',
@@ -1293,14 +1469,151 @@ const UserAnalyticsPage: React.FC = () => {
           isOpen={showEditModal}
           onClose={() => setShowEditModal(false)}
           title="Edit User"
+          actions={
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => setShowEditModal(false)}
+                style={{
+                  padding: '12px 24px',
+                  borderRadius: '12px',
+                  border: '2px solid rgba(102, 126, 234, 0.2)',
+                  background: 'white',
+                  color: '#667eea',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 2px 4px rgba(102, 126, 234, 0.1)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(102, 126, 234, 0.4)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(102, 126, 234, 0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(102, 126, 234, 0.2)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(102, 126, 234, 0.1)';
+                }}
+              >
+                Cancel
+              </button>
+                              <button
+                  onClick={() => {
+                    handleSaveEdit();
+                  }}
+                style={{
+                  padding: '12px 24px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(102, 126, 234, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.3)';
+                }}
+              >
+                Save Changes
+              </button>
+            </div>
+          }
         >
-          <div style={{ padding: '20px' }}>
-            <div style={{ marginBottom: '16px' }}>
+          {/* Help Text */}
+          <div style={{
+            background: 'rgba(102, 126, 234, 0.05)',
+            border: '1px solid rgba(102, 126, 234, 0.2)',
+            borderRadius: '8px',
+            padding: '12px',
+            marginBottom: '16px'
+          }}>
+            <p style={{
+              fontSize: '12px',
+              color: '#374151',
+              margin: 0,
+              fontWeight: '500'
+            }}>
+              💡 You can modify any field below. Leave fields empty to keep current values. You can also just change the account status without modifying other fields.
+            </p>
+          </div>
+
+          {/* Current Values Display */}
+          <div style={{
+            background: 'rgba(102, 126, 234, 0.05)',
+            border: '1px solid rgba(102, 126, 234, 0.2)',
+            borderRadius: '8px',
+            padding: '16px',
+            marginBottom: '16px'
+          }}>
+            <h4 style={{
+              fontSize: '14px',
+              fontWeight: '600',
+              color: '#374151',
+              margin: '0 0 12px 0'
+            }}>
+              Current Values
+            </h4>
+            <div style={{ display: 'grid', gap: '8px', fontSize: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#6b7280' }}>Display Name:</span>
+                <span style={{ fontWeight: '500', color: '#374151' }}>
+                  {user?.displayName || 'Not set'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#6b7280' }}>Email:</span>
+                <span style={{ fontWeight: '500', color: '#374151' }}>
+                  {user?.email || 'Not set'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#6b7280' }}>Status:</span>
+                <span style={{ 
+                  fontWeight: '500', 
+                  color: user?.disabled ? '#dc2626' : '#059669',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  background: user?.disabled ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)'
+                }}>
+                  {user?.disabled ? 'Disabled' : 'Active'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {user?.disabled && (
+            <div style={{
+              background: 'rgba(239, 68, 68, 0.05)',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              borderRadius: '8px',
+              padding: '12px',
+              marginBottom: '16px'
+            }}>
+              <p style={{
+                fontSize: '12px',
+                color: '#dc2626',
+                margin: 0,
+                fontWeight: '500'
+              }}>
+                ⚠️ This account is currently disabled. Uncheck the box below to enable it.
+              </p>
+            </div>
+          )}
+          <div style={{ display: 'grid', gap: '20px' }}>
+            <div>
               <label style={{
                 display: 'block',
                 marginBottom: '8px',
-                fontWeight: '500',
-                color: '#374151'
+                fontWeight: '600',
+                color: '#1f2937',
+                fontSize: '14px'
               }}>
                 Display Name
               </label>
@@ -1310,20 +1623,41 @@ const UserAnalyticsPage: React.FC = () => {
                 onChange={(e) => setEditForm({ ...editForm, displayName: e.target.value })}
                 style={{
                   width: '100%',
-                  padding: '10px',
-                  borderRadius: '8px',
-                  border: '1px solid #d1d5db',
-                  fontSize: '14px'
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  border: '2px solid rgba(102, 126, 234, 0.2)',
+                  fontSize: '14px',
+                  transition: 'all 0.2s ease',
+                  boxSizing: 'border-box' as const,
+                  background: 'white',
+                  color: '#1f2937'
                 }}
-                placeholder="Enter display name"
+                placeholder={user?.displayName || "Enter display name"}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#667eea';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = 'rgba(102, 126, 234, 0.2)';
+                  e.target.style.boxShadow = 'none';
+                }}
               />
+              <p style={{
+                fontSize: '11px',
+                color: '#6b7280',
+                margin: '4px 0 0 0'
+              }}>
+                Leave empty to keep current value
+              </p>
             </div>
-            <div style={{ marginBottom: '16px' }}>
+            
+            <div>
               <label style={{
                 display: 'block',
                 marginBottom: '8px',
-                fontWeight: '500',
-                color: '#374151'
+                fontWeight: '600',
+                color: '#1f2937',
+                fontSize: '14px'
               }}>
                 Email
               </label>
@@ -1333,66 +1667,79 @@ const UserAnalyticsPage: React.FC = () => {
                 onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
                 style={{
                   width: '100%',
-                  padding: '10px',
-                  borderRadius: '8px',
-                  border: '1px solid #d1d5db',
-                  fontSize: '14px'
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  border: '2px solid rgba(102, 126, 234, 0.2)',
+                  fontSize: '14px',
+                  transition: 'all 0.2s ease',
+                  boxSizing: 'border-box' as const,
+                  background: 'white',
+                  color: '#1f2937'
                 }}
-                placeholder="Enter email"
+                placeholder={user?.email || "Enter email"}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#667eea';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = 'rgba(102, 126, 234, 0.2)';
+                  e.target.style.boxShadow = 'none';
+                }}
               />
-            </div>
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontWeight: '500',
-                color: '#374151'
+              <p style={{
+                fontSize: '11px',
+                color: '#6b7280',
+                margin: '4px 0 0 0'
               }}>
-                <input
-                  type="checkbox"
-                  checked={editForm.disabled}
-                  onChange={(e) => setEditForm({ ...editForm, disabled: e.target.checked })}
-                  style={{ margin: 0 }}
-                />
-                Disabled Account
-              </label>
+                Leave empty to keep current value
+              </p>
             </div>
+            
             <div style={{
               display: 'flex',
+              alignItems: 'center',
               gap: '12px',
-              justifyContent: 'flex-end'
+              padding: '16px',
+              background: editForm.disabled 
+                ? 'rgba(239, 68, 68, 0.05)' 
+                : 'rgba(16, 185, 129, 0.05)',
+              borderRadius: '12px',
+              border: `2px solid ${editForm.disabled 
+                ? 'rgba(239, 68, 68, 0.2)' 
+                : 'rgba(16, 185, 129, 0.2)'
+              }`
             }}>
-              <button
-                onClick={() => setShowEditModal(false)}
+              <input
+                type="checkbox"
+                checked={editForm.disabled}
+                onChange={(e) => setEditForm({ ...editForm, disabled: e.target.checked })}
                 style={{
-                  padding: '10px 20px',
-                  borderRadius: '8px',
-                  border: '1px solid #d1d5db',
-                  background: 'white',
-                  color: '#374151',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '500'
+                  width: '20px',
+                  height: '20px',
+                  accentColor: editForm.disabled ? '#ef4444' : '#10b981',
+                  cursor: 'pointer'
                 }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                style={{
-                  padding: '10px 20px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                  color: 'white',
-                  cursor: 'pointer',
+              />
+              <div>
+                <label style={{
+                  fontWeight: '600',
+                  color: editForm.disabled ? '#dc2626' : '#059669',
                   fontSize: '14px',
-                  fontWeight: '500'
-                }}
-              >
-                Save Changes
-              </button>
+                  cursor: 'pointer'
+                }}>
+                  {editForm.disabled ? 'Disabled Account' : 'Enable Account'}
+                </label>
+                <p style={{
+                  fontSize: '12px',
+                  color: '#6b7280',
+                  margin: '4px 0 0 0'
+                }}>
+                  {editForm.disabled 
+                    ? 'Disable this user\'s access to the system' 
+                    : 'Enable this user\'s access to the system'
+                  }
+                </p>
+              </div>
             </div>
           </div>
         </Modal>
@@ -1402,27 +1749,30 @@ const UserAnalyticsPage: React.FC = () => {
           isOpen={showDeleteModal}
           onClose={() => setShowDeleteModal(false)}
           title="Delete User"
-        >
-          <div style={{ padding: '20px' }}>
-            <p style={{ marginBottom: '20px', color: '#374151' }}>
-              Are you sure you want to delete this user? This action cannot be undone.
-            </p>
-            <div style={{
-              display: 'flex',
-              gap: '12px',
-              justifyContent: 'flex-end'
-            }}>
+          variant="danger"
+          actions={
+            <div style={{ display: 'flex', gap: '12px' }}>
               <button
                 onClick={() => setShowDeleteModal(false)}
                 style={{
-                  padding: '10px 20px',
-                  borderRadius: '8px',
-                  border: '1px solid #d1d5db',
+                  padding: '12px 24px',
+                  borderRadius: '12px',
+                  border: '2px solid #e5e7eb',
                   background: 'white',
                   color: '#374151',
                   cursor: 'pointer',
                   fontSize: '14px',
-                  fontWeight: '500'
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = '#d1d5db';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.15)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
                 }}
               >
                 Cancel
@@ -1430,18 +1780,97 @@ const UserAnalyticsPage: React.FC = () => {
               <button
                 onClick={handleDelete}
                 style={{
-                  padding: '10px 20px',
-                  borderRadius: '8px',
+                  padding: '12px 24px',
+                  borderRadius: '12px',
                   border: 'none',
                   background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
                   color: 'white',
                   cursor: 'pointer',
                   fontSize: '14px',
-                  fontWeight: '500'
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(239, 68, 68, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
                 }}
               >
                 Delete User
               </button>
+            </div>
+          }
+        >
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            padding: '20px',
+            background: 'rgba(239, 68, 68, 0.05)',
+            borderRadius: '12px',
+            border: '2px solid rgba(239, 68, 68, 0.1)',
+            marginBottom: '16px'
+          }}>
+            <div style={{
+              padding: '12px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+              color: 'white',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <AlertCircle size={24} />
+            </div>
+            <div>
+              <h3 style={{
+                fontSize: '16px',
+                fontWeight: '600',
+                color: '#dc2626',
+                margin: '0 0 4px 0'
+              }}>
+                Warning
+              </h3>
+              <p style={{
+                fontSize: '14px',
+                color: '#6b7280',
+                margin: 0,
+                lineHeight: '1.5'
+              }}>
+                This action will permanently delete the user account and all associated data. 
+                This action cannot be undone.
+              </p>
+            </div>
+          </div>
+          
+          <div style={{
+            padding: '16px',
+            background: 'rgba(0, 0, 0, 0.02)',
+            borderRadius: '8px',
+            border: '1px solid rgba(0, 0, 0, 0.05)'
+          }}>
+            <p style={{
+              fontSize: '14px',
+              color: '#374151',
+              margin: '0 0 8px 0',
+              fontWeight: '500'
+            }}>
+              User Details:
+            </p>
+            <div style={{
+              display: 'grid',
+              gap: '8px',
+              fontSize: '13px',
+              color: '#6b7280'
+            }}>
+              <div><strong>Name:</strong> {user?.displayName || 'No Name'}</div>
+              <div><strong>Email:</strong> {user?.email}</div>
+              <div><strong>Status:</strong> {user?.disabled ? 'Disabled' : 'Active'}</div>
+              <div><strong>Joined:</strong> {user?.createdAt ? formatDate(user.createdAt) : 'Unknown'}</div>
             </div>
           </div>
         </Modal>

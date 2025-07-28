@@ -19,10 +19,12 @@ const apiCall = async (endpoint: string, options: RequestInit = {}) => {
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      console.error(`API call failed for ${endpoint}:`, errorData.error || `HTTP error! status: ${response.status}`);
       throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
     }
     
-    return await response.json();
+    const responseData = await response.json();
+    return responseData;
   } catch (error) {
     console.error(`API call failed for ${endpoint}:`, error);
     throw error;
@@ -110,6 +112,13 @@ export const usersAPI = {
     return apiCall(`/users/${userId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
+    });
+  },
+
+  create: async (userData: any) => {
+    return apiCall('/users', {
+      method: 'POST',
+      body: JSON.stringify(userData),
     });
   },
 };

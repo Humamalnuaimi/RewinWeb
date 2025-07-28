@@ -1,6 +1,6 @@
 const express = require('express');
 const admin = require('firebase-admin');
-const { query, validationResult } = require('express-validator');
+const { query, validationResult, body } = require('express-validator');
 const router = express.Router();
 
 // Get all users with pagination and search
@@ -256,19 +256,24 @@ router.put('/:userId', async (req, res) => {
     const { userId } = req.params;
     const { displayName, email, disabled } = req.body;
     
+    console.log('Update user request:', { userId, displayName, email, disabled });
+    
     const updateData = {};
     
     if (displayName !== undefined) {
       updateData.displayName = displayName;
     }
     
-    if (email !== undefined) {
+    // Handle email field - only update if it's not empty
+    if (email !== undefined && email !== '') {
       updateData.email = email;
     }
     
     if (disabled !== undefined) {
       updateData.disabled = disabled;
     }
+    
+    console.log('Firebase update data:', updateData);
     
     await admin.auth().updateUser(userId, updateData);
     
@@ -279,6 +284,11 @@ router.put('/:userId', async (req, res) => {
 
   } catch (error) {
     console.error('Update user error:', error);
+    console.error('Error details:', {
+      code: error.code,
+      message: error.message,
+      stack: error.stack
+    });
     res.status(500).json({ error: 'Failed to update user' });
   }
 });
@@ -322,6 +332,71 @@ router.post('/:userId/reset-password', async (req, res) => {
   } catch (error) {
     console.error('Reset password error:', error);
     res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+// Create new user
+router.post('/', [
+  body('email').isEmail().normalizeEmail(),
+  body('displayName').isLength({ min: 1 }).trim(),
+  body('password').isLength({ min: 6 })
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        error: 'Validation failed',
+        details: errors.array() 
+      });
+    }
+
+    const { email, displayName, password } = req.body;
+    
+    console.log('Create user request:', { email, displayName });
+    
+    // Create user in Firebase Auth
+    const userRecord = await admin.auth().createUser({
+      email,
+      displayName,
+      password,
+      emailVerified: false
+    });
+    
+    console.log('User created successfully:', userRecord.uid);
+    
+    res.json({
+      success: true,
+      message: 'User created successfully',
+      user: {
+        uid: userRecord.uid,
+        email: userRecord.email,
+        displayName: userRecord.displayName,
+        emailVerified: userRecord.emailVerified,
+        disabled: userRecord.disabled,
+        createdAt: userRecord.metadata.creationTime,
+        lastSignIn: userRecord.metadata.lastSignInTime
+      }
+    });
+
+  } catch (error) {
+    console.error('Create user error:', error);
+    console.error('Error details:', {
+      code: error.code,
+      message: error.message,
+      stack: error.stack
+    });
+    
+    // Handle specific Firebase errors
+    let errorMessage = 'Failed to create user';
+    if (error.code === 'auth/email-already-exists') {
+      errorMessage = 'Email already exists';
+    } else if (error.code === 'auth/invalid-email') {
+      errorMessage = 'Invalid email address';
+    } else if (error.code === 'auth/weak-password') {
+      errorMessage = 'Password is too weak';
+    }
+    
+    res.status(500).json({ error: errorMessage });
   }
 });
 
