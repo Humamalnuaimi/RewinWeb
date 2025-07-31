@@ -62,13 +62,11 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Serve static files from React build in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static('client/build'));
-  app.get('*', (req, res) => {
-    res.sendFile(path.resolve(__dirname, 'client', 'build', 'index.html'));
-  });
-}
+// Serve static files from React build
+app.use(express.static('client/build'));
+app.get('*', (req, res) => {
+  res.sendFile(path.resolve(__dirname, 'client', 'build', 'index.html'));
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {

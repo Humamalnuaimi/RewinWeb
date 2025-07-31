@@ -57,12 +57,12 @@ router.get('/overview', async (req, res) => {
           const transactionsSnapshot = await admin.firestore()
             .collection('users')
             .doc(userId)
-            .collection('transactions')
+            .collection('web_transactions')
             .get();
           transactionsSnapshot.docs.forEach(doc => {
             const transaction = doc.data();
-            if (transaction.amount) {
-              totalRevenue += parseFloat(transaction.amount) || 0;
+            if (transaction.receiptAmount) {
+              totalRevenue += parseFloat(transaction.receiptAmount) || 0;
             }
           });
         } catch (error) {
@@ -142,7 +142,7 @@ router.get('/outlets', async (req, res) => {
             const transactionsSnapshot = await admin.firestore()
               .collection('users')
               .doc(userId)
-              .collection('transactions')
+              .collection('web_transactions')
               .where('outletId', '==', outletId)
               .get();
             
@@ -175,6 +175,12 @@ router.get('/outlets', async (req, res) => {
       }
     }
     
+    // Disable caching for real-time updates
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
     res.json(allOutlets);
   } catch (error) {
     console.error('Get outlets error:', error);
@@ -213,7 +219,7 @@ router.get('/users/:userId/analytics', async (req, res) => {
       console.log(`Could not fetch outlets for user ${userId}:`, error.message);
     }
 
-    // Get user's customers
+    // Get user's customers from customers collection
     let customers = [];
     try {
       const customersSnapshot = await admin.firestore()
@@ -230,13 +236,13 @@ router.get('/users/:userId/analytics', async (req, res) => {
       console.log(`Could not fetch customers for user ${userId}:`, error.message);
     }
 
-    // Get user's transactions
+    // Get user's transactions from web_transactions collection
     let transactions = [];
     try {
       const transactionsSnapshot = await admin.firestore()
         .collection('users')
         .doc(userId)
-        .collection('transactions')
+        .collection('web_transactions')
         .get();
       
       transactions = transactionsSnapshot.docs.map(doc => ({
@@ -276,16 +282,33 @@ router.get('/users/:userId/analytics', async (req, res) => {
       return transactionDate >= startDate && transactionDate <= now;
     });
 
-    // Calculate metrics
-    const totalRevenue = filteredTransactions.reduce((sum, transaction) => {
-      return sum + (parseFloat(transaction.amount) || 0);
-    }, 0);
+    // Calculate metrics from transactions (same logic as dashboard)
+    let totalPointsEarned = 0;
+    let totalPointsRedeemed = 0;
+    
+    // Filter transactions by date range and calculate points (same as dashboard logic)
+    filteredTransactions.forEach(transaction => {
+      const pointsChanged = transaction.pointsChanged || 0;
+      const transactionType = transaction.transactionType || '';
+      const isManualTransaction = transaction.isManualTransaction || false;
+      const transactionDate = new Date(transaction.timestamp);
+      
+      // Only count transactions from the selected time period (same as dashboard)
+      if (transactionDate >= startDate && transactionDate <= now) {
+        // For EARNED transactions, only count manual ones (same as dashboard)
+        if (transactionType.toUpperCase() === 'EARNED' && isManualTransaction && pointsChanged > 0) {
+          totalPointsEarned += pointsChanged;
+        } else if (transactionType.toUpperCase() === 'REDEEMED' && pointsChanged < 0) {
+          totalPointsRedeemed += Math.abs(pointsChanged);
+        }
+      }
+    });
+    
+    const totalRevenue = totalPointsEarned * 0.1; // 1 point = $0.10 (same as dashboard)
 
-    const totalPoints = filteredTransactions.reduce((sum, transaction) => {
-      return sum + (parseInt(transaction.pointsChanged) || 0);
-    }, 0);
+    // Calculate total transactions count
 
-    const totalTransactions = filteredTransactions.length;
+    const totalTransactions = 0; // No transaction records available
 
     // Generate recent activity
     const generateRecentActivity = (period) => {
@@ -367,6 +390,13 @@ router.get('/users/:userId/analytics', async (req, res) => {
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
+    // Disable caching to ensure real-time updates
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+    
     res.json({
       user: {
         uid: userData.uid,
@@ -378,7 +408,8 @@ router.get('/users/:userId/analytics', async (req, res) => {
       transactions: filteredTransactions,
       analytics: {
         totalRevenue: Math.round(totalRevenue * 100) / 100,
-        totalPoints,
+        totalPointsEarned,
+        totalPointsRedeemed,
         totalTransactions,
         totalCustomers: customers.length,
         totalOutlets: outlets.length
@@ -408,6 +439,12 @@ router.get('/users/:userId/outlets', async (req, res) => {
       id: doc.id
     }));
     
+    // Disable caching for real-time updates
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
     res.json(outlets);
   } catch (error) {
     console.error('Get user outlets error:', error);
@@ -447,7 +484,7 @@ router.get('/outlets/:outletId', async (req, res) => {
 
     // Get transactions for this outlet
     const transactionsSnapshot = await admin.firestore()
-      .collection('users').doc(userId).collection('transactions')
+      .collection('users').doc(userId).collection('web_transactions')
       .where('outletId', '==', outletId).get();
     
     const transactions = transactionsSnapshot.docs.map(doc => ({
@@ -502,6 +539,12 @@ router.get('/customers', async (req, res) => {
       }
     }
     
+    // Disable caching for real-time updates
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
     res.json(allCustomers);
   } catch (error) {
     console.error('Get customers error:', error);
@@ -525,6 +568,12 @@ router.get('/users/:userId/customers', async (req, res) => {
       id: doc.id
     }));
     
+    // Disable caching for real-time updates
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
     res.json(customers);
   } catch (error) {
     console.error('Get user customers error:', error);

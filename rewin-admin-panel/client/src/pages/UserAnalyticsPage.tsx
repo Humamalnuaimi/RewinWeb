@@ -233,7 +233,23 @@ const UserAnalyticsPage: React.FC = () => {
       });
 
       const response = await analyticsAPI.getUserAnalytics(userId!, params.toString());
-      setAnalytics(response);
+      
+      // Extract analytics data from the response
+      // The backend now returns the correct structure with totalPointsEarned and totalPointsRedeemed
+      const analyticsData = {
+        totalCustomers: response.analytics?.totalCustomers || 0,
+        totalRevenue: response.analytics?.totalRevenue || 0,
+        totalPointsEarned: response.analytics?.totalPointsEarned || 0,
+        totalPointsRedeemed: response.analytics?.totalPointsRedeemed || 0,
+        totalCheckIns: response.analytics?.totalTransactions || 0,
+        averageCustomerRating: 0, // This might need to be calculated separately
+        topPerformingOutlet: '', // This might need to be calculated separately
+        dailyStats: response.dailyStats || [],
+        recentActivity: response.recentActivity || [],
+        outletPerformance: {} // This might need to be calculated separately
+      };
+      
+      setAnalytics(analyticsData);
 
     } catch (error) {
       console.error('Error fetching analytics:', error);
@@ -419,7 +435,7 @@ const UserAnalyticsPage: React.FC = () => {
   const renderChart = () => {
     if (!analytics?.dailyStats) return null;
 
-    const data = analytics.dailyStats;
+    const data = analytics?.dailyStats || [];
     const labels = data.map(stat => stat.date);
     const earnedPoints = data.map(stat => stat.earnedPoints);
     const redeemedPoints = data.map(stat => stat.redeemedPoints);
@@ -608,19 +624,19 @@ const UserAnalyticsPage: React.FC = () => {
                     fontSize: '14px',
                     fontWeight: '600'
                   }}>
-                    {analytics.totalPointsEarned + analytics.totalPointsRedeemed}
+                    {(analytics?.totalPointsEarned || 0) + (analytics?.totalPointsRedeemed || 0)}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: '18px', fontWeight: '600', color: '#10b981' }}>
-                      {formatNumber(analytics.totalPointsEarned)}
+                      {formatNumber(analytics?.totalPointsEarned || 0)}
                     </div>
                     <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)' }}>Earned</div>
                   </div>
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: '18px', fontWeight: '600', color: '#ef4444' }}>
-                      {formatNumber(analytics.totalPointsRedeemed)}
+                      {formatNumber(analytics?.totalPointsRedeemed || 0)}
                     </div>
                     <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)' }}>Redeemed</div>
                   </div>
@@ -657,7 +673,7 @@ const UserAnalyticsPage: React.FC = () => {
         </h3>
 
         <div style={{ display: 'grid', gap: '16px' }}>
-          {Object.entries(analytics.outletPerformance).map(([outletId, outlet]) => (
+                      {Object.entries(analytics?.outletPerformance || {}).map(([outletId, outlet]) => (
             <div key={outletId} style={{
               background: 'rgba(255, 255, 255, 0.05)',
               borderRadius: '12px',
@@ -1247,7 +1263,7 @@ const UserAnalyticsPage: React.FC = () => {
                 }}>
                   <Users size={20} />
                 </div>
-                {analytics ? getProgressIcon(analytics.totalCustomers, analytics.totalCustomers - 5) : null}
+                {analytics?.totalCustomers ? getProgressIcon(analytics.totalCustomers, analytics.totalCustomers - 5) : null}
               </div>
               <h3 style={{
                 fontSize: '28px',
@@ -1255,7 +1271,7 @@ const UserAnalyticsPage: React.FC = () => {
                 color: 'white',
                 margin: '0 0 8px 0'
               }}>
-                {analytics ? formatNumber(analytics.totalCustomers) : formatNumber(customers.length)}
+                {analytics?.totalCustomers ? formatNumber(analytics.totalCustomers) : formatNumber(customers.length)}
               </h3>
               <p style={{
                 fontSize: '14px',
@@ -1288,7 +1304,7 @@ const UserAnalyticsPage: React.FC = () => {
                 }}>
                   <DollarSign size={20} />
                 </div>
-                {analytics ? getProgressIcon(analytics.totalRevenue, analytics.totalRevenue - 100) : null}
+                {analytics?.totalRevenue ? getProgressIcon(analytics.totalRevenue, analytics.totalRevenue - 100) : null}
               </div>
               <h3 style={{
                 fontSize: '28px',
@@ -1296,7 +1312,7 @@ const UserAnalyticsPage: React.FC = () => {
                 color: 'white',
                 margin: '0 0 8px 0'
               }}>
-                {analytics ? formatCurrency(analytics.totalRevenue) : '$0.00'}
+                {analytics?.totalRevenue ? formatCurrency(analytics.totalRevenue) : '$0.00'}
               </h3>
               <p style={{
                 fontSize: '14px',
@@ -1329,7 +1345,7 @@ const UserAnalyticsPage: React.FC = () => {
                 }}>
                   <Gift size={20} />
                 </div>
-                {analytics ? getProgressIcon(analytics.totalPointsEarned, analytics.totalPointsEarned - 50) : null}
+                {analytics?.totalPointsEarned ? getProgressIcon(analytics.totalPointsEarned, analytics.totalPointsEarned - 50) : null}
               </div>
               <h3 style={{
                 fontSize: '28px',
@@ -1337,7 +1353,7 @@ const UserAnalyticsPage: React.FC = () => {
                 color: 'white',
                 margin: '0 0 8px 0'
               }}>
-                {analytics ? formatNumber(analytics.totalPointsEarned) : '0'}
+                {analytics?.totalPointsEarned ? formatNumber(analytics.totalPointsEarned) : '0'}
               </h3>
               <p style={{
                 fontSize: '14px',
@@ -1370,7 +1386,7 @@ const UserAnalyticsPage: React.FC = () => {
                 }}>
                   <Zap size={20} />
                 </div>
-                {analytics ? getProgressIcon(analytics.totalPointsRedeemed, analytics.totalPointsRedeemed - 25) : null}
+                {analytics?.totalPointsRedeemed ? getProgressIcon(analytics.totalPointsRedeemed, analytics.totalPointsRedeemed - 25) : null}
               </div>
               <h3 style={{
                 fontSize: '28px',
@@ -1378,7 +1394,7 @@ const UserAnalyticsPage: React.FC = () => {
                 color: 'white',
                 margin: '0 0 8px 0'
               }}>
-                {analytics ? formatNumber(analytics.totalPointsRedeemed) : '0'}
+                {analytics?.totalPointsRedeemed ? formatNumber(analytics.totalPointsRedeemed) : '0'}
               </h3>
               <p style={{
                 fontSize: '14px',
@@ -1417,7 +1433,7 @@ const UserAnalyticsPage: React.FC = () => {
             </h3>
 
             <div style={{ display: 'grid', gap: '12px' }}>
-              {analytics.recentActivity.slice(0, 10).map((activity, index) => (
+              {(analytics?.recentActivity || []).slice(0, 10).map((activity, index) => (
                 <div key={index} style={{
                   display: 'flex',
                   alignItems: 'center',
