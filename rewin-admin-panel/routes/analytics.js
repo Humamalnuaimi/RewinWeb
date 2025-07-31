@@ -45,7 +45,7 @@ router.get('/overview', async (req, res) => {
           const customersSnapshot = await admin.firestore()
             .collection('users')
             .doc(userId)
-            .collection('customers')
+            .collection('web_customers')
             .get();
           totalCustomers += customersSnapshot.size;
         } catch (error) {
@@ -112,11 +112,11 @@ router.get('/outlets', async (req, res) => {
         // Get all customers for this user to calculate customer counts
         let userCustomers = [];
         try {
-          const customersSnapshot = await admin.firestore()
-            .collection('users')
-            .doc(userId)
-            .collection('customers')
-            .get();
+                  const customersSnapshot = await admin.firestore()
+          .collection('users')
+          .doc(userId)
+          .collection('web_customers')
+          .get();
           
           userCustomers = customersSnapshot.docs.map(doc => ({
             ...doc.data(),
@@ -219,13 +219,13 @@ router.get('/users/:userId/analytics', async (req, res) => {
       console.log(`Could not fetch outlets for user ${userId}:`, error.message);
     }
 
-    // Get user's customers from customers collection
+    // Get user's customers from web_customers collection
     let customers = [];
     try {
       const customersSnapshot = await admin.firestore()
         .collection('users')
         .doc(userId)
-        .collection('customers')
+        .collection('web_customers')
         .get();
       
       customers = customersSnapshot.docs.map(doc => ({

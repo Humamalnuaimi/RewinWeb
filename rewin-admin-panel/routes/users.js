@@ -92,7 +92,7 @@ router.get('/', [
           const customersSnapshot = await admin.firestore()
             .collection('users')
             .doc(user.uid)
-            .collection('customers')
+            .collection('web_customers')
             .get();
           customerCount = customersSnapshot.size;
         } catch (error) {
