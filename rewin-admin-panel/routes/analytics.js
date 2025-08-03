@@ -277,14 +277,47 @@ router.get('/users/:userId/analytics', async (req, res) => {
       console.log(`Could not fetch customers for user ${userId}:`, error.message);
     }
 
-    // Create dummy transactions array for compatibility
-    const transactions = [];
+    // Get user's transactions from web_transactions collection (same as dashboard)
+    let transactions = [];
+    try {
+      const transactionsSnapshot = await admin.firestore()
+        .collection('users')
+        .doc(userId)
+        .collection('web_transactions')
+        .get();
+      
+      transactions = transactionsSnapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id
+      }));
+      
+      console.log(`Found ${transactions.length} transactions in web_transactions collection`);
+      
+      // If no transactions in web_transactions, try regular transactions collection
+      if (transactions.length === 0) {
+        console.log('No transactions in web_transactions, trying regular transactions collection...');
+        const regularTransactionsSnapshot = await admin.firestore()
+          .collection('users')
+          .doc(userId)
+          .collection('transactions')
+          .get();
+        
+        transactions = regularTransactionsSnapshot.docs.map(doc => ({
+          ...doc.data(),
+          id: doc.id
+        }));
+        
+        console.log(`Found ${transactions.length} transactions in regular transactions collection`);
+      }
+    } catch (error) {
+      console.log(`Could not fetch transactions for user ${userId}:`, error.message);
+    }
     
     // Initialize analytics variables
     let totalPointsEarned = 0;
     let totalPointsRedeemed = 0;
 
-    // Calculate analytics based on time period
+    // Calculate analytics based on time period (same as dashboard)
     const now = new Date();
     let startDate;
 
@@ -307,17 +340,22 @@ router.get('/users/:userId/analytics', async (req, res) => {
         break;
     }
 
-    // Filter transactions by time period (same as dashboard logic)
-    const filteredTransactions = transactions.filter(transaction => {
+    // Calculate points from transactions FOR THE SELECTED TIME PERIOD (same as dashboard)
+    transactions.forEach(transaction => {
+      const pointsChanged = transaction.pointsChanged || 0;
+      const transactionType = transaction.transactionType || '';
+      const isManualTransaction = transaction.isManualTransaction || false;
       const transactionDate = new Date(transaction.timestamp);
-      return transactionDate >= startDate && transactionDate <= now;
-    });
-
-    // Calculate metrics from customer records (transaction data is embedded in customer records)
-    // Use current available points (same as dashboard)
-    customers.forEach(customer => {
-      totalPointsEarned += customer.totalPoints || 0; // Current available points
-      totalPointsRedeemed += customer.totalPointsRedeemed || 0;
+      
+      // Only count transactions from the selected time period
+      if (transactionDate >= startDate && transactionDate <= now) {
+        // For EARNED transactions, only count manual ones (same as dashboard)
+        if (transactionType.toUpperCase() === 'EARNED' && isManualTransaction && pointsChanged > 0) {
+          totalPointsEarned += pointsChanged;
+        } else if (transactionType.toUpperCase() === 'REDEEMED' && pointsChanged < 0) {
+          totalPointsRedeemed += Math.abs(pointsChanged);
+        }
+      }
     });
     
     const totalRevenue = totalPointsEarned * 0.1; // 1 point = $0.10 (same as dashboard)
@@ -360,14 +398,22 @@ router.get('/users/:userId/analytics', async (req, res) => {
       }
     });
 
-    // Calculate total transactions count
-    const totalTransactions = filteredTransactions.length;
+    // Calculate total transactions count (same as dashboard)
+    const totalTransactions = transactions.filter(transaction => {
+      const transactionDate = new Date(transaction.timestamp);
+      return transactionDate >= startDate && transactionDate <= now;
+    }).length;
 
     // Generate recent activity
     const generateRecentActivity = (period) => {
       const activities = [];
       
-      // Add transaction activities
+      // Add transaction activities (filtered by time period)
+      const filteredTransactions = transactions.filter(transaction => {
+        const transactionDate = new Date(transaction.timestamp);
+        return transactionDate >= startDate && transactionDate <= now;
+      });
+      
       filteredTransactions.forEach(transaction => {
         activities.push({
           type: 'transaction',
@@ -420,13 +466,21 @@ router.get('/users/:userId/analytics', async (req, res) => {
       const dayStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
       const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
       
-      const dayTransactions = filteredTransactions.filter(transaction => {
+      const dayTransactions = transactions.filter(transaction => {
         const transactionDate = new Date(transaction.timestamp);
         return transactionDate >= dayStart && transactionDate < dayEnd;
       });
       
       const dayRevenue = dayTransactions.reduce((sum, transaction) => {
-        return sum + (parseFloat(transaction.amount) || 0);
+        // Calculate revenue from points earned (same as dashboard)
+        const pointsChanged = transaction.pointsChanged || 0;
+        const transactionType = transaction.transactionType || '';
+        const isManualTransaction = transaction.isManualTransaction || false;
+        
+        if (transactionType.toUpperCase() === 'EARNED' && isManualTransaction && pointsChanged > 0) {
+          return sum + (pointsChanged * 0.1); // 1 point = $0.10
+        }
+        return sum;
       }, 0);
       
       const dayPoints = dayTransactions.reduce((sum, transaction) => {
@@ -458,7 +512,10 @@ router.get('/users/:userId/analytics', async (req, res) => {
       },
       outlets,
       customers,
-      transactions: filteredTransactions,
+      transactions: transactions.filter(transaction => {
+        const transactionDate = new Date(transaction.timestamp);
+        return transactionDate >= startDate && transactionDate <= now;
+      }),
       analytics: {
         totalRevenue: Math.round(totalRevenue * 100) / 100,
         totalPointsEarned,
