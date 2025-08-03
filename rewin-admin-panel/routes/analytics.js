@@ -175,24 +175,52 @@ router.get('/outlets', async (req, res) => {
         
         console.log(`Outlet ${outletId} has ${outletCustomers.length} customers`);
           
-          // Calculate total revenue for this outlet
+          // Calculate TODAY'S revenue for this outlet (filtered by date)
           let outletRevenue = 0;
+          let totalPointsEarned = 0;
           try {
             const transactionsSnapshot = await admin.firestore()
               .collection('users')
               .doc(userId)
               .collection('web_transactions')
-              .where('outletId', '==', outletId)
               .get();
             
-            // Calculate revenue from transactions
+            // Define today's date range (same as analytics)
+            const now = new Date();
+            const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+            const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+            
+            // Calculate revenue from transactions for this specific outlet (TODAY ONLY)
             transactionsSnapshot.docs.forEach(transactionDoc => {
               const transaction = transactionDoc.data();
-              // Note: Since the current app doesn't store 'amount' field, 
-              // we'll use pointsChanged as a proxy for revenue calculation
-              // You may need to adjust this based on your business logic
-              outletRevenue += Math.abs(parseInt(transaction.pointsChanged) || 0) * 0.01; // $0.01 per point
+              const pointsChanged = transaction.pointsChanged || 0;
+              const transactionType = transaction.transactionType || '';
+              const isManualTransaction = transaction.isManualTransaction || false;
+              const transactionOutletId = transaction.transactionOutletId || transaction.outletId;
+              
+              // Handle Firebase Timestamps and regular dates
+              let transactionDate;
+              if (transaction.timestamp && transaction.timestamp.toDate) {
+                // Firebase Timestamp
+                transactionDate = transaction.timestamp.toDate();
+              } else {
+                // Regular date
+                transactionDate = new Date(transaction.timestamp);
+              }
+              
+              // Only count transactions for this specific outlet AND from today
+              if (transactionOutletId === outletId && transactionDate >= startDate && transactionDate <= endDate) {
+                // For EARNED transactions, only count manual ones (same as analytics)
+                if (transactionType.toUpperCase() === 'EARNED' && isManualTransaction && pointsChanged > 0) {
+                  totalPointsEarned += pointsChanged;
+                }
+              }
             });
+            
+            // Calculate revenue as points earned * $0.10 (same as analytics)
+            outletRevenue = totalPointsEarned * 0.1;
+            
+            console.log(`Outlet ${outletId} TODAY'S revenue calculation: ${totalPointsEarned} points earned = $${outletRevenue.toFixed(2)}`);
           } catch (error) {
             console.log(`Could not fetch transactions for outlet ${outletId}:`, error.message);
           }
@@ -320,23 +348,32 @@ router.get('/users/:userId/analytics', async (req, res) => {
     // Calculate analytics based on time period (same as dashboard)
     const now = new Date();
     let startDate;
+    let endDate;
 
     switch (timePeriod) {
       case 'today':
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        // Use local timezone for today's range (same as dashboard)
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
         break;
       case 'yesterday':
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        startDate = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
+        endDate = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
         break;
       case 'week':
         startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        endDate = now;
         break;
       case 'month':
         startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+        endDate = now;
         break;
       case 'all':
       default:
         startDate = new Date(0);
+        endDate = now;
         break;
     }
 
@@ -345,15 +382,32 @@ router.get('/users/:userId/analytics', async (req, res) => {
       const pointsChanged = transaction.pointsChanged || 0;
       const transactionType = transaction.transactionType || '';
       const isManualTransaction = transaction.isManualTransaction || false;
-      const transactionDate = new Date(transaction.timestamp);
       
-      // Only count transactions from the selected time period
-      if (transactionDate >= startDate && transactionDate <= now) {
+      // Use the same date conversion logic as dashboard
+      let transactionDate;
+      if (transaction.timestamp && transaction.timestamp.toDate) {
+        // Firebase timestamp
+        transactionDate = transaction.timestamp.toDate();
+      } else if (transaction.timestamp) {
+        // Regular date
+        transactionDate = new Date(transaction.timestamp);
+      } else {
+        // Skip transactions without timestamp
+        return;
+      }
+      
+      console.log('Transaction date:', transactionDate, 'Start:', startDate, 'End:', endDate);
+      
+      // Only count transactions from the selected time period (same as dashboard)
+      if (transactionDate >= startDate && transactionDate <= endDate) {
+        console.log('Transaction in date range:', transactionType, pointsChanged, isManualTransaction);
         // For EARNED transactions, only count manual ones (same as dashboard)
         if (transactionType.toUpperCase() === 'EARNED' && isManualTransaction && pointsChanged > 0) {
           totalPointsEarned += pointsChanged;
+          console.log('Counted earned points:', pointsChanged);
         } else if (transactionType.toUpperCase() === 'REDEEMED' && pointsChanged < 0) {
           totalPointsRedeemed += Math.abs(pointsChanged);
+          console.log('Counted redeemed points:', Math.abs(pointsChanged));
         }
       }
     });
@@ -374,7 +428,7 @@ router.get('/users/:userId/analytics', async (req, res) => {
         const visitDate = new Date(visit.timestamp);
         
         // Count ALL visits in the time period (same as dashboard)
-        if (visitDate >= startDate && visitDate <= now) {
+        if (visitDate >= startDate && visitDate <= endDate) {
           checkInsToday++;
         }
       });
@@ -383,7 +437,7 @@ router.get('/users/:userId/analytics', async (req, res) => {
       // Fallback: Use customers collection if web_visits doesn't exist
       customers.forEach(customer => {
         const visitDate = new Date(customer.lastVisit);
-        if (visitDate >= startDate && visitDate <= now) {
+        if (visitDate >= startDate && visitDate <= endDate) {
           checkInsToday++;
         }
       });
@@ -393,7 +447,7 @@ router.get('/users/:userId/analytics', async (req, res) => {
     let newSignupsToday = 0;
     customers.forEach(customer => {
       const joinDate = new Date(customer.dateJoined || customer.createdAt);
-      if (joinDate >= startDate && joinDate <= now) {
+      if (joinDate >= startDate && joinDate <= endDate) {
         newSignupsToday++;
       }
     });

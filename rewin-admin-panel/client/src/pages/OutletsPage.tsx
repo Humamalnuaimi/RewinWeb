@@ -31,7 +31,7 @@ interface Outlet {
   userName: string;
   createdAt: string | number;
   customerCount?: number;
-  revenue?: number;
+  totalRevenue?: number;
 }
 
 const OutletsPage: React.FC = () => {
@@ -362,7 +362,7 @@ const OutletsPage: React.FC = () => {
                             }}>
                               <DollarSign size={14} style={{ color: 'rgba(255, 255, 255, 0.5)' }} />
                               <span style={{ color: 'rgba(255, 255, 255, 0.9)', fontSize: '0.75rem' }}>
-                                {formatCurrency(outlet.revenue || 0)}
+                                {formatCurrency(outlet.totalRevenue || 0)}
                               </span>
                             </div>
                           </div>
