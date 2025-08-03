@@ -446,16 +446,90 @@ router.get('/users/:userId/outlets', async (req, res) => {
   try {
     const { userId } = req.params;
     
+    console.log(`Getting outlets for user: ${userId}`);
+    
     const outletsSnapshot = await admin.firestore()
       .collection('users')
       .doc(userId)
       .collection('outlets')
       .get();
     
-    const outlets = outletsSnapshot.docs.map(doc => ({
-      ...doc.data(),
-      id: doc.id
-    }));
+    // Get all customers for this user to calculate customer counts
+    let userCustomers = [];
+    try {
+      const customersSnapshot = await admin.firestore()
+        .collection('users')
+        .doc(userId)
+        .collection('customers')
+        .get();
+      
+      userCustomers = customersSnapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id
+      }));
+      
+      console.log(`Found ${userCustomers.length} customers for user ${userId}`);
+      // Debug: Log first few customers to see their structure
+      if (userCustomers.length > 0) {
+        console.log('Sample customer data:', JSON.stringify(userCustomers[0], null, 2));
+      }
+    } catch (error) {
+      console.log(`Could not fetch customers for user ${userId}:`, error.message);
+    }
+    
+    const outlets = [];
+    
+    // Process outlets with customer counts
+    for (const outletDoc of outletsSnapshot.docs) {
+      const outletData = outletDoc.data();
+      const outletId = outletDoc.id;
+      
+      // Count customers for this specific outlet (check multiple possible fields)
+      const outletCustomers = userCustomers.filter(customer => {
+        // Check multiple possible outlet ID fields
+        const matches = customer.outletId === outletId || 
+               customer.registrationOutletId === outletId ||
+               customer.lastVisitOutletId === outletId ||
+               (customer.visitedOutlets && customer.visitedOutlets.includes(outletId));
+        
+        if (matches) {
+          console.log(`Customer ${customer.id} matches outlet ${outletId}`);
+        }
+        
+        return matches;
+      });
+      
+      console.log(`Outlet ${outletId} has ${outletCustomers.length} customers`);
+      
+      // Calculate total revenue for this outlet
+      let outletRevenue = 0;
+      try {
+        const transactionsSnapshot = await admin.firestore()
+          .collection('users')
+          .doc(userId)
+          .collection('web_transactions')
+          .where('outletId', '==', outletId)
+          .get();
+        
+        // Calculate revenue from transactions
+        transactionsSnapshot.docs.forEach(transactionDoc => {
+          const transaction = transactionDoc.data();
+          // Note: Since the current app doesn't store 'amount' field, 
+          // we'll use pointsChanged as a proxy for revenue calculation
+          // You may need to adjust this based on your business logic
+          outletRevenue += Math.abs(parseInt(transaction.pointsChanged) || 0) * 0.01; // $0.01 per point
+        });
+      } catch (error) {
+        console.log(`Could not fetch transactions for outlet ${outletId}:`, error.message);
+      }
+      
+      outlets.push({
+        ...outletData,
+        id: outletId,
+        customerCount: outletCustomers.length,
+        revenue: Math.round(outletRevenue * 100) / 100
+      });
+    }
     
     // Disable caching for real-time updates
     res.set({
