@@ -112,16 +112,22 @@ router.get('/outlets', async (req, res) => {
         // Get all customers for this user to calculate customer counts
         let userCustomers = [];
         try {
-                  const customersSnapshot = await admin.firestore()
-          .collection('users')
-          .doc(userId)
-          .collection('web_customers')
-          .get();
+          const customersSnapshot = await admin.firestore()
+            .collection('users')
+            .doc(userId)
+            .collection('web_customers')
+            .get();
           
           userCustomers = customersSnapshot.docs.map(doc => ({
             ...doc.data(),
             id: doc.id
           }));
+          
+          console.log(`Found ${userCustomers.length} customers for user ${userId}`);
+          // Debug: Log first few customers to see their structure
+          if (userCustomers.length > 0) {
+            console.log('Sample customer data:', JSON.stringify(userCustomers[0], null, 2));
+          }
         } catch (error) {
           console.log(`Could not fetch customers for user ${userId}:`, error.message);
         }
@@ -131,10 +137,22 @@ router.get('/outlets', async (req, res) => {
           const outletData = outletDoc.data();
           const outletId = outletDoc.id;
           
-          // Count customers for this specific outlet (using outletId only)
-          const outletCustomers = userCustomers.filter(customer => 
-            customer.outletId === outletId
-          );
+                  // Count customers for this specific outlet (check multiple possible fields)
+        const outletCustomers = userCustomers.filter(customer => {
+          // Check multiple possible outlet ID fields
+          const matches = customer.outletId === outletId || 
+                 customer.registrationOutletId === outletId ||
+                 customer.lastVisitOutletId === outletId ||
+                 (customer.visitedOutlets && customer.visitedOutlets.includes(outletId));
+          
+          if (matches) {
+            console.log(`Customer ${customer.id} matches outlet ${outletId}`);
+          }
+          
+          return matches;
+        });
+        
+        console.log(`Outlet ${outletId} has ${outletCustomers.length} customers`);
           
           // Calculate total revenue for this outlet
           let outletRevenue = 0;
