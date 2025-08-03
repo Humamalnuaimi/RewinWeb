@@ -1031,8 +1031,8 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
     try {
       console.log('📱 Sending SMS to customers with flexible requirements...');
       
-      // Get all customers from web_customers collection (as per app team data structure)
-      const customersRef = collection(firestore, 'users', user.uid, 'web_customers');
+      // Get all customers from customers collection (as per Firebase console data)
+      const customersRef = collection(firestore, 'users', user.uid, 'customers');
       const customersSnapshot = await getDocs(customersRef);
       console.log(`📋 Found ${customersSnapshot.size} total customers for SMS`);
       
