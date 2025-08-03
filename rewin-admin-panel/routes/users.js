@@ -229,24 +229,152 @@ router.get('/:userId', async (req, res) => {
   }
 });
 
-// Delete user
+// Delete user with complete data cleanup
 router.delete('/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     
-    await admin.auth().deleteUser(userId);
+    console.log(`Starting complete deletion for user: ${userId}`);
     
-    // Also delete user's data from Firestore
+    // 1. Get user info before deletion for backup
+    let userInfo = null;
+    try {
+      const userRecord = await admin.auth().getUser(userId);
+      userInfo = {
+        uid: userRecord.uid,
+        email: userRecord.email,
+        displayName: userRecord.displayName,
+        disabled: userRecord.disabled,
+        createdAt: userRecord.metadata.creationTime
+      };
+    } catch (error) {
+      console.log('User not found in Auth, proceeding with Firestore cleanup');
+    }
+    
+    // 2. Get data summary before deletion
+    const dataSummary = {
+      webCustomers: 0,
+      webTransactions: 0,
+      customers: 0,
+      transactions: 0,
+      outlets: 0
+    };
+    
+    // Count web collections
+    try {
+      const webCustomersSnapshot = await admin.firestore()
+        .collection('users').doc(userId)
+        .collection('web_customers').get();
+      dataSummary.webCustomers = webCustomersSnapshot.size;
+      
+      const webTransactionsSnapshot = await admin.firestore()
+        .collection('users').doc(userId)
+        .collection('web_transactions').get();
+      dataSummary.webTransactions = webTransactionsSnapshot.size;
+    } catch (error) {
+      console.log('Error counting web collections:', error.message);
+    }
+    
+    // Count main collections
+    try {
+      const customersSnapshot = await admin.firestore()
+        .collection('users').doc(userId)
+        .collection('customers').get();
+      dataSummary.customers = customersSnapshot.size;
+      
+      const transactionsSnapshot = await admin.firestore()
+        .collection('users').doc(userId)
+        .collection('transactions').get();
+      dataSummary.transactions = transactionsSnapshot.size;
+    } catch (error) {
+      console.log('Error counting main collections:', error.message);
+    }
+    
+    // Count outlets
+    try {
+      const outletsSnapshot = await admin.firestore()
+        .collection('users').doc(userId)
+        .collection('outlets').get();
+      dataSummary.outlets = outletsSnapshot.size;
+    } catch (error) {
+      console.log('Error counting outlets:', error.message);
+    }
+    
+    console.log('Data summary before deletion:', dataSummary);
+    
+    // 3. Create backup/export (optional - can be enabled later)
+    // const backupData = {
+    //   userInfo,
+    //   dataSummary,
+    //   timestamp: new Date().toISOString()
+    // };
+    // await admin.firestore().collection('deleted_users_backup').doc(userId).set(backupData);
+    
+    // 4. Delete Auth user
+    if (userInfo) {
+      await admin.auth().deleteUser(userId);
+      console.log('Auth user deleted successfully');
+    }
+    
+    // 5. Delete all subcollections with batch operations
+    const collections = [
+      'web_customers', 
+      'web_transactions', 
+      'customers', 
+      'transactions', 
+      'outlets',
+      'web_visits'
+    ];
+    
+    let totalDeleted = 0;
+    
+    for (const collectionName of collections) {
+      try {
+        const snapshot = await admin.firestore()
+          .collection('users').doc(userId)
+          .collection(collectionName).get();
+        
+        if (snapshot.size > 0) {
+          const batch = admin.firestore().batch();
+          snapshot.docs.forEach(doc => {
+            batch.delete(doc.ref);
+          });
+          await batch.commit();
+          totalDeleted += snapshot.size;
+          console.log(`Deleted ${snapshot.size} documents from ${collectionName}`);
+        }
+      } catch (error) {
+        console.log(`Error deleting ${collectionName}:`, error.message);
+      }
+    }
+    
+    // 6. Delete user document
     await admin.firestore().collection('users').doc(userId).delete();
+    console.log('User document deleted successfully');
+    
+    // 7. Prepare response with deletion summary
+    const deletionSummary = {
+      userInfo,
+      dataSummary,
+      totalDeleted,
+      collectionsCleaned: collections.filter(col => dataSummary[col] > 0 || col === 'outlets' || col === 'web_visits'),
+      timestamp: new Date().toISOString()
+    };
+    
+    console.log('Complete deletion successful:', deletionSummary);
     
     res.json({
       success: true,
-      message: 'User deleted successfully'
+      message: 'User and all associated data deleted successfully',
+      deletionSummary
     });
 
   } catch (error) {
     console.error('Delete user error:', error);
-    res.status(500).json({ error: 'Failed to delete user' });
+    res.status(500).json({ 
+      error: 'Failed to delete user',
+      details: error.message 
+    });
   }
 });
 
@@ -290,6 +418,91 @@ router.put('/:userId', async (req, res) => {
       stack: error.stack
     });
     res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// Get deletion preview (data summary before deletion)
+router.get('/:userId/deletion-preview', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    console.log(`Getting deletion preview for user: ${userId}`);
+    
+    // Get user info
+    let userInfo = null;
+    try {
+      const userRecord = await admin.auth().getUser(userId);
+      userInfo = {
+        uid: userRecord.uid,
+        email: userRecord.email,
+        displayName: userRecord.displayName,
+        disabled: userRecord.disabled,
+        createdAt: userRecord.metadata.creationTime
+      };
+    } catch (error) {
+      console.log('User not found in Auth');
+    }
+    
+    // Get data summary
+    const dataSummary = {
+      webCustomers: 0,
+      webTransactions: 0,
+      customers: 0,
+      transactions: 0,
+      outlets: 0,
+      webVisits: 0
+    };
+    
+    // Count all collections
+    const collections = [
+      'web_customers', 
+      'web_transactions', 
+      'customers', 
+      'transactions', 
+      'outlets',
+      'web_visits'
+    ];
+    
+    for (const collectionName of collections) {
+      try {
+        const snapshot = await admin.firestore()
+          .collection('users').doc(userId)
+          .collection(collectionName).get();
+        
+        const summaryKey = collectionName === 'web_visits' ? 'webVisits' : collectionName;
+        dataSummary[summaryKey] = snapshot.size;
+      } catch (error) {
+        console.log(`Error counting ${collectionName}:`, error.message);
+      }
+    }
+    
+    const totalRecords = Object.values(dataSummary).reduce((sum, count) => sum + count, 0);
+    
+    const preview = {
+      userInfo,
+      dataSummary,
+      totalRecords,
+      estimatedDeletionTime: `${Math.ceil(totalRecords / 100)} seconds`,
+      collections: collections.map(col => ({
+        name: col,
+        count: dataSummary[col === 'web_visits' ? 'webVisits' : col]
+      })),
+      timestamp: new Date().toISOString()
+    };
+    
+    console.log('Deletion preview generated:', preview);
+    
+    res.json({
+      success: true,
+      preview
+    });
+
+  } catch (error) {
+    console.error('Get deletion preview error:', error);
+    res.status(500).json({ 
+      error: 'Failed to get deletion preview',
+      details: error.message 
+    });
   }
 });
 

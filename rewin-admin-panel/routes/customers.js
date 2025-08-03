@@ -262,7 +262,7 @@ router.get('/export/csv', async (req, res) => {
   }
 });
 
-// Delete customer
+// Delete customer with comprehensive cleanup
 router.delete('/:customerId', async (req, res) => {
   try {
     const { customerId } = req.params;
@@ -272,32 +272,149 @@ router.delete('/:customerId', async (req, res) => {
       return res.status(400).json({ error: 'userId is required' });
     }
 
-    // Delete customer document
-    await admin.firestore()
-      .collection('users').doc(userId)
-      .collection('web_customers').doc(customerId).delete();
+    console.log(`Starting customer deletion: ${customerId} for user: ${userId}`);
 
-    // Delete associated transactions
-    const transactionsSnapshot = await admin.firestore()
-      .collection('users').doc(userId)
-      .collection('web_transactions')
-      .where('phoneNumber', '==', req.body.phoneNumber)
-      .get();
+    // 1. Get customer info before deletion
+    let customerInfo = null;
+    try {
+      const customerDoc = await admin.firestore()
+        .collection('users').doc(userId)
+        .collection('web_customers').doc(customerId).get();
+      
+      if (customerDoc.exists) {
+        customerInfo = {
+          id: customerDoc.id,
+          ...customerDoc.data()
+        };
+      }
+    } catch (error) {
+      console.log('Error getting customer info:', error.message);
+    }
 
+    // 2. Count associated data before deletion
+    const dataSummary = {
+      webTransactions: 0,
+      transactions: 0,
+      visits: 0
+    };
+
+    // Count web transactions
+    try {
+      const webTransactionsSnapshot = await admin.firestore()
+        .collection('users').doc(userId)
+        .collection('web_transactions')
+        .where('customerId', '==', customerId)
+        .get();
+      dataSummary.webTransactions = webTransactionsSnapshot.size;
+    } catch (error) {
+      console.log('Error counting web transactions:', error.message);
+    }
+
+    // Count main transactions
+    try {
+      const transactionsSnapshot = await admin.firestore()
+        .collection('users').doc(userId)
+        .collection('transactions')
+        .where('customerId', '==', customerId)
+        .get();
+      dataSummary.transactions = transactionsSnapshot.size;
+    } catch (error) {
+      console.log('Error counting main transactions:', error.message);
+    }
+
+    // Count visits
+    try {
+      const visitsSnapshot = await admin.firestore()
+        .collection('users').doc(userId)
+        .collection('web_visits')
+        .where('customerId', '==', customerId)
+        .get();
+      dataSummary.visits = visitsSnapshot.size;
+    } catch (error) {
+      console.log('Error counting visits:', error.message);
+    }
+
+    console.log('Customer data summary before deletion:', dataSummary);
+
+    // 3. Delete customer from both collections
     const batch = admin.firestore().batch();
-    transactionsSnapshot.docs.forEach(doc => {
-      batch.delete(doc.ref);
-    });
+    
+    // Delete from web_customers
+    const webCustomerRef = admin.firestore()
+      .collection('users').doc(userId)
+      .collection('web_customers').doc(customerId);
+    batch.delete(webCustomerRef);
+
+    // Delete from customers (if exists)
+    const customerRef = admin.firestore()
+      .collection('users').doc(userId)
+      .collection('customers').doc(customerId);
+    batch.delete(customerRef);
+
+    // 4. Delete associated transactions from both collections
+    try {
+      const webTransactionsSnapshot = await admin.firestore()
+        .collection('users').doc(userId)
+        .collection('web_transactions')
+        .where('customerId', '==', customerId)
+        .get();
+
+      webTransactionsSnapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+
+      const transactionsSnapshot = await admin.firestore()
+        .collection('users').doc(userId)
+        .collection('transactions')
+        .where('customerId', '==', customerId)
+        .get();
+
+      transactionsSnapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+    } catch (error) {
+      console.log('Error deleting associated transactions:', error.message);
+    }
+
+    // 5. Delete associated visits
+    try {
+      const visitsSnapshot = await admin.firestore()
+        .collection('users').doc(userId)
+        .collection('web_visits')
+        .where('customerId', '==', customerId)
+        .get();
+
+      visitsSnapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+    } catch (error) {
+      console.log('Error deleting associated visits:', error.message);
+    }
+
+    // 6. Execute batch deletion
     await batch.commit();
+    console.log('Customer and associated data deleted successfully');
+
+    // 7. Prepare response with deletion summary
+    const deletionSummary = {
+      customerInfo,
+      dataSummary,
+      totalDeleted: 1 + dataSummary.webTransactions + dataSummary.transactions + dataSummary.visits,
+      timestamp: new Date().toISOString()
+    };
 
     res.json({
       success: true,
-      message: 'Customer and associated data deleted successfully'
+      message: 'Customer and all associated data deleted successfully',
+      deletionSummary
     });
 
   } catch (error) {
     console.error('Delete customer error:', error);
-    res.status(500).json({ error: 'Failed to delete customer' });
+    res.status(500).json({ 
+      error: 'Failed to delete customer',
+      details: error.message 
+    });
   }
 });
 
