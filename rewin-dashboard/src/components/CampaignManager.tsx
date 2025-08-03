@@ -1031,21 +1031,23 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
     try {
       console.log('📱 Sending SMS to customers with flexible requirements...');
       
-      // Get all customers first, then filter gracefully (using user collection as per app team)
-      const customersRef = collection(firestore, 'users', user.uid, 'customers');
+      // Get all customers from web_customers collection (as per app team data structure)
+      const customersRef = collection(firestore, 'users', user.uid, 'web_customers');
       const customersSnapshot = await getDocs(customersRef);
       console.log(`📋 Found ${customersSnapshot.size} total customers for SMS`);
       
       let smsEligibleCount = 0;
       let smsSentCount = 0;
+      let smsFailedCount = 0;
       
       // Send SMS to each eligible customer
       for (const customerDoc of customersSnapshot.docs) {
         const customer = customerDoc.data();
         
-        // Check if customer is eligible for SMS (graceful field checking)
+        // Enhanced SMS eligibility checking
         const hasPhoneNumber = customer.phoneNumber && customer.phoneNumber.trim();
-        const isOptedIn = customer.optedInForSMS === true;
+        const isOptedIn = customer.optedInForSMS === true || customer.optedInForSMS === undefined; // Default to true if not set
+        const hasValidPhoneFormat = hasPhoneNumber && /^\+[1-9]\d{1,14}$/.test(customer.phoneNumber.trim());
         
         // Check outlet targeting if applicable
         let isInTargetOutlet = true;
@@ -1053,23 +1055,50 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
           isInTargetOutlet = customer.outletId && promotion.targetOutlets.includes(customer.outletId);
         }
         
+        console.log(`📱 Customer ${customer.firstName || customer.customerId}:`, {
+          hasPhoneNumber: !!hasPhoneNumber,
+          phoneNumber: customer.phoneNumber,
+          isOptedIn,
+          hasValidPhoneFormat,
+          isInTargetOutlet,
+          outletId: customer.outletId
+        });
+        
         if (hasPhoneNumber && isOptedIn && isInTargetOutlet) {
           smsEligibleCount++;
           try {
-            await sendSMSMessage(customer.phoneNumber, smsMessage);
+            // Ensure phone number is in international format
+            let phoneNumber = customer.phoneNumber.trim();
+            if (!phoneNumber.startsWith('+')) {
+              // Add +1 for US numbers if not already formatted
+              phoneNumber = phoneNumber.startsWith('1') ? `+${phoneNumber}` : `+1${phoneNumber}`;
+            }
+            
+            await sendSMSMessage(phoneNumber, smsMessage);
             smsSentCount++;
-            console.log(`📱 SMS sent to ${customer.phoneNumber}`);
+            console.log(`✅ SMS sent to ${phoneNumber} (${customer.firstName || customer.customerId})`);
           } catch (smsError) {
+            smsFailedCount++;
             console.warn(`⚠️ Failed to send SMS to ${customer.phoneNumber}:`, smsError);
             // Continue with other customers even if one fails
           }
+        } else {
+          console.log(`❌ Customer ${customer.firstName || customer.customerId} not eligible:`, {
+            hasPhoneNumber: !!hasPhoneNumber,
+            isOptedIn,
+            isInTargetOutlet
+          });
         }
       }
       
-      console.log(`📱 SMS Summary: ${smsSentCount}/${smsEligibleCount} eligible customers notified`);
+      console.log(`📱 SMS Summary: ${smsSentCount}/${smsEligibleCount} eligible customers notified (${smsFailedCount} failed)`);
       
       if (smsEligibleCount === 0) {
         console.log('ℹ️ No customers eligible for SMS (missing phone number or not opted in)');
+        // Show user-friendly message
+        alert(`ℹ️ Promotion created successfully! No SMS sent because:\n• ${customersSnapshot.size} customers found\n• 0 customers have valid phone numbers and SMS opt-in`);
+      } else if (smsSentCount > 0) {
+        alert(`✅ Promotion created successfully!\n📱 SMS sent to ${smsSentCount} customers`);
       }
       
     } catch (error) {
