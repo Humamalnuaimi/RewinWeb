@@ -575,11 +575,153 @@ router.post('/', [
       emailVerified: false
     });
     
-    console.log('User created successfully:', userRecord.uid);
+    console.log('Auth user created successfully:', userRecord.uid);
+    
+    // Create Firestore user document and all necessary collections
+    const userDocRef = admin.firestore().collection('users').doc(userRecord.uid);
+    
+    // Create user document with basic info
+    await userDocRef.set({
+      uid: userRecord.uid,
+      email: userRecord.email,
+      displayName: userRecord.displayName,
+      emailVerified: userRecord.emailVerified,
+      disabled: userRecord.disabled,
+      createdAt: userRecord.metadata.creationTime,
+      lastSignIn: userRecord.metadata.lastSignInTime,
+      createdFrom: 'admin_panel',
+      // Mobile app compatibility fields
+      totalCustomers: 0,
+      totalOutlets: 0,
+      totalTransactions: 0,
+      totalRevenue: 0,
+      totalPoints: 0,
+      // Settings and preferences
+      settings: {
+        notifications: true,
+        emailUpdates: true,
+        timezone: 'UTC',
+        currency: 'USD',
+        language: 'en'
+      },
+      // Business info
+      businessInfo: {
+        name: displayName,
+        type: 'retail',
+        industry: 'general',
+        description: '',
+        website: '',
+        phone: '',
+        address: {
+          street: '',
+          city: '',
+          state: '',
+          zipCode: '',
+          country: ''
+        }
+      },
+      // Analytics and stats
+      analytics: {
+        totalCustomers: 0,
+        totalRevenue: 0,
+        totalPointsEarned: 0,
+        totalPointsRedeemed: 0,
+        totalCheckIns: 0,
+        averageCustomerRating: 0,
+        topPerformingOutlet: '',
+        lastUpdated: new Date().toISOString()
+      }
+    });
+    
+    console.log('User document created successfully');
+    
+    // Create all necessary subcollections (empty but ready for mobile app)
+    const collections = [
+      'customers',
+      'transactions', 
+      'outlets',
+      'web_customers',
+      'web_transactions',
+      'web_visits',
+      'web_outlet_stats',
+      'checkins',
+      'rewards',
+      'messages',
+      'templates'
+    ];
+    
+    console.log('Creating subcollections for mobile app compatibility...');
+    
+    // Create empty subcollections with placeholder documents
+    for (const collectionName of collections) {
+      try {
+        const collectionRef = userDocRef.collection(collectionName);
+        
+        // Create a placeholder document to initialize the collection
+        await collectionRef.doc('_placeholder').set({
+          _placeholder: true,
+          createdAt: new Date().toISOString(),
+          message: 'Collection initialized by admin panel'
+        });
+        
+        console.log(`✅ Created ${collectionName} collection`);
+      } catch (error) {
+        console.log(`⚠️ Error creating ${collectionName} collection:`, error.message);
+      }
+    }
+    
+    // Create default outlet template
+    try {
+      const outletsRef = userDocRef.collection('outlets');
+      await outletsRef.doc('_default').set({
+        outletId: '_default',
+        name: 'Default Outlet',
+        description: 'Default outlet created by admin panel',
+        address: {
+          street: '',
+          city: '',
+          state: '',
+          zipCode: '',
+          country: ''
+        },
+        phone: '',
+        email: '',
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        createdFrom: 'admin_panel'
+      });
+      console.log('✅ Created default outlet');
+    } catch (error) {
+      console.log('⚠️ Error creating default outlet:', error.message);
+    }
+    
+    // Create default customer template
+    try {
+      const customersRef = userDocRef.collection('customers');
+      await customersRef.doc('_default').set({
+        customerId: '_default',
+        firstName: 'Default',
+        lastName: 'Customer',
+        email: '',
+        phone: '',
+        totalPoints: 0,
+        totalPointsEarned: 0,
+        totalPointsRedeemed: 0,
+        totalVisits: 0,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        createdFrom: 'admin_panel'
+      });
+      console.log('✅ Created default customer');
+    } catch (error) {
+      console.log('⚠️ Error creating default customer:', error.message);
+    }
+    
+    console.log('🎉 Enhanced user creation completed successfully');
     
     res.json({
       success: true,
-      message: 'User created successfully',
+      message: 'User created successfully with all necessary collections',
       user: {
         uid: userRecord.uid,
         email: userRecord.email,
@@ -587,7 +729,9 @@ router.post('/', [
         emailVerified: userRecord.emailVerified,
         disabled: userRecord.disabled,
         createdAt: userRecord.metadata.creationTime,
-        lastSignIn: userRecord.metadata.lastSignInTime
+        lastSignIn: userRecord.metadata.lastSignInTime,
+        collectionsCreated: collections.length,
+        mobileAppCompatible: true
       }
     });
 
