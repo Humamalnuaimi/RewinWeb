@@ -127,6 +127,10 @@ router.get('/outlets', async (req, res) => {
           // Debug: Log first few customers to see their structure
           if (userCustomers.length > 0) {
             console.log('Sample customer data:', JSON.stringify(userCustomers[0], null, 2));
+            // Debug: Log all customers' outlet data
+            userCustomers.forEach((customer, index) => {
+              console.log(`Customer ${index + 1}: ${customer.id} - outletId: "${customer.outletId}", outletName: "${customer.outletName}"`);
+            });
           }
         } catch (error) {
           console.log(`Could not fetch customers for user ${userId}:`, error.message);
@@ -137,28 +141,33 @@ router.get('/outlets', async (req, res) => {
           const outletData = outletDoc.data();
           const outletId = outletDoc.id;
           
-                  // Count customers for this specific outlet using outletName field
-        // Each customer belongs to one home outlet based on their outletName
+                  // Count customers for this specific outlet using outletId (primary) and outletName (fallback)
+        // Each customer belongs to one home outlet based on their stable outletId field
         const outletCustomers = userCustomers.filter(customer => {
-          // Use the outletName field to determine which outlet the customer belongs to
-          const customerOutletName = customer.outletName;
+          const customerOutletId = customer.outletId;        // Stable field - use this first
+          const customerOutletName = customer.outletName;    // Stable field - fallback only
+          const currentOutletId = outletDoc.id;
           const outletName = outletData.name;
           
-          // Debug: Log all customer outlet names
-          console.log(`Customer ${customer.id} has outletName: "${customerOutletName}", outlet "${outletName}"`);
+          // Debug: Log all customer outlet data
+          console.log(`Customer ${customer.id} has outletId: "${customerOutletId}", outletName: "${customerOutletName}", outlet "${outletName}" (${currentOutletId})`);
           
-          // Case-insensitive comparison to handle different casing
-          // If customer has no outletName, assign to the first outlet (Main Outlet)
+          // PRIMARY: Match by outletId (most reliable - this is the stable field)
           let matches = false;
-          if (customerOutletName && outletName) {
-            matches = customerOutletName.toLowerCase() === outletName.toLowerCase();
-          } else if (!customerOutletName && outletName && outletName.toLowerCase().includes('main')) {
-            // If customer has no outletName, assign to "Main Outlet"
+          if (customerOutletId && customerOutletId === currentOutletId) {
             matches = true;
+            console.log(`Customer ${customer.id} matched by outletId: ${customerOutletId} === ${currentOutletId}`);
           }
+          // FALLBACK: Only if outletId is missing, try outletName (case-insensitive)
+          else if (!customerOutletId && customerOutletName && outletName && customerOutletName.toLowerCase() === outletName.toLowerCase()) {
+            matches = true;
+            console.log(`Customer ${customer.id} matched by outletName (fallback): ${customerOutletName} === ${outletName}`);
+          }
+          // NO FALLBACK: If customer has outletId but it doesn't match, don't assign to any outlet
+          // This prevents customers from being assigned to multiple outlets with the same name
           
           if (matches) {
-            console.log(`Customer ${customer.id} belongs to outlet ${outletName} (outletName: ${customerOutletName})`);
+            console.log(`Customer ${customer.id} belongs to outlet ${outletName} (${currentOutletId})`);
           }
           
           return matches;
@@ -512,24 +521,32 @@ router.get('/users/:userId/outlets', async (req, res) => {
       const outletData = outletDoc.data();
       const outletId = outletDoc.id;
       
-            // Count customers for this specific outlet using outletName field
+            // Count customers for this specific outlet using outletId (primary) and outletName (fallback)
       const outletCustomers = userCustomers.filter(customer => {
-        // Use the outletName field to determine which outlet the customer belongs to
-        const customerOutletName = customer.outletName;
+        const customerOutletId = customer.outletId;        // Stable field - use this first
+        const customerOutletName = customer.outletName;    // Stable field - fallback only
+        const currentOutletId = outletDoc.id;
         const outletName = outletData.name;
         
-        // Case-insensitive comparison to handle different casing
-        // If customer has no outletName, assign to the first outlet (Main Outlet)
+        // Debug: Log all customer outlet data
+        console.log(`Customer ${customer.id} has outletId: "${customerOutletId}", outletName: "${customerOutletName}", outlet "${outletName}" (${currentOutletId})`);
+        
+        // PRIMARY: Match by outletId (most reliable - this is the stable field)
         let matches = false;
-        if (customerOutletName && outletName) {
-          matches = customerOutletName.toLowerCase() === outletName.toLowerCase();
-        } else if (!customerOutletName && outletName && outletName.toLowerCase().includes('main')) {
-          // If customer has no outletName, assign to "Main Outlet"
+        if (customerOutletId && customerOutletId === currentOutletId) {
           matches = true;
+          console.log(`Customer ${customer.id} matched by outletId: ${customerOutletId} === ${currentOutletId}`);
         }
+        // FALLBACK: Only if outletId is missing, try outletName (case-insensitive)
+        else if (!customerOutletId && customerOutletName && outletName && customerOutletName.toLowerCase() === outletName.toLowerCase()) {
+          matches = true;
+          console.log(`Customer ${customer.id} matched by outletName (fallback): ${customerOutletName} === ${outletName}`);
+        }
+        // NO FALLBACK: If customer has outletId but it doesn't match, don't assign to any outlet
+        // This prevents customers from being assigned to multiple outlets with the same name
 
         if (matches) {
-          console.log(`Customer ${customer.id} belongs to outlet ${outletName} (outletName: ${customerOutletName})`);
+          console.log(`Customer ${customer.id} belongs to outlet ${outletName} (${currentOutletId})`);
         }
 
         return matches;
