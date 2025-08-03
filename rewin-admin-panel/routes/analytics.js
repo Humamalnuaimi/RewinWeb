@@ -109,14 +109,14 @@ router.get('/outlets', async (req, res) => {
           .collection('outlets')
           .get();
         
-        // Get all customers for this user to calculate customer counts
-        let userCustomers = [];
-        try {
-          const customersSnapshot = await admin.firestore()
-            .collection('users')
-            .doc(userId)
-            .collection('web_customers')
-            .get();
+            // Get all customers for this user to calculate customer counts
+    let userCustomers = [];
+    try {
+      const customersSnapshot = await admin.firestore()
+        .collection('users')
+        .doc(userId)
+        .collection('customers')
+        .get();
           
           userCustomers = customersSnapshot.docs.map(doc => ({
             ...doc.data(),
@@ -137,16 +137,22 @@ router.get('/outlets', async (req, res) => {
           const outletData = outletDoc.data();
           const outletId = outletDoc.id;
           
-                  // Count customers for this specific outlet (check multiple possible fields)
+                  // Count customers for this specific outlet using outletName field
+        // Each customer belongs to one home outlet based on their outletName
         const outletCustomers = userCustomers.filter(customer => {
-          // Check multiple possible outlet ID fields
-          const matches = customer.outletId === outletId || 
-                 customer.registrationOutletId === outletId ||
-                 customer.lastVisitOutletId === outletId ||
-                 (customer.visitedOutlets && customer.visitedOutlets.includes(outletId));
+          // Use the outletName field to determine which outlet the customer belongs to
+          const customerOutletName = customer.outletName;
+          const outletName = outletData.name;
+          
+          // Debug: Log all customer outlet names
+          console.log(`Customer ${customer.id} has outletName: "${customerOutletName}", outlet "${outletName}"`);
+          
+          // Case-insensitive comparison to handle different casing
+          const matches = customerOutletName && outletName && 
+                         customerOutletName.toLowerCase() === outletName.toLowerCase();
           
           if (matches) {
-            console.log(`Customer ${customer.id} matches outlet ${outletId}`);
+            console.log(`Customer ${customer.id} belongs to outlet ${outletName} (outletName: ${customerOutletName})`);
           }
           
           return matches;
@@ -186,6 +192,21 @@ router.get('/outlets', async (req, res) => {
             totalRevenue: outletRevenue,
             // Normalize display name to uppercase for consistency
             displayName: outletData.name ? outletData.name.toUpperCase() : outletData.name
+          });
+        }
+        
+        // Add a summary entry for this user showing total unique customers
+        if (outletsSnapshot.docs.length > 0) {
+          allOutlets.push({
+            id: `summary-${userId}`,
+            name: `${userName} - Total`,
+            userId: userId,
+            userEmail: userEmail,
+            userName: userName,
+            customerCount: userCustomers.length, // Total unique customers for this user
+            totalRevenue: 0,
+            displayName: `${userName.toUpperCase()} - TOTAL`,
+            isSummary: true
           });
         }
       } catch (error) {
@@ -484,18 +505,20 @@ router.get('/users/:userId/outlets', async (req, res) => {
       const outletData = outletDoc.data();
       const outletId = outletDoc.id;
       
-      // Count customers for this specific outlet (check multiple possible fields)
+            // Count customers for this specific outlet using outletName field
       const outletCustomers = userCustomers.filter(customer => {
-        // Check multiple possible outlet ID fields
-        const matches = customer.outletId === outletId || 
-               customer.registrationOutletId === outletId ||
-               customer.lastVisitOutletId === outletId ||
-               (customer.visitedOutlets && customer.visitedOutlets.includes(outletId));
+        // Use the outletName field to determine which outlet the customer belongs to
+        const customerOutletName = customer.outletName;
+        const outletName = outletData.name;
         
+        // Case-insensitive comparison to handle different casing
+        const matches = customerOutletName && outletName && 
+                       customerOutletName.toLowerCase() === outletName.toLowerCase();
+
         if (matches) {
-          console.log(`Customer ${customer.id} matches outlet ${outletId}`);
+          console.log(`Customer ${customer.id} belongs to outlet ${outletName} (outletName: ${customerOutletName})`);
         }
-        
+
         return matches;
       });
       
