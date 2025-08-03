@@ -148,8 +148,14 @@ router.get('/outlets', async (req, res) => {
           console.log(`Customer ${customer.id} has outletName: "${customerOutletName}", outlet "${outletName}"`);
           
           // Case-insensitive comparison to handle different casing
-          const matches = customerOutletName && outletName && 
-                         customerOutletName.toLowerCase() === outletName.toLowerCase();
+          // If customer has no outletName, assign to the first outlet (Main Outlet)
+          let matches = false;
+          if (customerOutletName && outletName) {
+            matches = customerOutletName.toLowerCase() === outletName.toLowerCase();
+          } else if (!customerOutletName && outletName && outletName.toLowerCase().includes('main')) {
+            // If customer has no outletName, assign to "Main Outlet"
+            matches = true;
+          }
           
           if (matches) {
             console.log(`Customer ${customer.id} belongs to outlet ${outletName} (outletName: ${customerOutletName})`);
@@ -195,20 +201,7 @@ router.get('/outlets', async (req, res) => {
           });
         }
         
-        // Add a summary entry for this user showing total unique customers
-        if (outletsSnapshot.docs.length > 0) {
-          allOutlets.push({
-            id: `summary-${userId}`,
-            name: `${userName} - Total`,
-            userId: userId,
-            userEmail: userEmail,
-            userName: userName,
-            customerCount: userCustomers.length, // Total unique customers for this user
-            totalRevenue: 0,
-            displayName: `${userName.toUpperCase()} - TOTAL`,
-            isSummary: true
-          });
-        }
+
       } catch (error) {
         console.log(`Could not fetch outlets for user ${userId}:`, error.message);
       }
@@ -512,8 +505,14 @@ router.get('/users/:userId/outlets', async (req, res) => {
         const outletName = outletData.name;
         
         // Case-insensitive comparison to handle different casing
-        const matches = customerOutletName && outletName && 
-                       customerOutletName.toLowerCase() === outletName.toLowerCase();
+        // If customer has no outletName, assign to the first outlet (Main Outlet)
+        let matches = false;
+        if (customerOutletName && outletName) {
+          matches = customerOutletName.toLowerCase() === outletName.toLowerCase();
+        } else if (!customerOutletName && outletName && outletName.toLowerCase().includes('main')) {
+          // If customer has no outletName, assign to "Main Outlet"
+          matches = true;
+        }
 
         if (matches) {
           console.log(`Customer ${customer.id} belongs to outlet ${outletName} (outletName: ${customerOutletName})`);
