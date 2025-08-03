@@ -251,7 +251,7 @@ router.get('/users/:userId/analytics', async (req, res) => {
       console.log(`Could not fetch outlets for user ${userId}:`, error.message);
     }
 
-    // Get user's customers from web_customers collection
+    // Get user's customers from web_customers collection (same as dashboard)
     let customers = [];
     try {
       const customersSnapshot = await admin.firestore()
@@ -268,22 +268,12 @@ router.get('/users/:userId/analytics', async (req, res) => {
       console.log(`Could not fetch customers for user ${userId}:`, error.message);
     }
 
-    // Get user's transactions from web_transactions collection
-    let transactions = [];
-    try {
-      const transactionsSnapshot = await admin.firestore()
-        .collection('users')
-        .doc(userId)
-        .collection('web_transactions')
-        .get();
-      
-      transactions = transactionsSnapshot.docs.map(doc => ({
-        ...doc.data(),
-        id: doc.id
-      }));
-    } catch (error) {
-      console.log(`Could not fetch transactions for user ${userId}:`, error.message);
-    }
+    // Create dummy transactions array for compatibility
+    const transactions = [];
+    
+    // Initialize analytics variables
+    let totalPointsEarned = 0;
+    let totalPointsRedeemed = 0;
 
     // Calculate analytics based on time period
     const now = new Date();
@@ -308,39 +298,61 @@ router.get('/users/:userId/analytics', async (req, res) => {
         break;
     }
 
-    // Filter transactions by time period
+    // Filter transactions by time period (same as dashboard logic)
     const filteredTransactions = transactions.filter(transaction => {
       const transactionDate = new Date(transaction.timestamp);
       return transactionDate >= startDate && transactionDate <= now;
     });
 
-    // Calculate metrics from transactions (same logic as dashboard)
-    let totalPointsEarned = 0;
-    let totalPointsRedeemed = 0;
-    
-    // Filter transactions by date range and calculate points (same as dashboard logic)
-    filteredTransactions.forEach(transaction => {
-      const pointsChanged = transaction.pointsChanged || 0;
-      const transactionType = transaction.transactionType || '';
-      const isManualTransaction = transaction.isManualTransaction || false;
-      const transactionDate = new Date(transaction.timestamp);
-      
-      // Only count transactions from the selected time period (same as dashboard)
-      if (transactionDate >= startDate && transactionDate <= now) {
-        // For EARNED transactions, only count manual ones (same as dashboard)
-        if (transactionType.toUpperCase() === 'EARNED' && isManualTransaction && pointsChanged > 0) {
-          totalPointsEarned += pointsChanged;
-        } else if (transactionType.toUpperCase() === 'REDEEMED' && pointsChanged < 0) {
-          totalPointsRedeemed += Math.abs(pointsChanged);
-        }
-      }
+    // Calculate metrics from customer records (transaction data is embedded in customer records)
+    // Use current available points (same as dashboard)
+    customers.forEach(customer => {
+      totalPointsEarned += customer.totalPoints || 0; // Current available points
+      totalPointsRedeemed += customer.totalPointsRedeemed || 0;
     });
     
     const totalRevenue = totalPointsEarned * 0.1; // 1 point = $0.10 (same as dashboard)
 
-    // Calculate total transactions count
+    // Calculate check-ins from web_visits collection (same as dashboard)
+    let checkInsToday = 0;
+    try {
+      const visitsSnapshot = await admin.firestore()
+        .collection('users')
+        .doc(userId)
+        .collection('web_visits')
+        .get();
+      
+      visitsSnapshot.docs.forEach(doc => {
+        const visit = doc.data();
+        const visitDate = new Date(visit.timestamp);
+        
+        // Count ALL visits in the time period (same as dashboard)
+        if (visitDate >= startDate && visitDate <= now) {
+          checkInsToday++;
+        }
+      });
+    } catch (error) {
+      console.log(`Could not fetch visits for user ${userId}:`, error.message);
+      // Fallback: Use customers collection if web_visits doesn't exist
+      customers.forEach(customer => {
+        const visitDate = new Date(customer.lastVisit);
+        if (visitDate >= startDate && visitDate <= now) {
+          checkInsToday++;
+        }
+      });
+    }
 
-    const totalTransactions = 0; // No transaction records available
+    // Calculate new signups from web_customers collection (same as dashboard)
+    let newSignupsToday = 0;
+    customers.forEach(customer => {
+      const joinDate = new Date(customer.dateJoined || customer.createdAt);
+      if (joinDate >= startDate && joinDate <= now) {
+        newSignupsToday++;
+      }
+    });
+
+    // Calculate total transactions count
+    const totalTransactions = filteredTransactions.length;
 
     // Generate recent activity
     const generateRecentActivity = (period) => {
@@ -444,7 +456,9 @@ router.get('/users/:userId/analytics', async (req, res) => {
         totalPointsRedeemed,
         totalTransactions,
         totalCustomers: customers.length,
-        totalOutlets: outlets.length
+        totalOutlets: outlets.length,
+        checkInsToday: checkInsToday,
+        newSignupsToday: newSignupsToday
       },
       dailyStats,
       recentActivity
