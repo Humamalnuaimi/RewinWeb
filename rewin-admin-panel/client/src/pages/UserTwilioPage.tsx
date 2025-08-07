@@ -646,7 +646,7 @@ const UserTwilioPage: React.FC = () => {
           
           <div style={{ 
             display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
             gap: '1.5rem',
             marginBottom: '2rem'
           }}>
@@ -665,6 +665,7 @@ const UserTwilioPage: React.FC = () => {
               value={formData.accountSid}
               onChange={(e) => setFormData(prev => ({ ...prev, accountSid: e.target.value }))}
               placeholder="Account SID from Twilio Console"
+              autoComplete="off"
               style={{
                 width: '100%',
                 padding: '0.75rem',
@@ -693,6 +694,7 @@ const UserTwilioPage: React.FC = () => {
               value={formData.authToken}
               onChange={(e) => setFormData(prev => ({ ...prev, authToken: e.target.value }))}
               placeholder="Auth Token from Twilio Console"
+              autoComplete="new-password"
               style={{
                 width: '100%',
                 padding: '0.75rem',
@@ -720,6 +722,7 @@ const UserTwilioPage: React.FC = () => {
               value={formData.phoneNumber}
               onChange={(e) => setFormData(prev => ({ ...prev, phoneNumber: e.target.value }))}
               placeholder="Twilio phone number (e.g., +1234567890)"
+              autoComplete="off"
               style={{
                 width: '100%',
                 padding: '0.75rem',
@@ -747,6 +750,7 @@ const UserTwilioPage: React.FC = () => {
               value={formData.accountName}
               onChange={(e) => setFormData(prev => ({ ...prev, accountName: e.target.value }))}
               placeholder={user ? `${user.fullName || user.displayName || user.email.split('@')[0]}'s Twilio Account` : "Account Name"}
+              autoComplete="off"
               style={{
                 width: '100%',
                 padding: '0.75rem',
@@ -782,7 +786,7 @@ const UserTwilioPage: React.FC = () => {
           
           <div style={{ 
             display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
             gap: '1.5rem',
             marginBottom: '2rem'
           }}>
@@ -801,6 +805,7 @@ const UserTwilioPage: React.FC = () => {
               value={formData.monthlyLimit}
               onChange={(e) => setFormData(prev => ({ ...prev, monthlyLimit: parseInt(e.target.value) || 0 }))}
               min="1"
+              autoComplete="off"
               style={{
                 width: '100%',
                 padding: '0.75rem',
@@ -829,6 +834,7 @@ const UserTwilioPage: React.FC = () => {
               value={formData.costLimit}
               onChange={(e) => setFormData(prev => ({ ...prev, costLimit: parseFloat(e.target.value) || 0 }))}
               min="0"
+              autoComplete="off"
               style={{
                 width: '100%',
                 padding: '0.75rem',
