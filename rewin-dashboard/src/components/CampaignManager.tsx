@@ -161,14 +161,12 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
         throw new Error('No authenticated user');
       }
       
-      // Get business ID from user profile
-      const userDocSnapshot = await getDocs(query(collection(firestore, 'users')));
+      // Get business ID from current user's profile (direct document read)
+      const userDocRef = doc(firestore, 'users', user.uid);
+      const userDocSnapshot = await getDoc(userDocRef);
       
-      // Find the user document
-      const userDoc = userDocSnapshot.docs.find(d => d.id === user.uid);
-      
-      if (userDoc && userDoc.exists()) {
-        const userData = userDoc.data() as any;
+      if (userDocSnapshot.exists()) {
+        const userData = userDocSnapshot.data() as any;
         const businessId = userData?.businessId;
         
         if (businessId) {
