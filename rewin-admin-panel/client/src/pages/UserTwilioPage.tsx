@@ -673,7 +673,6 @@ const UserTwilioPage: React.FC = () => {
                 borderRadius: '12px',
                 color: 'white',
                 fontSize: '0.875rem',
-                boxSizing: 'border-box',
                 fontFamily: 'monospace',
                 boxSizing: 'border-box'
               }}
