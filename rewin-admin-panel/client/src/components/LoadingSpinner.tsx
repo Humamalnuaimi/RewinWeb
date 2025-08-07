@@ -57,15 +57,15 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
       }}>
         {/* Animated Logo */}
         {showAppName && (
-          <div style={{ marginBottom: '3rem', position: 'relative', width: '200px', height: '200px', margin: '0 auto' }}>
+          <div style={{ marginBottom: '3rem', position: 'relative', width: '300px', height: '300px', margin: '0 auto' }}>
             {/* Outer rotating ring around logo */}
             <div style={{
               position: 'absolute',
               top: '50%',
               left: '50%',
               transform: 'translate(-50%, -50%)',
-              width: '180px',
-              height: '180px',
+              width: '280px',
+              height: '280px',
               border: '3px solid rgba(255, 255, 255, 0.2)',
               borderTop: '3px solid rgba(255, 255, 255, 0.8)',
               borderRadius: '50%',
@@ -78,8 +78,8 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
               top: '50%',
               left: '50%',
               transform: 'translate(-50%, -50%)',
-              width: '160px',
-              height: '160px',
+              width: '240px',
+              height: '240px',
               border: '2px solid rgba(255, 255, 255, 0.3)',
               borderRadius: '50%',
               animation: 'pulse 2s ease-in-out infinite'
@@ -93,11 +93,11 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
                   position: 'absolute',
                   top: '50%',
                   left: '50%',
-                  width: '10px',
-                  height: '10px',
+                  width: '14px',
+                  height: '14px',
                   backgroundColor: 'rgba(255, 255, 255, 0.8)',
                   borderRadius: '50%',
-                  transform: `translate(-50%, -50%) rotate(${i * 45}deg) translateY(-70px)`,
+                  transform: `translate(-50%, -50%) rotate(${i * 45}deg) translateY(-120px)`,
                   animation: `spin 4s linear infinite`,
                   animationDelay: `${i * 0.1}s`,
                   boxShadow: '0 0 10px rgba(255, 255, 255, 0.5)'
@@ -114,8 +114,8 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
                 top: '50%',
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
-                width: '120px',
-                height: '120px',
+                              width: '180px',
+              height: '180px',
                 objectFit: 'contain',
                 filter: 'drop-shadow(0 5px 15px rgba(0,0,0,0.3)) drop-shadow(0 0 30px rgba(255, 255, 255, 0.4))',
                 animation: 'logoFloat 3s ease-in-out infinite',
@@ -154,13 +154,7 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
           gap: '1rem',
           marginBottom: '1.5rem'
         }}>
-          {/* Spinning Emoji */}
-          <div style={{
-            fontSize: '2.5rem',
-            animation: 'spin 2s linear infinite'
-          }}>
-            🔄
-          </div>
+
           
           {/* Bouncing Dots */}
           <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -183,7 +177,7 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
         {/* Loading Message */}
         <p style={{
           color: 'rgba(255, 255, 255, 0.9)',
-          fontSize: '1.2rem',
+          fontSize: '2rem',
           margin: 0,
           fontWeight: '500',
           animation: 'pulse 2s infinite'
@@ -193,7 +187,7 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
 
         {/* Progress Bar */}
         <div style={{
-          width: '300px',
+          width: '400px',
           height: '4px',
           backgroundColor: 'rgba(255, 255, 255, 0.2)',
           borderRadius: '2px',
@@ -217,8 +211,8 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
         }
 
         @keyframes spin {
-          from { transform: translate(-50%, -50%) rotate(0deg) translateY(-70px); }
-          to { transform: translate(-50%, -50%) rotate(360deg) translateY(-70px); }
+          from { transform: translate(-50%, -50%) rotate(0deg) translateY(-120px); }
+          to { transform: translate(-50%, -50%) rotate(360deg) translateY(-120px); }
         }
 
         @keyframes logoFloat {
