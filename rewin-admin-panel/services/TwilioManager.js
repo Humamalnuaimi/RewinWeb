@@ -17,7 +17,8 @@ class TwilioManager {
   encrypt(text) {
     const algorithm = 'aes-256-gcm';
     const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipher(algorithm, this.encryptionKey);
+    const key = crypto.scryptSync(this.encryptionKey, 'salt', 32);
+    const cipher = crypto.createCipherGCM(algorithm, key, iv);
     
     let encrypted = cipher.update(text, 'utf8', 'hex');
     encrypted += cipher.final('hex');
@@ -36,7 +37,9 @@ class TwilioManager {
    */
   decrypt(encryptedData) {
     const algorithm = 'aes-256-gcm';
-    const decipher = crypto.createDecipher(algorithm, this.encryptionKey);
+    const iv = Buffer.from(encryptedData.iv, 'hex');
+    const key = crypto.scryptSync(this.encryptionKey, 'salt', 32);
+    const decipher = crypto.createDecipherGCM(algorithm, key, iv);
     
     decipher.setAuthTag(Buffer.from(encryptedData.authTag, 'hex'));
     
