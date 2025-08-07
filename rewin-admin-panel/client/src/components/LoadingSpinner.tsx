@@ -55,40 +55,78 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
         textAlign: 'center',
         animation: 'fadeInUp 0.8s ease-out'
       }}>
-        {/* App Logo and Name */}
+        {/* Animated Logo */}
         {showAppName && (
-          <div style={{ marginBottom: '2rem' }}>
+          <div style={{ marginBottom: '3rem', position: 'relative' }}>
+            {/* Outer rotating ring */}
             <div style={{
-              width: '100px',
-              height: '100px',
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: '160px',
+              height: '160px',
+              border: '3px solid rgba(255, 255, 255, 0.2)',
+              borderTop: '3px solid rgba(255, 255, 255, 0.8)',
+              borderRadius: '50%',
+              animation: 'rotate 3s linear infinite'
+            }} />
+            
+            {/* Middle pulsing ring */}
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: '140px',
+              height: '140px',
+              border: '2px solid rgba(255, 255, 255, 0.3)',
+              borderRadius: '50%',
+              animation: 'pulse 2s ease-in-out infinite'
+            }} />
+            
+            {/* Inner spinning dots */}
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <div
+                key={i}
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  width: '8px',
+                  height: '8px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.7)',
+                  borderRadius: '50%',
+                  transform: `translate(-50%, -50%) rotate(${i * 60}deg) translateY(-50px)`,
+                  animation: `spin 4s linear infinite`,
+                  animationDelay: `${i * 0.2}s`
+                }}
+              />
+            ))}
+            
+            {/* Central Logo */}
+            <div style={{
+              position: 'relative',
+              width: '120px',
+              height: '120px',
               background: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)',
-              borderRadius: '25px',
+              borderRadius: '30px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              margin: '0 auto 1.5rem auto',
-              boxShadow: '0 20px 40px rgba(255, 107, 107, 0.3)',
-              animation: 'bounce 2s infinite'
+              margin: '0 auto',
+              boxShadow: '0 25px 50px rgba(255, 107, 107, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
+              animation: 'logoFloat 3s ease-in-out infinite',
+              border: '3px solid rgba(255, 255, 255, 0.1)'
             }}>
               <span style={{ 
-                fontSize: '3rem', 
+                fontSize: '4rem', 
                 fontWeight: '900',
                 color: 'white',
-                textShadow: '3px 3px 6px rgba(0,0,0,0.3)'
+                textShadow: '0 3px 6px rgba(0,0,0,0.3)',
+                animation: 'logoGlow 2s ease-in-out infinite alternate'
               }}>R</span>
             </div>
-            
-            <h1 style={{ 
-              fontSize: '3.5rem', 
-              fontWeight: '900',
-              margin: '0',
-              color: 'white',
-              textShadow: '3px 3px 6px rgba(0,0,0,0.3)',
-              letterSpacing: '-2px',
-              animation: 'glow 2s ease-in-out infinite alternate'
-            }}>
-              Rewin Admin
-            </h1>
           </div>
         )}
 
@@ -157,9 +195,34 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
 
       {/* CSS Animations */}
       <style>{`
+        @keyframes rotate {
+          from { transform: translate(-50%, -50%) rotate(0deg); }
+          to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
         @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
+          from { transform: translate(-50%, -50%) rotate(0deg) translateY(-50px); }
+          to { transform: translate(-50%, -50%) rotate(360deg) translateY(-50px); }
+        }
+
+        @keyframes logoFloat {
+          0%, 100% { 
+            transform: translateY(0px) scale(1);
+            box-shadow: 0 25px 50px rgba(255, 107, 107, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+          }
+          50% { 
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: 0 35px 60px rgba(255, 107, 107, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+          }
+        }
+
+        @keyframes logoGlow {
+          from { 
+            text-shadow: 0 3px 6px rgba(0,0,0,0.3), 0 0 20px rgba(255, 255, 255, 0.3); 
+          }
+          to { 
+            text-shadow: 0 3px 6px rgba(0,0,0,0.3), 0 0 30px rgba(255, 255, 255, 0.6), 0 0 40px rgba(255, 107, 107, 0.4); 
+          }
         }
 
         @keyframes bounce {
@@ -174,13 +237,14 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
         }
 
         @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.6; }
-        }
-
-        @keyframes glow {
-          from { text-shadow: 0 0 20px rgba(255, 255, 255, 0.5); }
-          to { text-shadow: 0 0 30px rgba(255, 255, 255, 0.8), 0 0 40px rgba(255, 255, 255, 0.6); }
+          0%, 100% { 
+            opacity: 1; 
+            transform: translate(-50%, -50%) scale(1);
+          }
+          50% { 
+            opacity: 0.6; 
+            transform: translate(-50%, -50%) scale(1.05);
+          }
         }
 
         @keyframes fadeInUp {
