@@ -32,11 +32,27 @@ app.use(cors({
   credentials: true
 }));
 
-// Rate limiting
+// Rate limiting - More generous limits for development
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000 // limit each IP to 1000 requests per windowMs
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 5000, // Increased from 1000 to 5000 for development
+  message: {
+    error: 'Too many requests from this IP, please try again later.',
+    retryAfter: Math.ceil((parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000) / 1000)
+  }
 });
+
+// Special rate limit for auth endpoints (more lenient)
+const authLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute for auth
+  message: {
+    error: 'Too many authentication requests, please try again later.',
+    retryAfter: 60
+  }
+});
+
+app.use('/api/auth', authLimiter);
 app.use('/api/', limiter);
 
 // Logging

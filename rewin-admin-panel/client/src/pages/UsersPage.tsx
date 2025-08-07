@@ -16,6 +16,7 @@ import {
 import { usersAPI } from '../services/api';
 import Modal from '../components/Modal';
 import Toast from '../components/Toast';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 interface User {
   uid: string;
@@ -164,11 +165,7 @@ const UsersPage: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="loading-spinner">
-        <div className="spinner"></div>
-      </div>
-    );
+    return <LoadingSpinner message="Loading users..." showAppName={true} />;
   }
 
   return (
