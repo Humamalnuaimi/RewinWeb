@@ -107,7 +107,7 @@ const UserDetailPage: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'customers' | 'businesses' | 'analytics'>('overview');
-  const [timePeriod, setTimePeriod] = useState<TimePeriod>('all');
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>('today');
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   useEffect(() => {
