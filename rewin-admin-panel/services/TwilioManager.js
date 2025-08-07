@@ -15,20 +15,17 @@ class TwilioManager {
    * Encrypt sensitive data (auth tokens)
    */
   encrypt(text) {
-    const algorithm = 'aes-256-gcm';
+    const algorithm = 'aes-256-cbc';
     const iv = crypto.randomBytes(16);
     const key = crypto.scryptSync(this.encryptionKey, 'salt', 32);
-    const cipher = crypto.createCipherGCM(algorithm, key, iv);
+    const cipher = crypto.createCipheriv(algorithm, key, iv);
     
     let encrypted = cipher.update(text, 'utf8', 'hex');
     encrypted += cipher.final('hex');
     
-    const authTag = cipher.getAuthTag();
-    
     return {
       encrypted,
-      iv: iv.toString('hex'),
-      authTag: authTag.toString('hex')
+      iv: iv.toString('hex')
     };
   }
 
@@ -36,12 +33,10 @@ class TwilioManager {
    * Decrypt sensitive data
    */
   decrypt(encryptedData) {
-    const algorithm = 'aes-256-gcm';
+    const algorithm = 'aes-256-cbc';
     const iv = Buffer.from(encryptedData.iv, 'hex');
     const key = crypto.scryptSync(this.encryptionKey, 'salt', 32);
-    const decipher = crypto.createDecipherGCM(algorithm, key, iv);
-    
-    decipher.setAuthTag(Buffer.from(encryptedData.authTag, 'hex'));
+    const decipher = crypto.createDecipheriv(algorithm, key, iv);
     
     let decrypted = decipher.update(encryptedData.encrypted, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
