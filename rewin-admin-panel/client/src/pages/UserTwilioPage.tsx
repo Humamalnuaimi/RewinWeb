@@ -628,7 +628,8 @@ const UserTwilioPage: React.FC = () => {
 
         {/* Account Credentials Section */}
         <div style={{
-          marginBottom: '2rem'
+          marginBottom: '3rem',
+          padding: '1rem 0'
         }}>
           <h4 style={{ 
             color: 'rgba(255, 255, 255, 0.9)', 
@@ -645,9 +646,9 @@ const UserTwilioPage: React.FC = () => {
           
           <div style={{ 
             display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
-            gap: '1rem',
-            marginBottom: '1.5rem'
+            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
+            gap: '1.5rem',
+            marginBottom: '2rem'
           }}>
           <div>
             <label style={{ 
@@ -672,7 +673,9 @@ const UserTwilioPage: React.FC = () => {
                 borderRadius: '12px',
                 color: 'white',
                 fontSize: '0.875rem',
-                fontFamily: 'monospace'
+                boxSizing: 'border-box',
+                fontFamily: 'monospace',
+                boxSizing: 'border-box'
               }}
             />
           </div>
@@ -698,7 +701,8 @@ const UserTwilioPage: React.FC = () => {
                 border: '1px solid rgba(255, 255, 255, 0.2)',
                 borderRadius: '12px',
                 color: 'white',
-                fontSize: '0.875rem'
+                fontSize: '0.875rem',
+                boxSizing: 'border-box'
               }}
             />
           </div>
@@ -724,7 +728,8 @@ const UserTwilioPage: React.FC = () => {
                 border: '1px solid rgba(255, 255, 255, 0.2)',
                 borderRadius: '12px',
                 color: 'white',
-                fontSize: '0.875rem'
+                fontSize: '0.875rem',
+                boxSizing: 'border-box'
               }}
             />
           </div>
@@ -750,7 +755,8 @@ const UserTwilioPage: React.FC = () => {
                 border: '1px solid rgba(255, 255, 255, 0.2)',
                 borderRadius: '12px',
                 color: 'white',
-                fontSize: '0.875rem'
+                fontSize: '0.875rem',
+                boxSizing: 'border-box'
               }}
             />
           </div>
@@ -759,7 +765,8 @@ const UserTwilioPage: React.FC = () => {
 
         {/* Usage Limits Section */}
         <div style={{
-          marginBottom: '2rem'
+          marginBottom: '3rem',
+          padding: '1rem 0'
         }}>
           <h4 style={{ 
             color: 'rgba(255, 255, 255, 0.9)', 
@@ -776,9 +783,9 @@ const UserTwilioPage: React.FC = () => {
           
           <div style={{ 
             display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-            gap: '1rem',
-            marginBottom: '1.5rem'
+            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+            gap: '1.5rem',
+            marginBottom: '2rem'
           }}>
             <div>
               <label style={{ 
@@ -802,7 +809,8 @@ const UserTwilioPage: React.FC = () => {
                 border: '1px solid rgba(255, 255, 255, 0.2)',
                 borderRadius: '12px',
                 color: 'white',
-                fontSize: '0.875rem'
+                fontSize: '0.875rem',
+                boxSizing: 'border-box'
               }}
             />
           </div>
@@ -829,7 +837,8 @@ const UserTwilioPage: React.FC = () => {
                 border: '1px solid rgba(255, 255, 255, 0.2)',
                 borderRadius: '12px',
                 color: 'white',
-                fontSize: '0.875rem'
+                fontSize: '0.875rem',
+                boxSizing: 'border-box'
               }}
             />
           </div>
