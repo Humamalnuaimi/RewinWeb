@@ -174,16 +174,7 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
           </div>
         </div>
 
-        {/* Loading Message */}
-        <p style={{
-          color: 'rgba(255, 255, 255, 0.9)',
-          fontSize: '2rem',
-          margin: 0,
-          fontWeight: '500',
-          animation: 'pulse 2s infinite'
-        }}>
-          {message}
-        </p>
+
 
         {/* Progress Bar */}
         <div style={{
