@@ -23,7 +23,7 @@ try {
 }
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 // Security middleware
 app.use(helmet());
@@ -52,6 +52,7 @@ app.use('/api/users', require('./routes/users'));
 app.use('/api/customers', require('./routes/customers'));
 app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/system', require('./routes/system'));
+app.use('/api/twilio', require('./routes/twilio'));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

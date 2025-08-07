@@ -45,7 +45,7 @@ const UsersPage: React.FC = () => {
     confirmPassword: ''
   });
   const [addUserLoading, setAddUserLoading] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; onClose: () => void } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -59,11 +59,11 @@ const UsersPage: React.FC = () => {
       if (response.success) {
         setUsers(response.users);
       } else {
-        setToast({ message: 'Failed to fetch users', type: 'error', onClose: () => setToast(null) });
+        setToast({ message: 'Failed to fetch users', type: 'error' });
       }
     } catch (error) {
       console.error('Error fetching users:', error);
-      setToast({ message: 'Error loading users', type: 'error', onClose: () => setToast(null) });
+      setToast({ message: 'Error loading users', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -71,11 +71,11 @@ const UsersPage: React.FC = () => {
 
   const handleViewUser = (user: User) => {
     console.log('View user clicked:', user);
-    console.log('Navigating to:', `/users/${user.uid}/analytics`);
+    console.log('Navigating to:', `/users/${user.uid}`);
     console.log('Current location:', window.location.href);
     
     try {
-      navigate(`/users/${user.uid}/analytics`);
+      navigate(`/users/${user.uid}`);
       console.log('Navigation called successfully');
     } catch (error) {
       console.error('Navigation error:', error);
@@ -108,17 +108,17 @@ const UsersPage: React.FC = () => {
       
       // Validate form
       if (!addUserForm.email || !addUserForm.displayName || !addUserForm.password) {
-        setToast({ message: 'Please fill in all required fields', type: 'error', onClose: () => setToast(null) });
+        setToast({ message: 'Please fill in all required fields', type: 'error' });
         return;
       }
       
       if (addUserForm.password !== addUserForm.confirmPassword) {
-        setToast({ message: 'Passwords do not match', type: 'error', onClose: () => setToast(null) });
+        setToast({ message: 'Passwords do not match', type: 'error' });
         return;
       }
       
       if (addUserForm.password.length < 6) {
-        setToast({ message: 'Password must be at least 6 characters', type: 'error', onClose: () => setToast(null) });
+        setToast({ message: 'Password must be at least 6 characters', type: 'error' });
         return;
       }
       
@@ -130,15 +130,15 @@ const UsersPage: React.FC = () => {
       });
       
       if (response.success) {
-        setToast({ message: 'User created successfully', type: 'success', onClose: () => setToast(null) });
+        setToast({ message: 'User created successfully', type: 'success' });
         setShowAddModal(false);
         fetchUsers(); // Refresh the users list
       } else {
-        setToast({ message: response.error || 'Failed to create user', type: 'error', onClose: () => setToast(null) });
+        setToast({ message: response.error || 'Failed to create user', type: 'error' });
       }
     } catch (error) {
       console.error('Error creating user:', error);
-      setToast({ message: 'Error creating user', type: 'error', onClose: () => setToast(null) });
+      setToast({ message: 'Error creating user', type: 'error' });
     } finally {
       setAddUserLoading(false);
     }
@@ -368,7 +368,7 @@ const UsersPage: React.FC = () => {
                           }}
                           onClick={() => {
                             console.log('Customer count clicked for user:', user.uid);
-                            navigate(`/users/${user.uid}/analytics`);
+                            navigate(`/users/${user.uid}`);
                           }}
                           onMouseEnter={(e) => {
                             e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
@@ -772,7 +772,7 @@ const UsersPage: React.FC = () => {
       )}
 
       {/* Toast */}
-      {toast && <Toast {...toast} />}
+      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
     </div>
   );
 };

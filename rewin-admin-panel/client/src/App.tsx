@@ -14,6 +14,7 @@ import UserAnalyticsPage from './pages/UserAnalyticsPage';
 import CustomerDetailPage from './pages/CustomerDetailPage';
 import OutletDetailPage from './pages/OutletDetailPage';
 import OutletsPage from './pages/OutletsPage';
+import UserTwilioPage from './pages/UserTwilioPage';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -145,6 +146,15 @@ const AppContent: React.FC = () => {
                 <Layout>
                   <UserAnalyticsPage />
                 </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/admin/users/:userId/twilio"
+            element={
+              <ProtectedRoute>
+                <UserTwilioPage />
               </ProtectedRoute>
             }
           />

@@ -202,16 +202,20 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
         return Promise.resolve();
       }
       
-      // Send SMS using the multi-account system
-      const { handleSMSRequest } = await import('../api/send-sms');
-      
-      const result = await handleSMSRequest({
-        userId: user.uid,
-        accountId: businessId, // Use businessId as accountId for campaigns
-        phoneNumber: accountPhoneNumber,
-        message: message,
-        recipients: [phoneNumber]
+      // Send SMS using the new multi-tenant Twilio system
+      const response = await fetch('http://localhost:5001/api/twilio/customer/send-sms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          userId: user.uid,
+          to: phoneNumber,
+          message: message
+        })
       });
+      
+      const result = await response.json();
       
       if (result.success) {
         console.log(`✅ SMS sent successfully to ${phoneNumber} via ${accountPhoneNumber}`);

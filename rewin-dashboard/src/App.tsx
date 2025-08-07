@@ -4,6 +4,7 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { auth, firestore } from './firebase/config';
 import './App.css';
 import CampaignManager from './components/CampaignManager';
+import SMSCampaignManager from './components/SMSCampaignManager';
 
 import AdminDashboard from './components/AdminDashboard';
 

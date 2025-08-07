@@ -43,7 +43,7 @@ const OutletsPage: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedOutlet, setSelectedOutlet] = useState<Outlet | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; onClose: () => void } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -57,7 +57,7 @@ const OutletsPage: React.FC = () => {
       setOutlets(response);
     } catch (error) {
       console.error('Error fetching outlets:', error);
-      setToast({ message: 'Error loading outlets', type: 'error', onClose: () => setToast(null) });
+      setToast({ message: 'Error loading outlets', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -514,7 +514,7 @@ const OutletsPage: React.FC = () => {
       )}
 
       {/* Toast */}
-      {toast && <Toast {...toast} />}
+              {toast && <Toast {...toast} onClose={() => setToast(null)} />}
     </div>
   );
 };
