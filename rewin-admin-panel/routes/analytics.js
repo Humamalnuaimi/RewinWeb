@@ -425,7 +425,15 @@ router.get('/users/:userId/analytics', async (req, res) => {
       
       visitsSnapshot.docs.forEach(doc => {
         const visit = doc.data();
-        const visitDate = new Date(visit.timestamp);
+        // Handle Firebase timestamp properly (same as customer dashboard)
+        let visitDate;
+        if (visit.timestamp && visit.timestamp.toDate) {
+          visitDate = visit.timestamp.toDate();
+        } else if (visit.timestamp instanceof Date) {
+          visitDate = visit.timestamp;
+        } else {
+          visitDate = new Date(visit.timestamp);
+        }
         
         // Count ALL visits in the time period (same as dashboard)
         if (visitDate >= startDate && visitDate <= endDate) {

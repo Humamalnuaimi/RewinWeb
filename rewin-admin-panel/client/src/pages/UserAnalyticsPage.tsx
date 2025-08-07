@@ -232,20 +232,34 @@ const UserAnalyticsPage: React.FC = () => {
         ...(selectedOutlet !== 'all' && { outletId: selectedOutlet })
       });
 
-      const response = await analyticsAPI.getUserAnalytics(userId!, params.toString());
+      // Fetch analytics data from the backend
+      const analyticsResponse = await analyticsAPI.getUserAnalytics(userId!, params.toString());
+      
+      // For 'all' time period, we need to get total check-ins from customer data
+      let totalCheckIns = 0;
+      if (timePeriod === 'all') {
+        const customersResponse = await customersAPI.getByUser(userId!);
+        totalCheckIns = customersResponse.reduce((total: number, customer: any) => {
+          return total + (customer.visitCount || 0);
+        }, 0);
+      } else {
+        // For specific time periods, use the backend's checkInsToday field
+        // which represents check-ins for the selected period
+        totalCheckIns = analyticsResponse.analytics?.checkInsToday || 0;
+      }
       
       // Extract analytics data from the response
       // The backend now returns the correct structure with totalPointsEarned and totalPointsRedeemed
       const analyticsData = {
-        totalCustomers: response.analytics?.totalCustomers || 0,
-        totalRevenue: response.analytics?.totalRevenue || 0,
-        totalPointsEarned: response.analytics?.totalPointsEarned || 0,
-        totalPointsRedeemed: response.analytics?.totalPointsRedeemed || 0,
-        totalCheckIns: response.analytics?.totalTransactions || 0,
+        totalCustomers: analyticsResponse.analytics?.totalCustomers || 0,
+        totalRevenue: analyticsResponse.analytics?.totalRevenue || 0,
+        totalPointsEarned: analyticsResponse.analytics?.totalPointsEarned || 0,
+        totalPointsRedeemed: analyticsResponse.analytics?.totalPointsRedeemed || 0,
+        totalCheckIns: totalCheckIns, // Use actual backend data for specific periods
         averageCustomerRating: 0, // This might need to be calculated separately
         topPerformingOutlet: '', // This might need to be calculated separately
-        dailyStats: response.dailyStats || [],
-        recentActivity: response.recentActivity || [],
+        dailyStats: analyticsResponse.dailyStats || [],
+        recentActivity: analyticsResponse.recentActivity || [],
         outletPerformance: {} // This might need to be calculated separately
       };
       

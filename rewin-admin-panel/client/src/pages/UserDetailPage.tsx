@@ -35,6 +35,7 @@ import {
 import { usersAPI, analyticsAPI, outletsAPI, customersAPI } from '../services/api';
 import Modal from '../components/Modal';
 import Toast, { ToastProps } from '../components/Toast';
+import TwilioSetup from '../components/TwilioSetup';
 
 interface User {
   uid: string;
@@ -103,7 +104,7 @@ const UserDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [toast, setToast] = useState<ToastProps | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'customers' | 'businesses' | 'analytics'>('overview');
   const [timePeriod, setTimePeriod] = useState<TimePeriod>('all');
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
@@ -140,7 +141,7 @@ const UserDetailPage: React.FC = () => {
 
     } catch (error) {
       console.error('Error fetching user data:', error);
-      setToast({ message: 'Failed to fetch user data', type: 'error', onClose: () => setToast(null) });
+      setToast({ message: 'Failed to fetch user data', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -149,11 +150,44 @@ const UserDetailPage: React.FC = () => {
   const fetchAnalytics = async () => {
     try {
       setAnalyticsLoading(true);
-      const analyticsResponse = await analyticsAPI.getUserAnalytics(userId!, timePeriod);
-      setAnalytics(analyticsResponse);
+      
+      const params = new URLSearchParams({
+        timePeriod
+      });
+
+      // Fetch analytics data from the backend
+      const analyticsResponse = await analyticsAPI.getUserAnalytics(userId!, params.toString());
+      
+      // For 'all' time period, we need to get total check-ins from customer data
+      let totalCheckIns = 0;
+      if (timePeriod === 'all') {
+        const customersResponse = await customersAPI.getByUser(userId!);
+        totalCheckIns = customersResponse.reduce((total: number, customer: any) => {
+          return total + (customer.visitCount || 0);
+        }, 0);
+      } else {
+        // For specific time periods, use the backend's checkInsToday field
+        // which represents check-ins for the selected period
+        totalCheckIns = analyticsResponse.analytics?.checkInsToday || 0;
+      }
+      
+      // Extract analytics data from the response with the correct structure
+      const analyticsData = {
+        totalCustomers: analyticsResponse.analytics?.totalCustomers || 0,
+        totalRevenue: analyticsResponse.analytics?.totalRevenue || 0,
+        totalPointsEarned: analyticsResponse.analytics?.totalPointsEarned || 0,
+        totalPointsRedeemed: analyticsResponse.analytics?.totalPointsRedeemed || 0,
+        totalCheckIns: totalCheckIns, // Use actual backend data for specific periods
+        averageCustomerRating: analyticsResponse.analytics?.averageRating || 0,
+        topPerformingOutlet: analyticsResponse.analytics?.topPerformingOutlet || '',
+        dailyStats: analyticsResponse.dailyStats || [],
+        recentActivity: analyticsResponse.recentActivity || []
+      };
+      
+      setAnalytics(analyticsData);
     } catch (error) {
       console.error('Error fetching analytics:', error);
-      setToast({ message: 'Failed to fetch analytics data', type: 'error', onClose: () => setToast(null) });
+      setToast({ message: 'Failed to fetch analytics data', type: 'error' });
     } finally {
       setAnalyticsLoading(false);
     }
@@ -173,11 +207,11 @@ const UserDetailPage: React.FC = () => {
   const handleDelete = async () => {
     try {
       await usersAPI.delete(userId!);
-      setToast({ message: 'User deleted successfully', type: 'success', onClose: () => setToast(null) });
+              setToast({ message: 'User deleted successfully', type: 'success' });
       navigate('/users');
     } catch (error) {
       console.error('Error deleting user:', error);
-      setToast({ message: 'Failed to delete user', type: 'error', onClose: () => setToast(null) });
+      setToast({ message: 'Failed to delete user', type: 'error' });
     }
   };
 
@@ -370,6 +404,36 @@ const UserDetailPage: React.FC = () => {
               >
                 <Edit size={16} />
                 {editing ? 'Cancel' : 'Edit'}
+              </button>
+
+              <button
+                onClick={() => navigate(`/admin/users/${userId}/twilio`)}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  transition: 'all 0.3s ease',
+                  fontSize: '0.875rem',
+                  fontWeight: '600',
+                  boxShadow: '0 4px 15px rgba(59, 130, 246, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(59, 130, 246, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 15px rgba(59, 130, 246, 0.3)';
+                }}
+              >
+                <Phone size={16} />
+                Twilio Management
               </button>
               
               <button
@@ -939,6 +1003,81 @@ const UserDetailPage: React.FC = () => {
                 border: '1px solid rgba(139, 92, 246, 0.3)'
               }}>
                 <CheckCircle size={28} color="#8b5cf6" />
+              </div>
+            </div>
+          </div>
+
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.05)',
+            backdropFilter: 'blur(20px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '20px',
+            padding: '2rem',
+            position: 'relative',
+            overflow: 'hidden',
+            transition: 'all 0.3s ease',
+            cursor: 'pointer'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-5px)';
+            e.currentTarget.style.boxShadow = '0 10px 30px rgba(239, 68, 68, 0.2)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}>
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '4px',
+              background: 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)',
+              borderRadius: '20px 20px 0 0'
+            }} />
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              position: 'relative',
+              zIndex: 1
+            }}>
+              <div>
+                <p style={{
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  margin: '0 0 0.5rem 0'
+                }}>
+                  Points Redeemed
+                </p>
+                <p style={{
+                  color: 'white',
+                  fontSize: '2.5rem',
+                  fontWeight: '700',
+                  margin: '0 0 0.25rem 0'
+                }}>
+                  {formatNumber(analytics?.totalPointsRedeemed || 0)}
+                </p>
+                <p style={{
+                  color: 'rgba(255, 255, 255, 0.6)',
+                  fontSize: '0.75rem',
+                  margin: 0
+                }}>
+                  {getTimePeriodLabel(timePeriod)}
+                </p>
+              </div>
+              <div style={{
+                width: '60px',
+                height: '60px',
+                background: 'rgba(239, 68, 68, 0.2)',
+                borderRadius: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '1px solid rgba(239, 68, 68, 0.3)'
+              }}>
+                <Gift size={28} color="#ef4444" />
               </div>
             </div>
           </div>
@@ -2340,7 +2479,7 @@ const UserDetailPage: React.FC = () => {
           </div>
         </Modal>
 
-        {toast && <Toast {...toast} />}
+        {toast && <Toast {...toast} onClose={() => setToast(null)} />}
       </div>
     </div>
   );
