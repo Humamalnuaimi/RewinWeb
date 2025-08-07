@@ -117,15 +117,36 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
               margin: '0 auto',
               boxShadow: '0 25px 50px rgba(255, 107, 107, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
               animation: 'logoFloat 3s ease-in-out infinite',
-              border: '3px solid rgba(255, 255, 255, 0.1)'
+              border: '3px solid rgba(255, 255, 255, 0.1)',
+              overflow: 'hidden'
             }}>
-              <span style={{ 
-                fontSize: '4rem', 
-                fontWeight: '900',
-                color: 'white',
-                textShadow: '0 3px 6px rgba(0,0,0,0.3)',
-                animation: 'logoGlow 2s ease-in-out infinite alternate'
-              }}>R</span>
+              <img 
+                src="/R.png" 
+                alt="Rewin Logo" 
+                style={{
+                  width: '80px',
+                  height: '80px',
+                  objectFit: 'contain',
+                  filter: 'drop-shadow(0 3px 6px rgba(0,0,0,0.3))',
+                  animation: 'logoGlow 2s ease-in-out infinite alternate'
+                }}
+                onError={(e) => {
+                  // Fallback to text if image fails to load
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                  const parent = target.parentElement;
+                  if (parent) {
+                    const fallbackText = document.createElement('span');
+                    fallbackText.textContent = 'R';
+                    fallbackText.style.fontSize = '4rem';
+                    fallbackText.style.fontWeight = '900';
+                    fallbackText.style.color = 'white';
+                    fallbackText.style.textShadow = '0 3px 6px rgba(0,0,0,0.3)';
+                    fallbackText.style.animation = 'logoGlow 2s ease-in-out infinite alternate';
+                    parent.appendChild(fallbackText);
+                  }
+                }}
+              />
             </div>
           </div>
         )}
@@ -218,9 +239,11 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
 
         @keyframes logoGlow {
           from { 
+            filter: drop-shadow(0 3px 6px rgba(0,0,0,0.3)) drop-shadow(0 0 20px rgba(255, 255, 255, 0.3));
             text-shadow: 0 3px 6px rgba(0,0,0,0.3), 0 0 20px rgba(255, 255, 255, 0.3); 
           }
           to { 
+            filter: drop-shadow(0 3px 6px rgba(0,0,0,0.3)) drop-shadow(0 0 30px rgba(255, 255, 255, 0.6)) drop-shadow(0 0 40px rgba(255, 107, 107, 0.4));
             text-shadow: 0 3px 6px rgba(0,0,0,0.3), 0 0 30px rgba(255, 255, 255, 0.6), 0 0 40px rgba(255, 107, 107, 0.4); 
           }
         }
