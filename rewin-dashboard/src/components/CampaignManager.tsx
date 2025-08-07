@@ -38,17 +38,18 @@ interface Promotion {
   id?: string;
   title: string;
   description: string;
-  discountType: 'dollar' | 'percentage';  // NEW: Support both $ and % discounts
+  discountType: 'dollar' | 'percentage';  // Support both $ and % discounts
   discountAmount: number;
   minimumPurchase: number;
   targetOutlets: string[] | 'ALL';
-  targetOutletId?: string;                // NEW: Single outlet targeting (app compatibility)
-  targetOutletName?: string;              // NEW: Outlet name for display (app compatibility)
-  validityDays: number;
-  expiresAt?: any;                        // NEW: Expiration timestamp (per customer)
-  expirationDays?: number;                // NEW: Days until expiration (template)
+  targetOutletId?: string;                // Optional: Single outlet targeting (app compatibility)
+  targetOutletName?: string;              // Optional: Outlet name for display (app compatibility)
+  expiresAt?: any;                        // App team requirement: Expiration timestamp (not days!)
   createdAt: any;
   isActive: boolean;
+  source: 'manual' | 'campaign_birthday' | 'campaign_inactive';  // App team requirement
+  createdBy: 'dashboard' | 'mobile';      // App team requirement
+  campaignId?: string;                    // Required for campaign promotions
 }
 
 interface Campaign {
@@ -293,22 +294,39 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
       console.log('🔍 DEBUG - Selected outlet IDs:', promotionForm.targetOutlets);
       
       // Create promotion object (exact as per Firebase structure spec)
-      const promotion: Promotion = {
+      // ✅ Build promotion object per App Team requirements
+      const promotionData: any = {
         title: promotionForm.title,
         description: promotionForm.description,
         discountType: promotionForm.discountType,
         discountAmount: promotionForm.discountAmount,
         minimumPurchase: promotionForm.minimumPurchase,
         targetOutlets: promotionForm.targetOutlets.length === 0 ? 'ALL' : promotionForm.targetOutlets,
-        // NEW: Add app-compatible fields
-        targetOutletId: promotionForm.targetOutlets.length === 1 ? promotionForm.targetOutlets[0] : undefined,
-        targetOutletName: promotionForm.targetOutlets.length === 1 ? 
-          outlets.find(o => o.id === promotionForm.targetOutlets[0])?.name : undefined,
-        validityDays: promotionForm.validityDays,
-        expirationDays: promotionForm.hasExpiration ? promotionForm.expirationDays : undefined,  // NEW: Expiration template
+        isActive: true,
         createdAt: Timestamp.now(),
-        isActive: true
+        source: "manual",  // Required by app team
+        createdBy: "dashboard"  // Required by app team
       };
+
+      // Only add outlet fields when they have actual values (avoid undefined)
+      if (promotionForm.targetOutlets.length === 1) {
+        const targetOutletId = promotionForm.targetOutlets[0];
+        const targetOutlet = outlets.find(o => o.id === targetOutletId);
+        
+        if (targetOutletId && targetOutlet?.name) {
+          promotionData.targetOutletId = targetOutletId;
+          promotionData.targetOutletName = targetOutlet.name;
+        }
+      }
+
+      // Convert expirationDays to expiresAt Timestamp (app team requirement)
+      if (promotionForm.hasExpiration && promotionForm.expirationDays > 0) {
+        const expirationDate = new Date();
+        expirationDate.setDate(expirationDate.getDate() + promotionForm.expirationDays);
+        promotionData.expiresAt = Timestamp.fromDate(expirationDate);
+      }
+
+      const promotion = promotionData;
 
       // Save to Firebase: /businesses/{businessId}/promotions/{promotionId}
       const promotionRef = await addDoc(
@@ -328,6 +346,10 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
       }
       
       // Show success message with Firebase console instructions
+      const expirationText = promotion.expiresAt ? 
+        `• Expires: ${new Date(promotion.expiresAt.toDate()).toLocaleDateString()}` : 
+        '• No expiration set';
+
       alert(`✅ SUCCESS! Promotion "${promotion.title}" created and assigned!
 
 📱 MOBILE APP TEST:
@@ -341,7 +363,9 @@ Check: /businesses/${businessId}/promotions/${promotionRef.id}
 📋 PROMOTION DETAILS:
 • Title: ${promotion.title}
 • Discount: ${promotion.discountType === 'percentage' ? promotion.discountAmount + '%' : '$' + promotion.discountAmount} off
-• Expires in: ${promotionForm.expirationDays} days`);
+${expirationText}
+• Source: ${promotion.source}
+• Created by: ${promotion.createdBy}`);
 
       // Reset form and close
       setPromotionForm({
@@ -817,9 +841,7 @@ Check: /businesses/${businessId}/promotions/${promotionRef.id}
             isUsed: false,
             usedAt: null,
             assignedAt: Timestamp.now(),
-            expiresAt: promotion.expirationDays ?              // NEW: Calculate expiration per customer
-              Timestamp.fromDate(new Date(Date.now() + (promotion.expirationDays * 24 * 60 * 60 * 1000))) :
-              null
+            expiresAt: promotion.expiresAt || null              // Use promotion's expiration timestamp
           };
 
           // Store in customer's promotions subcollection (using new path structure)
@@ -911,9 +933,8 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       const batch = writeBatch(firestore);
       let assignedCount = 0;
       
-      // Calculate expiration date
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + promotion.validityDays);
+      // Use promotion's expiration timestamp (no need to calculate)
+      const expiresAt = promotion.expiresAt ? promotion.expiresAt.toDate() : null;
       
       // Assign to each customer with graceful field handling
       userCustomersSnapshot.docs.forEach((customerDoc: any) => {
@@ -2401,13 +2422,13 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                             </strong>
                           </div>
                         )}
-                        {promotion.expirationDays && !promotion.expiresAt && (
+                        {promotion.expiresAt && (
                           <div style={{
                             color: '#d1d5db',
                             fontSize: '1rem',
                             marginBottom: '0.5rem'
                           }}>
-                            <strong style={{ color: '#f59e0b' }}>⏰ Expires After:</strong> {promotion.expirationDays} days (template)
+                            <strong style={{ color: '#f59e0b' }}>⏰ Expires:</strong> {new Date(promotion.expiresAt.toDate()).toLocaleDateString()}
                           </div>
                         )}
                         <div style={{
@@ -2415,7 +2436,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                           fontSize: '1rem',
                           marginBottom: '0.5rem'
                         }}>
-                          <strong style={{ color: '#a78bfa' }}>Period:</strong> {promotion.validityDays} days
+                          <strong style={{ color: '#a78bfa' }}>Source:</strong> {promotion.source}
                         </div>
                         <div style={{
                           color: '#d1d5db',
