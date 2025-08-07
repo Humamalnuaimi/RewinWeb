@@ -47,10 +47,18 @@ interface TwilioEvent {
   status: 'success' | 'error' | 'warning';
 }
 
+interface User {
+  uid: string;
+  email: string;
+  displayName?: string;
+  fullName?: string;
+}
+
 const UserTwilioPage: React.FC = () => {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
   
+  const [user, setUser] = useState<User | null>(null);
   const [twilioAccount, setTwilioAccount] = useState<TwilioAccount | null>(null);
   const [billingData, setBillingData] = useState<BillingData | null>(null);
   const [events, setEvents] = useState<TwilioEvent[]>([]);
@@ -75,10 +83,29 @@ const UserTwilioPage: React.FC = () => {
     }
   }, [userId]);
 
+  const loadUserData = async () => {
+    try {
+      const response = await fetch(`/api/users/${userId}`);
+      const data = await response.json();
+      
+      if (data.success && data.user) {
+        setUser(data.user);
+        // Update form with user-specific default account name
+        setFormData(prev => ({
+          ...prev,
+          accountName: prev.accountName || `${data.user.fullName || data.user.displayName || data.user.email.split('@')[0]}'s Twilio Account`
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    }
+  };
+
   const loadTwilioData = async () => {
     setLoading(true);
     try {
       await Promise.all([
+        loadUserData(),
         loadTwilioAccount(),
         loadBillingData(),
         loadEvents()
@@ -585,16 +612,43 @@ const UserTwilioPage: React.FC = () => {
       }} />
       
       <div style={{ position: 'relative', zIndex: 1 }}>
-        <h3 style={{ color: 'white', fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem' }}>
+        <h3 style={{ color: 'white', fontSize: '1.5rem', fontWeight: '600', marginBottom: '0.5rem' }}>
           {twilioAccount ? 'Update Twilio Configuration' : 'Connect Twilio Account'}
         </h3>
-
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
-          gap: '1rem',
-          marginBottom: '1.5rem'
+        
+        <p style={{ 
+          color: 'rgba(255, 255, 255, 0.7)', 
+          fontSize: '0.9rem', 
+          marginBottom: '2rem',
+          lineHeight: '1.5'
         }}>
+          {user && `Configure Twilio SMS service for ${user.fullName || user.displayName || user.email}. `}
+          Enter your Twilio account credentials to enable SMS campaigns and messaging features.
+        </p>
+
+        {/* Account Credentials Section */}
+        <div style={{
+          marginBottom: '2rem'
+        }}>
+          <h4 style={{ 
+            color: 'rgba(255, 255, 255, 0.9)', 
+            fontSize: '1.1rem', 
+            fontWeight: '600', 
+            marginBottom: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}>
+            <Settings size={18} />
+            Account Credentials
+          </h4>
+          
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+            gap: '1rem',
+            marginBottom: '1.5rem'
+          }}>
           <div>
             <label style={{ 
               display: 'block', 
@@ -609,7 +663,7 @@ const UserTwilioPage: React.FC = () => {
               type="text"
               value={formData.accountSid}
               onChange={(e) => setFormData(prev => ({ ...prev, accountSid: e.target.value }))}
-              placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              placeholder="Account SID from Twilio Console"
               style={{
                 width: '100%',
                 padding: '0.75rem',
@@ -636,7 +690,7 @@ const UserTwilioPage: React.FC = () => {
               type="password"
               value={formData.authToken}
               onChange={(e) => setFormData(prev => ({ ...prev, authToken: e.target.value }))}
-              placeholder="Your auth token"
+              placeholder="Auth Token from Twilio Console"
               style={{
                 width: '100%',
                 padding: '0.75rem',
@@ -662,7 +716,7 @@ const UserTwilioPage: React.FC = () => {
               type="tel"
               value={formData.phoneNumber}
               onChange={(e) => setFormData(prev => ({ ...prev, phoneNumber: e.target.value }))}
-              placeholder="+1234567890"
+              placeholder="Twilio phone number (e.g., +1234567890)"
               style={{
                 width: '100%',
                 padding: '0.75rem',
@@ -688,7 +742,7 @@ const UserTwilioPage: React.FC = () => {
               type="text"
               value={formData.accountName}
               onChange={(e) => setFormData(prev => ({ ...prev, accountName: e.target.value }))}
-              placeholder="My Twilio Account"
+              placeholder={user ? `${user.fullName || user.displayName || user.email.split('@')[0]}'s Twilio Account` : "Account Name"}
               style={{
                 width: '100%',
                 padding: '0.75rem',
@@ -700,16 +754,42 @@ const UserTwilioPage: React.FC = () => {
               }}
             />
           </div>
-          <div>
-            <label style={{ 
-              display: 'block', 
-              color: 'rgba(255, 255, 255, 0.9)', 
-              fontSize: '0.875rem', 
-              fontWeight: '500',
-              marginBottom: '0.5rem'
-            }}>
-              Monthly Message Limit
-            </label>
+        </div>
+        </div>
+
+        {/* Usage Limits Section */}
+        <div style={{
+          marginBottom: '2rem'
+        }}>
+          <h4 style={{ 
+            color: 'rgba(255, 255, 255, 0.9)', 
+            fontSize: '1.1rem', 
+            fontWeight: '600', 
+            marginBottom: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}>
+            <BarChart3 size={18} />
+            Usage Limits
+          </h4>
+          
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+            gap: '1rem',
+            marginBottom: '1.5rem'
+          }}>
+            <div>
+              <label style={{ 
+                display: 'block', 
+                color: 'rgba(255, 255, 255, 0.9)', 
+                fontSize: '0.875rem', 
+                fontWeight: '500',
+                marginBottom: '0.5rem'
+              }}>
+                Monthly Message Limit
+              </label>
             <input
               type="number"
               value={formData.monthlyLimit}
@@ -753,6 +833,7 @@ const UserTwilioPage: React.FC = () => {
               }}
             />
           </div>
+        </div>
         </div>
 
         <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
@@ -1025,7 +1106,7 @@ const UserTwilioPage: React.FC = () => {
                 margin: 0,
                 fontWeight: '400'
               }}>
-                Manage SMS capabilities and monitor account usage
+{user ? `Manage SMS capabilities for ${user.fullName || user.displayName || user.email}` : 'Manage SMS capabilities and monitor account usage'}
               </p>
             </div>
           </div>
