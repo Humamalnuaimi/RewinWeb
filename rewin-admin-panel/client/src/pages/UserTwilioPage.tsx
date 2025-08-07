@@ -1086,7 +1086,7 @@ const UserTwilioPage: React.FC = () => {
           }}>
             <div>
               <button
-                onClick={() => navigate(`/admin/users/${userId}`)}
+                onClick={() => navigate(`/users/${userId}`)}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
