@@ -16,7 +16,7 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
       left: 0,
       right: 0,
       bottom: 0,
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: 'radial-gradient(1200px 800px at 18% 10%, rgba(120,140,255,0.45), transparent 60%),\n              radial-gradient(1100px 700px at 80% 25%, rgba(150,110,220,0.40), transparent 60%),\n              linear-gradient(135deg, #0c1020 0%, #161a33 100%)',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
@@ -105,17 +105,17 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
               />
             ))}
             
-            {/* Central Logo - Direct placement without container box */}
+            {/* Central Logo */}
             <img 
-              src="/R.png" 
+              src="/ic_rewin_logo_new.png" 
               alt="Rewin Logo" 
               style={{
                 position: 'absolute',
                 top: '50%',
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
-                              width: '180px',
-              height: '180px',
+                width: '180px',
+                height: '180px',
                 objectFit: 'contain',
                 filter: 'drop-shadow(0 5px 15px rgba(0,0,0,0.3)) drop-shadow(0 0 30px rgba(255, 255, 255, 0.4))',
                 animation: 'logoFloat 3s ease-in-out infinite',
