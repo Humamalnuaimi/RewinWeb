@@ -48,6 +48,13 @@ div[style*="rgba(255,255,255,0.1)"], div[style*="rgba(255,255,255,0.1)"] * {
   user-select: none !important;
 }
 
+/* Theme override: replace legacy purple page backgrounds with the new admin theme */
+[style*="minHeight: '100vh'"][style*="#667eea 0%, #764ba2 100%"],
+[style*="minHeight: '100vh'"][style*="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"],
+div[style*="background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'"] {
+  background: transparent !important;
+}
+
 /* Global text selection prevention for transaction and customer pages */
 [style*="minHeight: '100vh'"] div,
 [style*="minHeight: '100vh'"] p,
