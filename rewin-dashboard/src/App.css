@@ -18,6 +18,10 @@ body {
   -moz-user-select: none !important;
   -ms-user-select: none !important;
   user-select: none !important;
+  background:
+    radial-gradient(1200px 800px at 18% 10%, rgba(120,140,255,0.35), transparent 60%),
+    radial-gradient(1100px 700px at 80% 25%, rgba(150,110,220,0.30), transparent 60%),
+    linear-gradient(135deg, #0c1020 0%, #161a33 100%);
 }
 
 /* Allow text selection only for input fields */

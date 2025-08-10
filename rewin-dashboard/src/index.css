@@ -3,9 +3,13 @@
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color-scheme: dark;
+  color: rgba(255, 255, 255, 0.92);
+  /* Match admin panel theme: layered dark gradients with subtle lighting */
+  background:
+    radial-gradient(1200px 800px at 18% 10%, rgba(120,140,255,0.35), transparent 60%),
+    radial-gradient(1100px 700px at 80% 25%, rgba(150,110,220,0.30), transparent 60%),
+    linear-gradient(135deg, #0c1020 0%, #161a33 100%);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -68,18 +72,7 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
-}
+/* Always use the admin dark theme in the dashboard regardless of OS preference */
 
 /* Modal animations */
 @keyframes fadeIn {
