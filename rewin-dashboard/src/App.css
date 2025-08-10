@@ -55,6 +55,11 @@ div[style*="background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'"] {
   background: transparent !important;
 }
 
+/* Fallback: neutralize any inline element using the legacy purple gradient */
+[style*="#667eea"][style*="#764ba2"] {
+  background: transparent !important;
+}
+
 /* Global text selection prevention for transaction and customer pages */
 [style*="minHeight: '100vh'"] div,
 [style*="minHeight: '100vh'"] p,
