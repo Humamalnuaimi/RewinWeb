@@ -327,7 +327,7 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
   if (loading) {
     return (
       <div style={{
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'transparent',
         minHeight: '100vh',
         display: 'flex',
         alignItems: 'center',
@@ -352,7 +352,7 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
 
   return (
     <div style={{
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: 'transparent',
       minHeight: '100vh',
       padding: '2rem',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'

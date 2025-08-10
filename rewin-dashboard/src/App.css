@@ -56,8 +56,17 @@ div[style*="background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'"] {
 }
 
 /* Fallback: neutralize any inline element using the legacy purple gradient */
-[style*="#667eea"][style*="#764ba2"] {
+/* Stronger override: remove any inline gradient background (legacy purple) */
+*[style*="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"],
+*[style*="#667eea"][style*="#764ba2"] {
   background: transparent !important;
+  background-image: none !important;
+}
+
+/* Very generic catch-all for any element using the legacy purple gradient (partial match) */
+*[style*="linear-gradient(135deg, #667eea"] {
+  background: transparent !important;
+  background-image: none !important;
 }
 
 /* Global text selection prevention for transaction and customer pages */

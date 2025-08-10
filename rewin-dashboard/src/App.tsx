@@ -95,7 +95,7 @@ const LoginPage = ({ onLogin }: { onLogin: (email: string, password: string) => 
     <div style={{
       height: '100vh',
       width: '100vw',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: 'transparent',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -1231,7 +1231,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       <div style={{
         minHeight: '100vh',
         width: '100%',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'transparent',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         margin: 0,
         padding: 0,
@@ -1850,7 +1850,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       <div style={{
         minHeight: '100vh',
         width: '100%',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'transparent',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         margin: 0,
         padding: 0,
@@ -2271,7 +2271,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             <div
               onClick={(e) => e.stopPropagation()}
               style={{
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                background: 'rgba(20,24,45,0.6)',
                 borderRadius: '24px',
                 padding: '0',
                 width: '800px',
@@ -2787,7 +2787,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       <div style={{
         minHeight: '100vh',
         width: '100%',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'transparent',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         margin: 0,
         padding: 0,
@@ -2833,7 +2833,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               <div style={{
                 width: '40px',
                 height: '40px',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
                 borderRadius: '10px',
                 display: 'flex',
                 alignItems: 'center',
@@ -3309,7 +3309,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       <div style={{
         minHeight: '100vh',
         width: '100%',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'transparent',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         margin: 0,
         padding: 0,
@@ -3834,9 +3834,9 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
     if (!selectedCustomer) return null;
 
-    return (
-      <div style={{
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  return (
+    <div style={{
+      background: 'transparent',
         minHeight: '100vh',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         margin: 0,
@@ -3889,7 +3889,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               <div style={{
                 width: '40px',
                 height: '40px',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
                 borderRadius: '10px',
                 display: 'flex',
                 alignItems: 'center',
@@ -4429,7 +4429,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
   return (
     <div style={{
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: 'transparent',
       minHeight: '100vh',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       margin: 0,
@@ -4476,7 +4476,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               <div style={{
                 width: '40px',
                 height: '40px',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
                 borderRadius: '10px',
                 display: 'flex',
                 alignItems: 'center',
@@ -4837,7 +4837,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       <div style={{
         minHeight: '100vh',
         width: '100%',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'transparent',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         margin: 0,
         padding: 0,
@@ -4920,7 +4920,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     <div style={{
       minHeight: '100vh',
       width: '100%',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: 'transparent',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       margin: 0,
       padding: 0,
@@ -5049,13 +5049,13 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 </button>
                 
                 {dropdownOpen && (
-                  <div style={{
+      <div style={{
                     position: 'absolute',
                     top: '100%',
                     left: 0,
                     right: 0,
                     marginTop: '0.5rem',
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'rgba(20,24,45,0.7)',
                     backdropFilter: 'blur(20px)',
                     borderRadius: '20px',
                   border: '1px solid rgba(255,255,255,0.3)',
@@ -5610,7 +5610,7 @@ function App() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'transparent',
         color: 'white',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         margin: 0,
