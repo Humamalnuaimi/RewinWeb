@@ -1,23 +1,26 @@
 /**
- * 🔒 SECURE MULTI-TENANT CAMPAIGN MANAGER
- * 
- * CRITICAL SECURITY UPDATE:
- * - Uses business-specific collections: /businesses/{businessId}/campaigns & /businesses/{businessId}/promotions
- * - Prevents data leaks between different businesses
- * - Each business only sees their own campaigns/promotions/outlets
- * - All documents include businessId for ownership tracking
- * 
- * OLD (INSECURE): /campaigns/{id} & /promotions/{id} - shared by all businesses
- * NEW (SECURE): /businesses/{businessId}/campaigns/{id} & /businesses/{businessId}/promotions/{id}
+ * 🔒 USER-ISOLATED CAMPAIGN MANAGER
+ *
+ * FINAL ARCHITECTURE:
+ * - Uses user-specific collections: /users/{userId}/promotions & /users/{userId}/campaigns  
+ * - Complete data isolation per user
+ * - No cross-user data access
+ * - Enhanced smart targeting and analytics
+ *
+ * COLLECTIONS:
+ * - /users/{userId}/promotions/{promotionId}
+ * - /users/{userId}/campaigns/{campaignId}
+ * - /users/{userId}/customers/{customerId}
+ * - /users/{userId}/outlets/{outletId}
  */
 import React, { useState, useEffect } from 'react';
 import { type User } from 'firebase/auth';
-import { firestore } from '../firebase/config';
-import { 
-  collection, 
-  doc, 
-  addDoc, 
-  getDocs, 
+import { firestore, auth } from '../firebase/config';
+import {
+  collection,
+  doc,
+  addDoc,
+  getDocs,
   query,
   Timestamp,
   writeBatch,
@@ -27,6 +30,8 @@ import {
   updateDoc,
   getDoc
 } from 'firebase/firestore';
+import { PromotionService } from '../services/PromotionService';
+import { CampaignService } from '../services/CampaignService';
 
 interface CampaignManagerProps {
   user: User;
@@ -79,6 +84,7 @@ interface PromotionForm {
   targetOutlets: string[];
   smsMessage: string;
   sendSMS: boolean;
+  assignNow?: boolean;                     // NEW: Fan-out immediately to eligible customers
 }
 
 interface CampaignForm {
@@ -135,7 +141,8 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
     hasExpiration: false,    // Default no expiration
     targetOutlets: [],
     smsMessage: '',
-    sendSMS: true
+    sendSMS: true,
+    assignNow: true
   });
 
   const [campaignForm, setCampaignForm] = useState<CampaignForm>({
@@ -154,35 +161,34 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
     targetOutlets: []
   });
 
-  // 🔥 BUSINESS ID FUNCTION (Production-Ready with User Profile Retrieval)
-  const getCurrentBusinessId = async (): Promise<string> => {
+  // Dev/test automation triggers
+  const runBirthdayAutomation = async () => {
     try {
-      if (!user) {
-        throw new Error('No authenticated user');
-      }
-      
-      // Get business ID from current user's profile (direct document read)
-      const userDocRef = doc(firestore, 'users', user.uid);
-      const userDocSnapshot = await getDoc(userDocRef);
-      
-      if (userDocSnapshot.exists()) {
-        const userData = userDocSnapshot.data() as any;
-        const businessId = userData?.businessId;
-        
-        if (businessId) {
-          console.log('✅ Retrieved business ID from user profile:', businessId);
-          return businessId;
-        }
-      }
-      
-      // Fallback to default business ID if not found
-      console.warn('⚠️ No business ID found in user profile, using fallback');
-      return "esZ8rT1v0d0qs0x97Dvo"; // Keep as fallback
-      
-    } catch (error) {
-      console.error('❌ Error getting business ID:', error);
-      return "esZ8rT1v0d0qs0x97Dvo"; // Fallback on error
+      const { AutomationService } = await import('../services/AutomationService');
+      const result = await AutomationService.runBirthday();
+      alert(`Birthday automation created ${result.created} promotions.`);
+    } catch (e) {
+      alert(`Failed to run birthday automation: ${e instanceof Error ? e.message : 'Unknown error'}`);
     }
+  };
+
+  const runInactiveAutomation = async () => {
+    try {
+      const days = Number(prompt('Days inactive?', '15') || '15');
+      const { AutomationService } = await import('../services/AutomationService');
+      const result = await AutomationService.runInactive({ daysInactive: days });
+      alert(`Inactive automation created ${result.created} promotions.`);
+    } catch (e) {
+      alert(`Failed to run inactive automation: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    }
+  };
+
+  // 🔥 USER-BASED DATA ACCESS - No business ID needed
+  const getCurrentUserId = (): string => {
+    if (!user) {
+      throw new Error('No authenticated user');
+    }
+    return user.uid;
   };
 
   // 📱 SMS SERVICE INTEGRATION (Production-Ready with Multi-Account Support)
@@ -191,7 +197,7 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
       console.log(`📱 SMS to ${phoneNumber}: ${message}`);
       
       // Get the business ID for this user
-      const businessId = await getCurrentBusinessId();
+      const uid = user.uid;
       
       // Find the account and phone number to use for this business
       const accountPhoneNumber = await getAccountPhoneNumberForBusiness(businessId);
@@ -267,7 +273,7 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
     }
   };
 
-  // 🎯 STEP 1: PROMOTION CREATION SYSTEM (Exact as per App Team Spec)
+  // 🎯 USER-BASED PROMOTION CREATION SYSTEM
   const createPromotion = async () => {
     try {
       setLoading(true);
@@ -278,92 +284,107 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
         return;
       }
 
-      const businessId = await getCurrentBusinessId();
-      console.log('🎯 Creating promotion for business:', businessId);
+      console.log('🎯 Creating promotion for user:', user.uid);
       console.log('📋 Promotion data:', promotionForm);
       console.log('🎯 Target outlets selected:', promotionForm.targetOutlets);
       console.log('🎯 Available outlets:', outlets);
       
-      // DEBUG: Log outlet details for app team verification
-      console.log('🔍 DEBUG - Outlet Details:');
-      outlets.forEach(outlet => {
-        console.log(`   Outlet: ${outlet.name} | ID: ${outlet.id}`);
-      });
-      console.log('🔍 DEBUG - Selected outlet IDs:', promotionForm.targetOutlets);
-      
-      // Create promotion object (exact as per Firebase structure spec)
-      // ✅ Build promotion object per App Team requirements
+      // Create promotion object for user-based system
       const promotionData: any = {
         title: promotionForm.title,
         description: promotionForm.description,
         discountType: promotionForm.discountType,
         discountAmount: promotionForm.discountAmount,
         minimumPurchase: promotionForm.minimumPurchase,
-        targetOutlets: promotionForm.targetOutlets.length === 0 ? 'ALL' : promotionForm.targetOutlets,
-        isActive: true,
-        createdAt: Timestamp.now(),
-        source: "manual",  // Required by app team
-        createdBy: "dashboard"  // Required by app team
+        targetAudience: 'all',
+        // App spec: [] means all outlets; if form has none selected, store []
+        targetOutlets: promotionForm.targetOutlets.length === 0 ? [] : promotionForm.targetOutlets,
+        targetCustomers: [], // Empty for all customers
+        minVisitsRequired: 0,
+        maxDaysSinceLastVisit: 0,
+        minTotalSpent: 0
       };
 
-      // Only add outlet fields when they have actual values (avoid undefined)
-      if (promotionForm.targetOutlets.length === 1) {
-        const targetOutletId = promotionForm.targetOutlets[0];
-        const targetOutlet = outlets.find(o => o.id === targetOutletId);
-        
-        if (targetOutletId && targetOutlet?.name) {
-          promotionData.targetOutletId = targetOutletId;
-          promotionData.targetOutletName = targetOutlet.name;
-        }
-      }
-
-      // Convert expirationDays to expiresAt Timestamp (app team requirement)
+      // Convert expirationDays to expiresAt Date
       if (promotionForm.hasExpiration && promotionForm.expirationDays > 0) {
         const expirationDate = new Date();
         expirationDate.setDate(expirationDate.getDate() + promotionForm.expirationDays);
-        promotionData.expiresAt = Timestamp.fromDate(expirationDate);
+        promotionData.expiresAt = expirationDate;
       }
 
-      const promotion = promotionData;
-
-      // Save to Firebase: /businesses/{businessId}/promotions/{promotionId}
-      const promotionRef = await addDoc(
-        collection(firestore, 'businesses', businessId, 'promotions'),
-        promotion
-      );
+      // Create promotion using service
+      const promotionId = await PromotionService.createPromotion(promotionData);
       
-      console.log('✅ Promotion created with ID:', promotionRef.id);
-      console.log(`📍 Firebase path: /businesses/${businessId}/promotions/${promotionRef.id}`);
+      console.log('✅ Promotion created with ID:', promotionId);
+      console.log(`📍 Firebase path: /users/${user.uid}/promotions/${promotionId}`);
       
-      // Immediately assign to customers
-      await assignPromotionToCustomers(businessId, promotionRef.id, promotion);
+      // Get analytics for the promotion
+      const analytics = await PromotionService.getPromotionAnalytics(promotionId);
       
       // Send SMS if requested
       if (promotionForm.sendSMS && promotionForm.smsMessage) {
-        await sendPromotionSMS(businessId, promotion, promotionForm.smsMessage);
+        // Send SMS to eligible customers
+        for (const customer of analytics.eligibleCustomers.slice(0, 10)) { // Limit to first 10 for now
+          if (customer.phoneNumber) {
+            await sendSMSMessage(customer.phoneNumber, promotionForm.smsMessage);
+          }
+        }
       }
       
-      // Show success message with Firebase console instructions
-      const expirationText = promotion.expiresAt ? 
-        `• Expires: ${new Date(promotion.expiresAt.toDate()).toLocaleDateString()}` : 
+      // Fan-out to per-customer promotions if requested
+      if (promotionForm.assignNow) {
+        try {
+          const { CustomerPromotionService } = await import('../services/CustomerPromotionService');
+          const expiresAtTs = promotionData.expiresAt
+            ? (promotionData.expiresAt.toDate ? promotionData.expiresAt : Timestamp.fromDate(promotionData.expiresAt))
+            : null;
+
+          let createdCount = 0;
+          for (const customer of analytics.eligibleCustomers) {
+            const customerId = customer.id;
+            const outletId = customer.outletId || customer.checkInOutletId || customer.preferredOutlet || customer.lastVisitOutlet || null;
+            const detId = `promo_manual_${promotionId}_${customerId}`;
+            await CustomerPromotionService.upsert(customerId, detId, {
+              title: promotionData.title,
+              description: promotionData.description,
+              discountType: promotionData.discountType,
+              discountAmount: promotionData.discountAmount,
+              minimumPurchase: promotionData.minimumPurchase,
+              expiresAt: expiresAtTs,
+              isActive: true,
+              isUsed: false,
+              outletId,
+              campaignId: null,
+              source: 'manual'
+            });
+            createdCount++;
+          }
+          console.log(`✅ Assigned promotion to ${createdCount} eligible customers`);
+        } catch (err) {
+          console.error('❌ Fan-out error:', err);
+          alert('Fan-out to customers failed. The master promotion was created successfully.');
+        }
+      }
+
+      // Show success message with analytics
+      const expirationText = promotionData.expiresAt ? 
+        `• Expires: ${promotionData.expiresAt.toLocaleDateString()}` : 
         '• No expiration set';
 
-      alert(`✅ SUCCESS! Promotion "${promotion.title}" created and assigned!
+      alert(`✅ SUCCESS! Promotion "${promotionData.title}" created!
 
-📱 MOBILE APP TEST:
-1. Open your mobile app
-2. Look for "${promotion.title}" promotion
-3. Test employee redemption
+📊 ANALYTICS:
+• Will reach: ${analytics.eligibleCustomers.length} out of ${analytics.totalCustomers} customers
+• Eligibility rate: ${Math.round(analytics.eligibilityRate)}%
 
-🔍 FIREBASE CONSOLE:
-Check: /businesses/${businessId}/promotions/${promotionRef.id}
+📱 MOBILE APP:
+Your customers can now see this promotion in the mobile app!
 
 📋 PROMOTION DETAILS:
-• Title: ${promotion.title}
-• Discount: ${promotion.discountType === 'percentage' ? promotion.discountAmount + '%' : '$' + promotion.discountAmount} off
+• Title: ${promotionData.title}
+• Discount: ${promotionData.discountType === 'percentage' ? promotionData.discountAmount + '%' : '$' + promotionData.discountAmount} off
 ${expirationText}
-• Source: ${promotion.source}
-• Created by: ${promotion.createdBy}`);
+• Target: ${promotionData.targetOutlets.length === 0 ? 'All outlets' : promotionData.targetOutlets.length + ' outlets'}`);
 
       // Reset form and close
       setPromotionForm({
@@ -631,7 +652,7 @@ ${expirationText}
 
           // Save to customer's promotions (using the path where mobile app expects it)
           const customerPromotionRef = doc(
-            collection(firestore, 'businesses', businessId, 'customerPromotions', customerId, 'promotions')
+            collection(firestore, 'users', uid, 'customerPromotions', customerId, 'promotions')
           );
           batch.set(customerPromotionRef, campaignPromotion);
           
@@ -679,10 +700,10 @@ ${expirationText}
       
       console.log(`🤖 Starting campaign automation process... (${isAutomatic ? 'Automatic' : 'Manual'})`);
 
-      const businessId = await getCurrentBusinessId();
+      const uid = user.uid;
       
       // Get all active campaigns
-      const campaignsRef = collection(firestore, 'businesses', businessId, 'campaigns');
+      const campaignsRef = collection(firestore, 'users', uid, 'campaigns');
       const campaignsSnapshot = await getDocs(campaignsRef);
       
       if (campaignsSnapshot.size === 0) {
@@ -705,14 +726,14 @@ ${expirationText}
 
         console.log(`🎯 Processing campaign: ${campaign.name} (Type: ${campaign.triggerType})`);
         
-        const result = await assignCampaignToCustomers(businessId, campaign);
+        const result = await assignCampaignToCustomers(uid, campaign);
         totalAssigned += result.assigned;
         totalProcessed++;
 
         // Update campaign's lastProcessed timestamp
-        await getDocs(query(collection(firestore, 'businesses', businessId, 'campaigns'), limit(1))).then(async () => {
+        await getDocs(query(collection(firestore, 'users', uid, 'campaigns'), limit(1))).then(async () => {
           // Update the campaign document with lastProcessed timestamp
-          const campaignRef = doc(firestore, 'businesses', businessId, 'campaigns', campaign.id!);
+          const campaignRef = doc(firestore, 'users', uid, 'campaigns', campaign.id!);
           // Note: You might want to use updateDoc here, but keeping it simple for now
         });
       }
@@ -1216,76 +1237,47 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
     }
   };
 
-  // 📊 DATA LOADING FUNCTIONS
+  // 📊 DATA LOADING FUNCTIONS - USER-BASED
   const loadPromotions = async () => {
     try {
-      const businessId = await getCurrentBusinessId();
-      const promotionsRef = collection(firestore, 'businesses', businessId, 'promotions');
-      const snapshot = await getDocs(promotionsRef);
-      
-      const loadedPromotions = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Promotion[];
-      
-      setPromotions(loadedPromotions);
+      console.log('📊 Loading promotions from user collection...');
+      const loadedPromotions = await PromotionService.getPromotions();
+      setPromotions(loadedPromotions as Promotion[]);
+      console.log(`✅ Loaded ${loadedPromotions.length} promotions`);
     } catch (error) {
       console.error('❌ Error loading promotions:', error);
     }
   };
 
-  // 🧹 CLEAN ALL DATA (NUCLEAR OPTION)
+  // 🧹 CLEAN ALL DATA (USER-BASED)
   const cleanAllData = async () => {
-    if (!confirm('⚠️ DANGER: This will delete ALL campaigns and customer promotions. Are you absolutely sure?')) return;
+    if (!confirm('⚠️ DANGER: This will delete ALL your campaigns and promotions. Are you absolutely sure?')) return;
     if (!confirm('⚠️ FINAL WARNING: This action cannot be undone. Continue?')) return;
     
     try {
       setLoading(true);
-      const businessId = await getCurrentBusinessId();
+      console.log('🧹 Starting complete user data cleanup...');
       
-      console.log('🧹 Starting complete data cleanup...');
-      
-      const batch = writeBatch(firestore);
       let totalDeleted = 0;
       
-      // 1. Delete all campaigns
+      // 1. Delete all campaigns using service
       console.log('🗑️ Deleting all campaigns...');
-      const campaignsRef = collection(firestore, 'businesses', businessId, 'campaigns');
-      const campaignsSnapshot = await getDocs(campaignsRef);
-      campaignsSnapshot.docs.forEach(doc => {
-        batch.delete(doc.ref);
+      const userCampaigns = await CampaignService.getCampaigns();
+      for (const campaign of userCampaigns) {
+        await CampaignService.deleteCampaign(campaign.id);
         totalDeleted++;
-        console.log(`   ✅ Queued campaign deletion: ${doc.data().name}`);
-      });
-      
-      // 2. Delete all standalone promotions
-      console.log('🗑️ Deleting all standalone promotions...');
-      const promotionsRef = collection(firestore, 'businesses', businessId, 'promotions');
-      const promotionsSnapshot = await getDocs(promotionsRef);
-      promotionsSnapshot.docs.forEach(doc => {
-        batch.delete(doc.ref);
-        totalDeleted++;
-        console.log(`   ✅ Queued promotion deletion: ${doc.data().title}`);
-      });
-      
-      // 3. Delete ALL customer promotions
-      console.log('🗑️ Deleting all customer promotions...');
-      const allCustomersRef = collection(firestore, 'businesses', businessId, 'customerPromotions');
-      const customersSnapshot = await getDocs(allCustomersRef);
-      
-      for (const customerDoc of customersSnapshot.docs) {
-        const customerPromotionsRef = collection(firestore, 'businesses', businessId, 'customerPromotions', customerDoc.id, 'promotions');
-        const promotionsSnapshot = await getDocs(customerPromotionsRef);
-        
-        promotionsSnapshot.docs.forEach(promotionDoc => {
-          batch.delete(promotionDoc.ref);
-          totalDeleted++;
-          console.log(`   ✅ Queued customer promotion deletion: ${customerDoc.id}`);
-        });
+        console.log(`   ✅ Deleted campaign: ${campaign.name}`);
       }
       
-      // Commit all deletions
-      await batch.commit();
+      // 2. Delete all promotions using service
+      console.log('🗑️ Deleting all promotions...');
+      const userPromotions = await PromotionService.getPromotions();
+      for (const promotion of userPromotions) {
+        await PromotionService.deletePromotion(promotion.id);
+        totalDeleted++;
+        console.log(`   ✅ Deleted promotion: ${promotion.title}`);
+      }
+      
       console.log(`🎉 Cleanup complete! Deleted ${totalDeleted} items total.`);
       
       // Refresh all data
@@ -1324,7 +1316,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       console.log(`🔍 Found campaign: ${campaignToDelete ? 'YES' : 'NO'}`);
       
       console.log(`🔍 Deleting campaign: "${campaignName}" (ID: ${campaignId})`);
-      console.log(`🏢 Using business ID: ${businessId}`);
+      console.log(`👤 Using user ID: ${uid}`);
       console.log(`🎯 Looking for promotions with campaignId: "${campaignId}"`);
       console.log(`🎯 Or promotions with title: "${campaignName}"`);
       
@@ -1335,19 +1327,19 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       
       try {
         // First try the user's customers path (same as campaign processing)
-        allCustomersRef = collection(firestore, 'users', user.uid, 'customers');
+        allCustomersRef = collection(firestore, 'users', uid, 'customers');
         customersSnapshot = await getDocs(allCustomersRef);
         console.log(`🔍 Found ${customersSnapshot.docs.length} customers in user collection (same as campaign processing)`);
       } catch (error) {
         console.log('⚠️ User customers not found, trying web_customers collection...');
         // Fallback to web_customers
-        allCustomersRef = collection(firestore, 'users', user.uid, 'web_customers');
+        allCustomersRef = collection(firestore, 'users', uid, 'web_customers');
         customersSnapshot = await getDocs(allCustomersRef);
         console.log(`🔍 Found ${customersSnapshot.docs.length} customers in web_customers collection`);
       }
       
       // Also check if we have any customers at all
-      const allCustomersDataRef = collection(firestore, 'users', user.uid, 'web_customers');
+      const allCustomersDataRef = collection(firestore, 'users', uid, 'web_customers');
       const allCustomersDataSnapshot = await getDocs(allCustomersDataRef);
       console.log(`📊 Total customers in web_customers database: ${allCustomersDataSnapshot.docs.length}`);
       
@@ -1372,7 +1364,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
          const customerId = customerDoc.id;
          
          // Campaign promotions are ALWAYS saved to business collection, regardless of where customers come from
-         const customerPromotionsRef = collection(firestore, 'businesses', businessId, 'customerPromotions', customerId, 'promotions');
+          const customerPromotionsRef = collection(firestore, 'users', uid, 'customerPromotions', customerId, 'promotions');
          
          const promotionsSnapshot = await getDocs(customerPromotionsRef);
          
@@ -1416,7 +1408,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
        }
       
       // Step 3: Delete the campaign itself
-      batch.delete(doc(firestore, 'businesses', businessId, 'campaigns', campaignId));
+      batch.delete(doc(firestore, 'users', uid, 'campaigns', campaignId));
       
       // Execute all deletions
       await batch.commit();
@@ -1435,16 +1427,10 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
 
   const loadCampaigns = async () => {
     try {
-      const businessId = await getCurrentBusinessId();
-      const campaignsRef = collection(firestore, 'businesses', businessId, 'campaigns');
-      const snapshot = await getDocs(campaignsRef);
-      
-      const loadedCampaigns = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Campaign[];
-      
-      setCampaigns(loadedCampaigns);
+      console.log('📊 Loading campaigns from user collection...');
+      const loadedCampaigns = await CampaignService.getCampaigns();
+      setCampaigns(loadedCampaigns as Campaign[]);
+      console.log(`✅ Loaded ${loadedCampaigns.length} campaigns`);
     } catch (error) {
       console.error('❌ Error loading campaigns:', error);
     }
@@ -1452,15 +1438,10 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
 
   const loadOutlets = async () => {
     try {
-      const outletsRef = collection(firestore, 'users', user.uid, 'outlets');
-      const snapshot = await getDocs(outletsRef);
-      
-      const loadedOutlets = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      
+      console.log('📊 Loading outlets from user collection...');
+      const loadedOutlets = await PromotionService.getOutlets();
       setOutlets(loadedOutlets);
+      console.log(`✅ Loaded ${loadedOutlets.length} outlets`);
     } catch (error) {
       console.error('❌ Error loading outlets:', error);
     }
@@ -1493,11 +1474,8 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
         customersSnapshot = await getDocs(allCustomersRef);
         console.log(`🔍 Found ${customersSnapshot.docs.length} customers in user collection for promotion cleanup`);
       } catch (error) {
-        console.log('⚠️ User customers not found, trying business collection...');
-        // Fallback to business customers
-        allCustomersRef = collection(firestore, 'businesses', businessId, 'customers');
-        customersSnapshot = await getDocs(allCustomersRef);
-        console.log(`🔍 Found ${customersSnapshot.docs.length} customers in business collection for promotion cleanup`);
+        console.log('⚠️ User customers not found. Skipping business fallback (not used).');
+        customersSnapshot = { docs: [] } as any;
       }
       
       const batch = writeBatch(firestore);
@@ -1508,7 +1486,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
         const customerId = customerDoc.id;
         
         // Campaign promotions are ALWAYS saved to business collection, regardless of where customers come from
-        const customerPromotionsRef = collection(firestore, 'businesses', businessId, 'customerPromotions', customerId, 'promotions');
+        const customerPromotionsRef = collection(firestore, 'users', uid, 'customerPromotions', customerId, 'promotions');
         const promotionsSnapshot = await getDocs(customerPromotionsRef);
         
         console.log(`🔍 Customer ${customerId}: Found ${promotionsSnapshot.docs.length} promotions`);
@@ -1528,8 +1506,8 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
         });
       }
       
-      // Step 3: Delete from master promotions
-      batch.delete(doc(firestore, 'businesses', businessId, 'promotions', promotionId));
+      // Step 3: Delete from master promotions (users collection)
+      batch.delete(doc(firestore, 'users', uid, 'promotions', promotionId));
       
       // Execute all deletions
       await batch.commit();
@@ -1562,8 +1540,8 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
   const toggleCampaignStatus = async (campaignId: string, currentStatus: boolean) => {
     try {
       setLoading(true);
-      const businessId = await getCurrentBusinessId();
-      const campaignRef = doc(firestore, 'businesses', businessId, 'campaigns', campaignId);
+      const uid = user.uid;
+      const campaignRef = doc(firestore, 'users', uid, 'campaigns', campaignId);
       
       const newStatus = !currentStatus;
       console.log(`🔄 ${newStatus ? 'Activating' : 'Deactivating'} campaign ${campaignId}`);
@@ -1591,13 +1569,13 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
   const togglePromotionStatus = async (promotionId: string, currentStatus: boolean) => {
     try {
       setLoading(true);
-      const businessId = await getCurrentBusinessId();
+      const uid = user.uid;
       
       const newStatus = !currentStatus;
       console.log(`🔄 ${newStatus ? 'Activating' : 'Deactivating'} promotion ${promotionId}`);
       
       // Step 1: Update the master promotion status
-      const promotionRef = doc(firestore, 'businesses', businessId, 'promotions', promotionId);
+      const promotionRef = doc(firestore, 'users', uid, 'promotions', promotionId);
       await updateDoc(promotionRef, {
         isActive: newStatus
       });
@@ -1605,18 +1583,18 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       // Step 2: Update customer assignments if deactivating
       let customerUpdateCount = 0;
       if (!newStatus) {
-        const allCustomersRef = collection(firestore, 'businesses', businessId, 'customerPromotions');
+        const allCustomersRef = collection(firestore, 'users', uid, 'customerPromotions');
         const customersSnapshot = await getDocs(allCustomersRef);
         
         const batch = writeBatch(firestore);
         
         // Deactivate this promotion for all customers
         for (const customerDoc of customersSnapshot.docs) {
-          const customerPromotionRef = doc(firestore, 'businesses', businessId, 'customerPromotions', customerDoc.id, 'promotions', promotionId);
+          const customerPromotionRef = doc(firestore, 'users', uid, 'customerPromotions', customerDoc.id, 'promotions', promotionId);
           
           try {
             // Check if customer has this promotion and update its status
-            const promotionSnapshot = await getDocs(query(collection(firestore, 'businesses', businessId, 'customerPromotions', customerDoc.id, 'promotions'), where('__name__', '==', promotionId)));
+            const promotionSnapshot = await getDocs(query(collection(firestore, 'users', uid, 'customerPromotions', customerDoc.id, 'promotions'), where('__name__', '==', promotionId)));
             if (!promotionSnapshot.empty) {
               batch.update(customerPromotionRef, {
                 isActive: false
@@ -1715,7 +1693,6 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
   // 🔍 CUSTOMER LOOKUP FUNCTION
   const lookupCustomer = async (customerId: string) => {
     try {
-      const businessId = await getCurrentBusinessId();
       
       // Try user collection first (where app team stores customers)
       const userCustomersRef = collection(firestore, 'users', user.uid, 'customers');
@@ -1966,6 +1943,34 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
           >
             🔵 Promotions ({promotions.length})
           </button>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
+            <button
+              onClick={runBirthdayAutomation}
+              style={{
+                padding: '0.5rem 0.75rem',
+                backgroundColor: 'rgba(74, 222, 128, 0.2)',
+                color: '#bbf7d0',
+                border: '1px solid rgba(74, 222, 128, 0.35)',
+                borderRadius: '10px',
+                cursor: 'pointer'
+              }}
+            >
+              Run Birthday Today
+            </button>
+            <button
+              onClick={runInactiveAutomation}
+              style={{
+                padding: '0.5rem 0.75rem',
+                backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                color: '#bfdbfe',
+                border: '1px solid rgba(59, 130, 246, 0.35)',
+                borderRadius: '10px',
+                cursor: 'pointer'
+              }}
+            >
+              Run Inactive…
+            </button>
+          </div>
         </div>
 
         {/* Automatic Processing Status */}
@@ -2521,29 +2526,50 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       {showCreatePromotion && (
         <div style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
+          inset: 0,
           width: '100%',
           height: '100%',
-          background: 'rgba(0, 0, 0, 0.7)',
+          background: 'rgba(15, 23, 42, 0.6)',
+          backdropFilter: 'blur(6px)',
+          WebkitBackdropFilter: 'blur(6px)',
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
+          padding: '1rem',
           zIndex: 1000
         }}>
           <div style={{
-            background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
-            borderRadius: '12px',
-            padding: '2rem',
-            width: '90%',
-            maxWidth: '600px',
-            maxHeight: '90vh',
+            background: 'linear-gradient(180deg, rgba(15,23,42,0.95), rgba(30,41,59,0.92))',
+            border: '1px solid rgba(148,163,184,0.12)',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.35)',
+            borderRadius: '16px',
+            padding: '1.5rem 1.75rem',
+            width: 'min(640px, 92vw)',
+            maxHeight: '88vh',
             overflowY: 'auto',
             color: 'white'
           }}>
-            <h2 style={{ margin: '0 0 1.5rem 0', color: '#60a5fa' }}>
-              🎁 Create New Promotion
-            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+              <h2 style={{ margin: 0, color: '#60a5fa', fontSize: '1.25rem', fontWeight: 700 }}>
+                🎁 Create New Promotion
+              </h2>
+              <button
+                onClick={() => setShowCreatePromotion(false)}
+                aria-label="Close"
+                style={{
+                  appearance: 'none',
+                  background: 'transparent',
+                  border: '1px solid rgba(148,163,184,0.25)',
+                  color: '#cbd5e1',
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+            </div>
 
             {/* Basic Details */}
             <div style={{ marginBottom: '1rem' }}>
@@ -2778,7 +2804,9 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 value={promotionForm.targetOutlets}
                 onChange={(e) => {
                   const selected = Array.from(e.target.selectedOptions, option => option.value);
-                  setPromotionForm(prev => ({ ...prev, targetOutlets: selected }));
+                  // If "ALL" is selected, set empty array (meaning all outlets)
+                  const targetOutlets = selected.includes('ALL') ? [] : selected;
+                  setPromotionForm(prev => ({ ...prev, targetOutlets }));
                 }}
                 style={{
                   width: '100%',
@@ -2832,6 +2860,15 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 />
                 Send SMS to customers
               </label>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginTop: '0.5rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={!!promotionForm.assignNow}
+                    onChange={(e) => setPromotionForm(prev => ({ ...prev, assignNow: e.target.checked }))}
+                    style={{ marginRight: '0.5rem' }}
+                  />
+                  Assign to eligible customers now
+                </label>
             </div>
 
             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
@@ -2876,29 +2913,50 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       {showCreateCampaign && (
         <div style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
+          inset: 0,
           width: '100%',
           height: '100%',
-          background: 'rgba(0, 0, 0, 0.7)',
+          background: 'rgba(15, 23, 42, 0.6)',
+          backdropFilter: 'blur(6px)',
+          WebkitBackdropFilter: 'blur(6px)',
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
+          padding: '1rem',
           zIndex: 1000
         }}>
           <div style={{
-            background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
-            borderRadius: '12px',
-            padding: '2rem',
-            width: '90%',
-            maxWidth: '600px',
-            maxHeight: '90vh',
+            background: 'linear-gradient(180deg, rgba(15,23,42,0.95), rgba(30,41,59,0.92))',
+            border: '1px solid rgba(148,163,184,0.12)',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.35)',
+            borderRadius: '16px',
+            padding: '1.5rem 1.75rem',
+            width: 'min(640px, 92vw)',
+            maxHeight: '88vh',
             overflowY: 'auto',
             color: 'white'
           }}>
-            <h2 style={{ margin: '0 0 1.5rem 0', color: '#4ade80' }}>
-              📈 Create New Campaign
-            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+              <h2 style={{ margin: 0, color: '#4ade80', fontSize: '1.25rem', fontWeight: 700 }}>
+                📈 Create New Campaign
+              </h2>
+              <button
+                onClick={() => setShowCreateCampaign(false)}
+                aria-label="Close"
+                style={{
+                  appearance: 'none',
+                  background: 'transparent',
+                  border: '1px solid rgba(148,163,184,0.25)',
+                  color: '#cbd5e1',
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+            </div>
 
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>

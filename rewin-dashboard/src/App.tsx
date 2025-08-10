@@ -4422,23 +4422,24 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       }
     }, [searchTerm, customersData.customers]);
 
-    const handleCustomerClick = (customer: any) => {
-      setSelectedCustomer(customer);
-      setPreviousPage('customers'); // Track that we came from customers page
-    };
+      const handleCustomerClick = (customer: any) => {
+    setSelectedCustomer(customer);
+    setPreviousPage('customers'); // Track that we came from customers page
+  };
 
-    return (
-      <div style={{
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        minHeight: '100vh',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        margin: 0,
-        padding: 0,
-        overflow: 'auto',
-        display: 'flex',
-        flexDirection: 'column'
-      }}>
-        {/* Header */}
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      minHeight: '100vh',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      margin: 0,
+      padding: 0,
+      overflow: 'auto',
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
+
+      {/* Header */}
         <header style={{
           background: 'linear-gradient(135deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.1) 100%)',
           color: 'white',
