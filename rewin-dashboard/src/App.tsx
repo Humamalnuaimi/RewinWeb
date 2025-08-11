@@ -5272,7 +5272,11 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
                 if (glow) glow.style.opacity = '1';
                 const icon = card.querySelector('[data-role="icon"]') as HTMLElement;
-                if (icon) icon.style.filter = 'drop-shadow(0 0 18px rgba(99,102,241,0.6))';
+                if (icon) {
+                  icon.style.filter = 'drop-shadow(0 0 18px rgba(99,102,241,0.6))';
+                  icon.style.background = 'linear-gradient(135deg, rgba(129,140,248,0.35) 0%, rgba(129,140,248,0.2) 100%)';
+                  icon.style.borderColor = 'rgba(129,140,248,0.6)';
+                }
               }}
               onMouseLeave={(e) => {
                 const card = e.currentTarget as HTMLElement;
@@ -5281,11 +5285,15 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
                 if (glow) glow.style.opacity = '0';
                 const icon = card.querySelector('[data-role="icon"]') as HTMLElement;
-                if (icon) icon.style.filter = 'none';
+                if (icon) {
+                  icon.style.filter = 'none';
+                  icon.style.background = 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)';
+                  icon.style.borderColor = 'rgba(255,255,255,0.25)';
+                }
               }}
             >
-                <div data-role="glow" style={{ position: 'absolute', top: '-30px', right: '-30px', width: '180px', height: '180px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(99,102,241,0.35) 0%, rgba(99,102,241,0) 60%)', opacity: 0, transition: 'opacity 0.3s ease', pointerEvents: 'none' }} />
-                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transition: 'filter 0.3s ease' }}>
+                <div data-role="glow" style={{ position: 'absolute', top: '12px', right: '12px', width: '60px', height: '60px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(99,102,241,0.4) 0%, rgba(99,102,241,0) 70%)', opacity: 0, transition: 'opacity 0.3s ease', filter: 'blur(6px)', pointerEvents: 'none', zIndex: 0 }} />
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)', color: '#a5b4fc', border: '1px solid rgba(255,255,255,0.25)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transition: 'filter 0.3s ease, background 0.3s ease, border-color 0.3s ease', zIndex: 1 }}>
                   <UsersIcon />
                 </div>
                 <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>
@@ -5331,8 +5339,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                   if (icon) icon.style.filter = 'none';
                 }}
               >
-                <div data-role="glow" style={{ position: 'absolute', top: '-30px', right: '-30px', width: '180px', height: '180px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(16,185,129,0.35) 0%, rgba(16,185,129,0) 60%)', opacity: 0, transition: 'opacity 0.3s ease', pointerEvents: 'none' }} />
-                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transition: 'filter 0.3s ease' }}>
+                <div data-role="glow" style={{ position: 'absolute', top: '12px', right: '12px', width: '60px', height: '60px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(16,185,129,0.4) 0%, rgba(16,185,129,0) 70%)', opacity: 0, transition: 'opacity 0.3s ease', filter: 'blur(6px)', pointerEvents: 'none', zIndex: 0 }} />
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)', color: '#34d399', border: '1px solid rgba(255,255,255,0.25)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transition: 'filter 0.3s ease, background 0.3s ease, border-color 0.3s ease', zIndex: 1 }}>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                   </svg>
@@ -5410,8 +5418,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                   if (icon) icon.style.filter = 'none';
                 }}
               >
-                <div data-role="glow" style={{ position: 'absolute', top: '-30px', right: '-30px', width: '180px', height: '180px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(59,130,246,0.35) 0%, rgba(59,130,246,0) 60%)', opacity: 0, transition: 'opacity 0.3s ease', pointerEvents: 'none' }} />
-                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transition: 'filter 0.3s ease' }}>
+                <div data-role="glow" style={{ position: 'absolute', top: '12px', right: '12px', width: '60px', height: '60px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(59,130,246,0.4) 0%, rgba(59,130,246,0) 70%)', opacity: 0, transition: 'opacity 0.3s ease', filter: 'blur(6px)', pointerEvents: 'none', zIndex: 0 }} />
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)', color: '#60a5fa', border: '1px solid rgba(255,255,255,0.25)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transition: 'filter 0.3s ease, background 0.3s ease, border-color 0.3s ease', zIndex: 1 }}>
                   <AnalyticsIcon />
                 </div>
                 <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>Check-ins Today</h3>
@@ -5455,8 +5463,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                   if (icon) icon.style.filter = 'none';
                 }}
               >
-                <div data-role="glow" style={{ position: 'absolute', top: '-30px', right: '-30px', width: '180px', height: '180px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(234,179,8,0.35) 0%, rgba(234,179,8,0) 60%)', opacity: 0, transition: 'opacity 0.3s ease', pointerEvents: 'none' }} />
-                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transition: 'filter 0.3s ease' }}>
+                <div data-role="glow" style={{ position: 'absolute', top: '12px', right: '12px', width: '60px', height: '60px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(234,179,8,0.4) 0%, rgba(234,179,8,0) 70%)', opacity: 0, transition: 'opacity 0.3s ease', filter: 'blur(6px)', pointerEvents: 'none', zIndex: 0 }} />
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)', color: '#facc15', border: '1px solid rgba(255,255,255,0.25)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transition: 'filter 0.3s ease, background 0.3s ease, border-color 0.3s ease', zIndex: 1 }}>
                   <SignupIcon />
                 </div>
                 <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>New Signups Today</h3>
@@ -5501,8 +5509,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                   if (icon) icon.style.filter = 'none';
                 }}
               >
-                <div data-role="glow" style={{ position: 'absolute', top: '-30px', right: '-30px', width: '180px', height: '180px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(248,113,113,0.35) 0%, rgba(248,113,113,0) 60%)', opacity: 0, transition: 'opacity 0.3s ease', pointerEvents: 'none' }} />
-                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transition: 'filter 0.3s ease' }}>
+                <div data-role="glow" style={{ position: 'absolute', top: '12px', right: '12px', width: '60px', height: '60px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(248,113,113,0.4) 0%, rgba(248,113,113,0) 70%)', opacity: 0, transition: 'opacity 0.3s ease', filter: 'blur(6px)', pointerEvents: 'none', zIndex: 0 }} />
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)', color: '#fca5a5', border: '1px solid rgba(255,255,255,0.25)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transition: 'filter 0.3s ease, background 0.3s ease, border-color 0.3s ease', zIndex: 1 }}>
                   <StoreIcon />
                 </div>
                 <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>Active Outlets</h3>
