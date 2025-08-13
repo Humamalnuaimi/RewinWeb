@@ -5260,7 +5260,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 position: 'relative',
                 overflow: 'hidden',
                 backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(255,255,255,0.2)',
+                border: '2px solid rgba(16,185,129,0.8)',
                 cursor: 'pointer',
                 transition: 'all 0.3s ease',
                 transform: 'translateY(0)'
@@ -5268,32 +5268,33 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               onMouseEnter={(e) => {
                 const card = e.currentTarget as HTMLElement;
                 card.style.transform = 'translateY(-5px)';
-                card.style.boxShadow = '0 12px 40px rgba(0,0,0,0.3)';
+                card.style.boxShadow = '0 12px 40px rgba(16,185,129,0.3)';
+                card.style.border = '2px solid rgba(16,185,129,1)';
                 const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
                 if (glow) glow.style.opacity = '1';
-                const icon = card.querySelector('[data-role="icon"]') as HTMLElement;
-                if (icon) {
-                  icon.style.filter = 'drop-shadow(0 0 18px rgba(99,102,241,0.6))';
-                  icon.style.background = 'linear-gradient(135deg, rgba(129,140,248,0.35) 0%, rgba(129,140,248,0.2) 100%)';
-                  icon.style.borderColor = 'rgba(129,140,248,0.6)';
+                const closeBtn = card.querySelector('[data-role="close-btn"]') as HTMLElement;
+                if (closeBtn) {
+                  closeBtn.style.opacity = '1';
+                  closeBtn.style.transform = 'scale(1)';
                 }
               }}
               onMouseLeave={(e) => {
                 const card = e.currentTarget as HTMLElement;
                 card.style.transform = 'translateY(0)';
                 card.style.boxShadow = '0 8px 32px rgba(0,0,0,0.2)';
+                card.style.border = '2px solid rgba(16,185,129,0.8)';
                 const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
                 if (glow) glow.style.opacity = '0';
-                const icon = card.querySelector('[data-role="icon"]') as HTMLElement;
-                if (icon) {
-                  icon.style.filter = 'none';
-                  icon.style.background = 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)';
-                  icon.style.borderColor = 'rgba(255,255,255,0.25)';
+                const closeBtn = card.querySelector('[data-role="close-btn"]') as HTMLElement;
+                if (closeBtn) {
+                  closeBtn.style.opacity = '0';
+                  closeBtn.style.transform = 'scale(0.8)';
                 }
               }}
             >
-                <div data-role="glow" style={{ position: 'absolute', top: '12px', right: '12px', width: '60px', height: '60px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(99,102,241,0.4) 0%, rgba(99,102,241,0) 70%)', opacity: 0, transition: 'opacity 0.3s ease', filter: 'blur(6px)', pointerEvents: 'none', zIndex: 0 }} />
-                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(129,140,248,0.25) 0%, rgba(129,140,248,0.15) 100%)', color: '#a5b4fc', border: '1px solid rgba(129,140,248,0.4)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transition: 'filter 0.3s ease, background 0.3s ease, border-color 0.3s ease', zIndex: 1 }}>
+                <div data-role="glow" style={{ position: 'absolute', top: '-80px', right: '-80px', width: '120px', height: '120px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(16,185,129,0.5) 0%, rgba(16,185,129,0) 78%)', opacity: 0, transition: 'opacity 0.25s ease', filter: 'blur(16px)', pointerEvents: 'none', zIndex: 0 }} />
+
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(13,16,34,0.98) 0%, rgba(13,16,34,0.92) 100%)', color: '#10b981', border: '1px solid rgba(16,185,129,0.4)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 2, isolation: 'isolate' }}>
                   <UsersIcon />
                 </div>
                 <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>
@@ -5316,31 +5317,33 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                   position: 'relative',
                   overflow: 'hidden',
                   backdropFilter: 'blur(20px)',
-                  border: '1px solid rgba(255,255,255,0.2)',
+                  border: '2px solid rgba(139,92,246,0.8)',
                   cursor: 'pointer',
-                  transition: 'all 0.3s ease'
+                  transition: 'all 0.3s ease',
+                  transform: 'translateY(0)'
                 }}
                 onMouseEnter={(e) => {
                   const card = e.currentTarget as HTMLElement;
                   card.style.transform = 'translateY(-5px)';
-                  card.style.boxShadow = '0 12px 40px rgba(0,0,0,0.3)';
+                  card.style.boxShadow = '0 12px 40px rgba(139,92,246,0.3)';
+                  card.style.border = '2px solid rgba(139,92,246,1)';
                   const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
                   if (glow) glow.style.opacity = '1';
-                  const icon = card.querySelector('[data-role="icon"]') as HTMLElement;
-                  if (icon) icon.style.filter = 'drop-shadow(0 0 18px rgba(16,185,129,0.6))';
+
                 }}
                 onMouseLeave={(e) => {
                   const card = e.currentTarget as HTMLElement;
                   card.style.transform = 'translateY(0)';
                   card.style.boxShadow = '0 8px 32px rgba(0,0,0,0.2)';
+                  card.style.border = '2px solid rgba(139,92,246,0.8)';
                   const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
                   if (glow) glow.style.opacity = '0';
-                  const icon = card.querySelector('[data-role="icon"]') as HTMLElement;
-                  if (icon) icon.style.filter = 'none';
+
                 }}
               >
-                <div data-role="glow" style={{ position: 'absolute', top: '12px', right: '12px', width: '60px', height: '60px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(16,185,129,0.4) 0%, rgba(16,185,129,0) 70%)', opacity: 0, transition: 'opacity 0.3s ease', filter: 'blur(6px)', pointerEvents: 'none', zIndex: 0 }} />
-                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(16,185,129,0.25) 0%, rgba(16,185,129,0.15) 100%)', color: '#34d399', border: '1px solid rgba(16,185,129,0.4)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transition: 'filter 0.3s ease, background 0.3s ease, border-color 0.3s ease', zIndex: 1 }}>
+                <div data-role="glow" style={{ position: 'absolute', top: '-80px', right: '-80px', width: '120px', height: '120px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(139,92,246,0.5) 0%, rgba(139,92,246,0) 78%)', opacity: 0, transition: 'opacity 0.25s ease', filter: 'blur(16px)', pointerEvents: 'none', zIndex: 0 }} />
+
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(13,16,34,0.98) 0%, rgba(13,16,34,0.92) 100%)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.4)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 2, isolation: 'isolate' }}>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                   </svg>
@@ -5354,24 +5357,44 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 </div>
               </div>
               
-              <div style={{
-                background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
-                color: 'white',
-                padding: '2.5rem',
-                borderRadius: '20px',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
-                position: 'relative',
-                overflow: 'hidden',
-                backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(255,255,255,0.2)'
-              }}>
-                <div style={{ 
-                  position: 'absolute', 
-                  top: '20px', 
-                  right: '20px', 
-                  opacity: 0.3,
-                  transform: 'scale(1.5)'
-                }}>
+              <div 
+                onClick={() => handleCardClick('revenue')}
+                style={{
+                  background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
+                  color: 'white',
+                  padding: '2.5rem',
+                  borderRadius: '20px',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  backdropFilter: 'blur(20px)',
+                  border: '2px solid rgba(156,163,175,0.8)',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  transform: 'translateY(0)'
+                }}
+                onMouseEnter={(e) => {
+                  const card = e.currentTarget as HTMLElement;
+                  card.style.transform = 'translateY(-5px)';
+                  card.style.boxShadow = '0 12px 40px rgba(156,163,175,0.3)';
+                  card.style.border = '2px solid rgba(156,163,175,1)';
+                  const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
+                  if (glow) glow.style.opacity = '1';
+
+                }}
+                onMouseLeave={(e) => {
+                  const card = e.currentTarget as HTMLElement;
+                  card.style.transform = 'translateY(0)';
+                  card.style.boxShadow = '0 8px 32px rgba(0,0,0,0.2)';
+                  card.style.border = '2px solid rgba(156,163,175,0.8)';
+                  const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
+                  if (glow) glow.style.opacity = '0';
+
+                }}
+              >
+                <div data-role="glow" style={{ position: 'absolute', top: '-80px', right: '-80px', width: '120px', height: '120px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(156,163,175,0.5) 0%, rgba(156,163,175,0) 78%)', opacity: 0, transition: 'opacity 0.25s ease', filter: 'blur(16px)', pointerEvents: 'none', zIndex: 0 }} />
+
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(13,16,34,0.98) 0%, rgba(13,16,34,0.92) 100%)', color: '#d1d5db', border: '1px solid rgba(156,163,175,0.4)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 2, isolation: 'isolate' }}>
                   <RevenueIcon />
                 </div>
                 <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>
@@ -5379,7 +5402,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 </h3>
                 <p style={{ fontSize: '3.5rem', fontWeight: '900', margin: 0 }}>${data.revenue.toLocaleString()}</p>
                 <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>
-                  {selectedOutlet === 'all' ? 'All outlets' : 'This outlet'}
+                  {selectedOutlet === 'all' ? 'All outlets' : 'This outlet'} • Click to view details →
                 </div>
               </div>
               
@@ -5395,76 +5418,88 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                   position: 'relative',
                   overflow: 'hidden',
                   backdropFilter: 'blur(20px)',
-                  border: '1px solid rgba(255,255,255,0.2)',
+                  border: '2px solid rgba(59,130,246,0.8)',
                   cursor: 'pointer',
-                  transition: 'all 0.3s ease'
+                  transition: 'all 0.3s ease',
+                  transform: 'translateY(0)'
                 }}
                 onMouseEnter={(e) => {
                   const card = e.currentTarget as HTMLElement;
                   card.style.transform = 'translateY(-5px)';
-                  card.style.boxShadow = '0 15px 40px rgba(0,0,0,0.3)';
+                  card.style.boxShadow = '0 12px 40px rgba(59,130,246,0.3)';
+                  card.style.border = '2px solid rgba(59,130,246,1)';
                   const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
                   if (glow) glow.style.opacity = '1';
-                  const icon = card.querySelector('[data-role="icon"]') as HTMLElement;
-                  if (icon) icon.style.filter = 'drop-shadow(0 0 18px rgba(59,130,246,0.6))';
+
                 }}
                 onMouseLeave={(e) => {
                   const card = e.currentTarget as HTMLElement;
                   card.style.transform = 'translateY(0)';
                   card.style.boxShadow = '0 8px 32px rgba(0,0,0,0.2)';
+                  card.style.border = '2px solid rgba(59,130,246,0.8)';
                   const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
                   if (glow) glow.style.opacity = '0';
-                  const icon = card.querySelector('[data-role="icon"]') as HTMLElement;
-                  if (icon) icon.style.filter = 'none';
+
                 }}
               >
-                <div data-role="glow" style={{ position: 'absolute', top: '12px', right: '12px', width: '60px', height: '60px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(59,130,246,0.4) 0%, rgba(59,130,246,0) 70%)', opacity: 0, transition: 'opacity 0.3s ease', filter: 'blur(6px)', pointerEvents: 'none', zIndex: 0 }} />
-                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(59,130,246,0.25) 0%, rgba(59,130,246,0.15) 100%)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.4)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transition: 'filter 0.3s ease, background 0.3s ease, border-color 0.3s ease', zIndex: 1 }}>
+                <div data-role="glow" style={{ position: 'absolute', top: '-80px', right: '-80px', width: '120px', height: '120px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(59,130,246,0.5) 0%, rgba(59,130,246,0) 78%)', opacity: 0, transition: 'opacity 0.25s ease', filter: 'blur(16px)', pointerEvents: 'none', zIndex: 0 }} />
+
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(13,16,34,0.98) 0%, rgba(13,16,34,0.92) 100%)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.35)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 2, isolation: 'isolate' }}>
                   <AnalyticsIcon />
                 </div>
                 <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>Check-ins Today</h3>
                 <p style={{ fontSize: '3.5rem', fontWeight: '900', margin: 0 }}>{data.checkIns.toLocaleString()}</p>
                 <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>
-                  {selectedOutlet === 'all' ? 'All outlets • Click to view details →' : 'This outlet • Click to view details →'}
+                  {selectedOutlet === 'all' ? 'All outlets' : 'This outlet'} • Click to view details →
                 </div>
               </div>
               
               <div 
                 onClick={() => handleCardClick('signups')}
                 style={{
-                background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
-                color: 'white',
-                padding: '2.5rem',
-                borderRadius: '20px',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
-                position: 'relative',
-                overflow: 'hidden',
-                backdropFilter: 'blur(20px)',
-                  border: '1px solid rgba(255,255,255,0.2)',
+                  background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
+                  color: 'white',
+                  padding: '2.5rem',
+                  borderRadius: '20px',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  backdropFilter: 'blur(20px)',
+                  border: '2px solid rgba(251,191,36,0.8)',
                   cursor: 'pointer',
-                  transition: 'all 0.3s ease'
+                  transition: 'all 0.3s ease',
+                  transform: 'translateY(0)'
                 }}
                 onMouseEnter={(e) => {
                   const card = e.currentTarget as HTMLElement;
                   card.style.transform = 'translateY(-5px)';
-                  card.style.boxShadow = '0 12px 40px rgba(0,0,0,0.3)';
+                  card.style.boxShadow = '0 12px 40px rgba(251,191,36,0.3)';
+                  card.style.border = '2px solid rgba(251,191,36,1)';
                   const glow = card.querySelector('[data-role=\"glow\"]') as HTMLElement;
                   if (glow) glow.style.opacity = '1';
-                  const icon = card.querySelector('[data-role=\"icon\"]') as HTMLElement;
-                  if (icon) icon.style.filter = 'drop-shadow(0 0 18px rgba(234,179,8,0.6))';
+                  const closeBtn = card.querySelector('[data-role=\"close-btn\"]') as HTMLElement;
+                  if (closeBtn) {
+                    closeBtn.style.opacity = '1';
+                    closeBtn.style.transform = 'scale(1)';
+                  }
                 }}
                 onMouseLeave={(e) => {
                   const card = e.currentTarget as HTMLElement;
                   card.style.transform = 'translateY(0)';
                   card.style.boxShadow = '0 8px 32px rgba(0,0,0,0.2)';
+                  card.style.border = '2px solid rgba(251,191,36,0.8)';
                   const glow = card.querySelector('[data-role=\"glow\"]') as HTMLElement;
                   if (glow) glow.style.opacity = '0';
-                  const icon = card.querySelector('[data-role=\"icon\"]') as HTMLElement;
-                  if (icon) icon.style.filter = 'none';
+                  const closeBtn = card.querySelector('[data-role=\"close-btn\"]') as HTMLElement;
+                  if (closeBtn) {
+                    closeBtn.style.opacity = '0';
+                    closeBtn.style.transform = 'scale(0.8)';
+                  }
                 }}
               >
-                <div data-role="glow" style={{ position: 'absolute', top: '12px', right: '12px', width: '60px', height: '60px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(234,179,8,0.4) 0%, rgba(234,179,8,0) 70%)', opacity: 0, transition: 'opacity 0.3s ease', filter: 'blur(6px)', pointerEvents: 'none', zIndex: 0 }} />
-                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(234,179,8,0.25) 0%, rgba(234,179,8,0.15) 100%)', color: '#facc15', border: '1px solid rgba(234,179,8,0.4)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transition: 'filter 0.3s ease, background 0.3s ease, border-color 0.3s ease', zIndex: 1 }}>
+                <div data-role="glow" style={{ position: 'absolute', top: '-80px', right: '-80px', width: '120px', height: '120px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(251,191,36,0.5) 0%, rgba(251,191,36,0) 78%)', opacity: 0, transition: 'opacity 0.25s ease', filter: 'blur(16px)', pointerEvents: 'none', zIndex: 0 }} />
+
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(13,16,34,0.98) 0%, rgba(13,16,34,0.92) 100%)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.35)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 2, isolation: 'isolate' }}>
                   <SignupIcon />
                 </div>
                 <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>New Signups Today</h3>
@@ -5477,15 +5512,15 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               <div 
                 onClick={() => handleCardClick('outlets')}
                 style={{
-                background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
-                color: 'white',
-                padding: '2.5rem',
-                borderRadius: '20px',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
-                position: 'relative',
-                overflow: 'hidden',
-                backdropFilter: 'blur(20px)',
-                  border: '1px solid rgba(255,255,255,0.2)',
+                  background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
+                  color: 'white',
+                  padding: '2.5rem',
+                  borderRadius: '20px',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  backdropFilter: 'blur(20px)',
+                  border: '2px solid rgba(251,146,60,0.8)',
                   cursor: 'pointer',
                   transition: 'all 0.3s ease',
                   transform: 'translateY(0)'
@@ -5493,30 +5528,31 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 onMouseEnter={(e) => {
                   const card = e.currentTarget as HTMLElement;
                   card.style.transform = 'translateY(-5px)';
-                  card.style.boxShadow = '0 12px 40px rgba(0,0,0,0.3)';
+                  card.style.boxShadow = '0 12px 40px rgba(251,146,60,0.3)';
+                  card.style.border = '2px solid rgba(251,146,60,1)';
                   const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
                   if (glow) glow.style.opacity = '1';
-                  const icon = card.querySelector('[data-role="icon"]') as HTMLElement;
-                  if (icon) icon.style.filter = 'drop-shadow(0 0 18px rgba(248,113,113,0.6))';
+
                 }}
                 onMouseLeave={(e) => {
                   const card = e.currentTarget as HTMLElement;
                   card.style.transform = 'translateY(0)';
                   card.style.boxShadow = '0 8px 32px rgba(0,0,0,0.2)';
+                  card.style.border = '2px solid rgba(251,146,60,0.8)';
                   const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
                   if (glow) glow.style.opacity = '0';
-                  const icon = card.querySelector('[data-role="icon"]') as HTMLElement;
-                  if (icon) icon.style.filter = 'none';
+
                 }}
               >
-                <div data-role="glow" style={{ position: 'absolute', top: '12px', right: '12px', width: '60px', height: '60px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(248,113,113,0.4) 0%, rgba(248,113,113,0) 70%)', opacity: 0, transition: 'opacity 0.3s ease', filter: 'blur(6px)', pointerEvents: 'none', zIndex: 0 }} />
-                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(248,113,113,0.25) 0%, rgba(248,113,113,0.15) 100%)', color: '#fca5a5', border: '1px solid rgba(248,113,113,0.4)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transition: 'filter 0.3s ease, background 0.3s ease, border-color 0.3s ease', zIndex: 1 }}>
+                <div data-role="glow" style={{ position: 'absolute', top: '-80px', right: '-80px', width: '120px', height: '120px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(251,146,60,0.5) 0%, rgba(251,146,60,0) 78%)', opacity: 0, transition: 'opacity 0.25s ease', filter: 'blur(16px)', pointerEvents: 'none', zIndex: 0 }} />
+
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(13,16,34,0.98) 0%, rgba(13,16,34,0.92) 100%)', color: '#fdba74', border: '1px solid rgba(251,146,60,0.35)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 2, isolation: 'isolate' }}>
                   <StoreIcon />
                 </div>
                 <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>Active Outlets</h3>
                 <p style={{ fontSize: '3.5rem', fontWeight: '900', margin: 0 }}>{data.outlets.toLocaleString()}</p>
                 <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>Click to manage outlets →</div>
-                </div>
+              </div>
               
               {/* Three-Tier Rewards System Card */}
               <div 
@@ -5530,7 +5566,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 position: 'relative',
                 overflow: 'hidden',
                 backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(255,255,255,0.2)',
+                border: '2px solid rgba(16,185,129,0.8)',
                 cursor: 'pointer',
                 transition: 'all 0.3s ease',
                 transform: 'translateY(0)'
@@ -5538,22 +5574,39 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               onMouseEnter={(e) => {
                 const card = e.currentTarget as HTMLElement;
                 card.style.transform = 'translateY(-5px)';
-                card.style.boxShadow = '0 12px 40px rgba(0,0,0,0.3)';
+                card.style.boxShadow = '0 12px 40px rgba(16,185,129,0.3)';
+                card.style.border = '2px solid rgba(16,185,129,1)';
                 const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
                 if (glow) glow.style.opacity = '1';
+                const closeBtn = card.querySelector('[data-role="close-btn"]') as HTMLElement;
+                if (closeBtn) {
+                  closeBtn.style.opacity = '1';
+                  closeBtn.style.transform = 'scale(1)';
+                }
               }}
               onMouseLeave={(e) => {
                 const card = e.currentTarget as HTMLElement;
                 card.style.transform = 'translateY(0)';
                 card.style.boxShadow = '0 8px 32px rgba(0,0,0,0.2)';
+                card.style.border = '2px solid rgba(16,185,129,0.8)';
                 const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
                 if (glow) glow.style.opacity = '0';
+                const closeBtn = card.querySelector('[data-role="close-btn"]') as HTMLElement;
+                if (closeBtn) {
+                  closeBtn.style.opacity = '0';
+                  closeBtn.style.transform = 'scale(0.8)';
+                }
               }}
             >
-                <div data-role="glow" style={{ position: 'absolute', top: '-30px', right: '-30px', width: '180px', height: '180px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(168,85,247,0.35) 0%, rgba(168,85,247,0) 60%)', opacity: 0, transition: 'opacity 0.3s ease', pointerEvents: 'none' }} />
+                <div data-role="glow" style={{ position: 'absolute', top: '-80px', right: '-80px', width: '120px', height: '120px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(16,185,129,0.5) 0%, rgba(16,185,129,0) 78%)', opacity: 0, transition: 'opacity 0.25s ease', filter: 'blur(16px)', pointerEvents: 'none', zIndex: 0 }} />
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(13,16,34,0.98) 0%, rgba(13,16,34,0.92) 100%)', color: '#10b981', border: '1px solid rgba(16,185,129,0.4)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 2, isolation: 'isolate' }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+                  </svg>
+                </div>
                 <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>Rewards System</h3>
-                <p style={{ fontSize: '2.5rem', fontWeight: '900', margin: 0, color: '#10B981' }}>3-TIER</p>
-                <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>Campaigns • Promotions • Points →</div>
+                <p style={{ fontSize: '1.8rem', fontWeight: '700', margin: 0, color: '#10B981' }}>Promotions • Campaigns</p>
+                <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>Manage your loyalty rewards →</div>
               </div>
 
               {/* Admin Panel Card - Only for Authorized Users */}
