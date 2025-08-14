@@ -1746,10 +1746,14 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     useEffect(() => {
       if (!user?.uid) return;
 
+      console.log('🚨 POINTS HISTORY USEEFFECT TRIGGERED');
       console.log('🔍 Fetching points data for time period:', timePeriod);
       console.log('📅 Selected date:', selectedDate.toLocaleDateString());
+      console.log('📅 Selected date full:', selectedDate.toString());
       const { startDate, endDate } = getCurrentDateRange();
       console.log('📅 Date range:', startDate.toLocaleDateString(), 'to', endDate.toLocaleDateString());
+      console.log('📅 Start date full:', startDate.toString());
+      console.log('📅 End date full:', endDate.toString());
       
       setPointsData(prev => ({ ...prev, loading: true }));
       
@@ -2591,17 +2595,14 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                                 console.log('📅 Date selected from calendar:', selectedDay.toLocaleDateString());
                                 const newSelectedDate = new Date(selectedDay);
                                 console.log('🎯 Setting selectedDate to:', newSelectedDate.toLocaleDateString());
+                                console.log('🔍 Current selectedDate before update:', selectedDate.toLocaleDateString());
                                 
-                                // Close modal first, then update date
+                                // Update both states together
+                                setTimePeriod('today');
+                                setSelectedDate(newSelectedDate);
                                 setTimeDropdownOpen(false);
                                 
-                                // Force a clean state update
-                                setTimeout(() => {
-                                  setSelectedDate(newSelectedDate);
-                                  setTimePeriod('today'); // Use today mode for single date
-                                  console.log('🔄 Date state updated to:', newSelectedDate.toLocaleDateString());
-                                  console.log('✅ Current page:', currentPage);
-                                }, 50);
+                                console.log('✅ States updated - new date:', newSelectedDate.toLocaleDateString());
                               } else {
                                 console.log('❌ Future date clicked, ignoring');
                               }
@@ -4821,7 +4822,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
   }
   
   if (currentPage === 'points') {
-    return <PointsDetailsPage />;
+    return <PointsDetailsPage key={`points-${selectedDate.getTime()}`} />;
   }
   
   if (currentPage === 'checkins') {
