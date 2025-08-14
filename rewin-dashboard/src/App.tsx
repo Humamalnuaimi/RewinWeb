@@ -2011,9 +2011,12 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                     {(() => {
                       const { startDate, endDate } = getCurrentDateRange();
                       if (timePeriod === 'this_week' || timePeriod === 'last_week') {
-                        const start = startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                        const end = endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                        return `${start} to ${end}`;
+                        const shortOpts = { weekday: 'short', month: 'short', day: 'numeric' } as const;
+                        const startStr = startDate.toLocaleDateString('en-US', shortOpts);
+                        const endStr = endDate.toLocaleDateString('en-US', shortOpts);
+                        const sameYear = startDate.getFullYear() === endDate.getFullYear();
+                        const yearSuffix = sameYear ? `, ${endDate.getFullYear()}` : `, ${startDate.getFullYear()} to ${endDate.getFullYear()}`;
+                        return `${startStr} to ${endStr}${yearSuffix}`;
                       }
                       if (timePeriod === 'this_month') {
                         return selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
