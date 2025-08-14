@@ -1985,7 +1985,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                             <div style={{ textAlign: 'center', position: 'relative' }}>
                 <button
                   onClick={() => setTimeDropdownOpen(!timeDropdownOpen)}
-                  data-time-dropdown
+                  data-time-dropdown="true"
                   style={{
                     background: 'none',
                     border: 'none',
@@ -2277,6 +2277,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
           >
             {/* Modal Content */}
             <div
+              data-time-dropdown="true"
               onClick={(e) => e.stopPropagation()}
               style={{
                 background: 'rgba(20,24,45,0.6)',
