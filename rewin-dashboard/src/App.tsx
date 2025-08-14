@@ -2581,23 +2581,23 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                          days.push(
                            <button
                              key={day}
-                             onClick={(e) => {
-                               console.log('🔥 CALENDAR BUTTON CLICKED!', day, 'isFutureDate:', isFutureDate);
+                             onClick={((selectedDay) => (e) => {
+                               console.log('🔥 CALENDAR BUTTON CLICKED!', selectedDay.getDate(), 'isFutureDate:', selectedDay > today);
                                e.preventDefault();
                                e.stopPropagation();
                                e.nativeEvent.stopImmediatePropagation();
-                                                              if (!isFutureDate) {
+                               if (selectedDay <= today) {
                                 // Set the specific date and switch to single day view
-                                console.log('📅 Date selected from calendar:', currentDate.toLocaleDateString());
-                                setSelectedDate(currentDate);
+                                console.log('📅 Date selected from calendar:', selectedDay.toLocaleDateString());
+                                setSelectedDate(new Date(selectedDay));
                                 setTimePeriod('today'); // Use today mode for single date
                                 setTimeDropdownOpen(false);
-                                console.log('🔄 Switching to single date view for:', currentDate.toLocaleDateString());
-                                console.log('✅ Updated state - selectedDate:', currentDate, 'timePeriod:', 'today');
+                                console.log('🔄 Switching to single date view for:', selectedDay.toLocaleDateString());
+                                console.log('✅ Updated state - selectedDate:', selectedDay, 'timePeriod:', 'today');
                               } else {
                                 console.log('❌ Future date clicked, ignoring');
                               }
-                             }}
+                             })(currentDate)}
                              disabled={isFutureDate}
                              style={{
                                padding: '0.75rem',
