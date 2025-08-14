@@ -421,6 +421,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
   const [selectedOutlet, setSelectedOutlet] = useState('all');
   const [outlets, setOutlets] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [customRangeStart, setCustomRangeStart] = useState<Date | null>(null);
+  const [customRangeEnd, setCustomRangeEnd] = useState<Date | null>(null);
   const [historicalData, setHistoricalData] = useState<any[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
@@ -1726,6 +1728,17 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
           endDate = new Date(now.getFullYear(), now.getMonth(), 0);
           endDate.setHours(23, 59, 59, 999);
           break;
+        case 'custom_range': {
+          const start = customRangeStart ?? selectedDate;
+          const end = customRangeEnd ?? customRangeStart ?? selectedDate;
+          const minDate = start <= end ? start : end;
+          const maxDate = start <= end ? end : start;
+          startDate = new Date(minDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(maxDate);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        }
         default:
           startDate = new Date(selectedDate);
           startDate.setHours(0, 0, 0, 0);
@@ -1829,7 +1842,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       return () => {
         unsubscribeCustomers();
       };
-    }, [timePeriod, selectedDate, selectedOutlet, user.uid]);
+    }, [timePeriod, selectedDate, selectedOutlet, user.uid, customRangeStart, customRangeEnd]);
 
     // Separate useEffect for outlet name to avoid infinite loops
     useEffect(() => {
@@ -2017,6 +2030,13 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         const sameYear = startDate.getFullYear() === endDate.getFullYear();
                         const yearSuffix = sameYear ? `, ${endDate.getFullYear()}` : `, ${startDate.getFullYear()} to ${endDate.getFullYear()}`;
                         return `${startStr} to ${endStr}${yearSuffix}`;
+                      }
+                      if (timePeriod === 'custom_range') {
+                        const start = customRangeStart ?? startDate;
+                        const end = customRangeEnd ?? endDate;
+                        const s = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                        const e = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                        return `${s} to ${e}`;
                       }
                       if (timePeriod === 'this_month') {
                         return selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -2368,13 +2388,13 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   {[
-                    { value: 'custom_day', label: 'Custom Day' },
                     { value: 'today', label: 'Today' },
                     { value: 'yesterday', label: 'Yesterday' },
                     { value: 'this_week', label: 'This Week' },
                     { value: 'last_week', label: 'Last Week' },
                     { value: 'this_month', label: 'This Month' },
-                    { value: 'last_month', label: 'Last Month' }
+                    { value: 'last_month', label: 'Last Month' },
+                    { value: 'custom_range', label: 'Custom Range' }
                   ].map((option) => (
                     <button
                       key={option.value}
@@ -2382,11 +2402,12 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         e.preventDefault();
                         e.stopPropagation();
                         console.log('🎯 TIME PERIOD SELECTED:', option.value);
-                        if (option.value === 'custom_day') {
-                          // Keep the modal open and let the user click a day on the calendar
-                          // Switch to 'today' mode but do not close the modal yet
-                          setTimePeriod('today');
-                          console.log('🗓️ Custom Day mode: select a date from the calendar');
+                        if (option.value === 'custom_range') {
+                          // Start custom range flow: keep modal open and wait for two clicks
+                          setCustomRangeStart(null);
+                          setCustomRangeEnd(null);
+                          setTimePeriod('custom_range');
+                          console.log('🗓️ Custom Range mode: select start and end dates');
                           return;
                         }
 
@@ -2448,7 +2469,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                   color: '#333'
                 }}
               >
-                <h3
+                  <h3
                   style={{
                     color: '#333',
                     fontSize: '1.2rem',
@@ -2483,6 +2504,18 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       case 'last_month':
                         const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
                         return `Last Month - ${lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+                      case 'custom_range': {
+                        const start = customRangeStart;
+                        const end = customRangeEnd;
+                        const hasStart = !!start;
+                        const hasEnd = !!end;
+                        const rangeLabel = hasStart && hasEnd
+                          ? `${start!.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${end!.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                          : hasStart
+                            ? `Start: ${start!.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                            : 'Select start date';
+                        return `Custom Range - ${rangeLabel}`;
+                      }
                       default:
                         return 'Selected Period';
                     }
@@ -2615,32 +2648,39 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                          days.push(
                            <button
                               key={day}
-                             onClick={((selectedDay) => (e) => {
+                              onClick={((selectedDay) => (e) => {
                                console.log('🔥 CALENDAR BUTTON CLICKED!', selectedDay.getDate(), 'isFutureDate:', selectedDay > today);
                                e.preventDefault();
                                e.stopPropagation();
                                e.nativeEvent.stopImmediatePropagation();
-                               if (selectedDay <= today) {
-                                // Set the specific date and switch to single day view
-                                console.log('📅 Date selected from calendar:', selectedDay.toLocaleDateString());
-                                const newSelectedDate = new Date(selectedDay);
-                                console.log('🎯 Setting selectedDate to:', newSelectedDate.toLocaleDateString());
-                                console.log('🔍 Current selectedDate before update:', selectedDate.toLocaleDateString());
-                                
-                                // Update both states together
-                                console.log('🎯 About to call setSelectedDate with:', newSelectedDate);
-                                console.log('🎯 Current selectedDate value:', selectedDate);
-                                
-                                // Use flushSync to force immediate state updates
-                                flushSync(() => {
-                                  setTimePeriod('today');
-                                  setSelectedDate(newSelectedDate);
-                                    // Close only if we are not in custom picker flow
+                                if (selectedDay <= today) {
+                                  const clicked = new Date(selectedDay);
+                                  console.log('📅 Date selected from calendar:', clicked.toLocaleDateString());
+
+                                  if (timePeriod === 'custom_range') {
+                                    // First click sets start, second sets end then close
+                                    if (!customRangeStart) {
+                                      setCustomRangeStart(clicked);
+                                      console.log('🔹 Set customRangeStart:', clicked.toDateString());
+                                      return;
+                                    }
+                                    if (!customRangeEnd) {
+                                      setCustomRangeEnd(clicked);
+                                      console.log('🔸 Set customRangeEnd:', clicked.toDateString());
+                                      // Close after selecting end
+                                      setTimeDropdownOpen(false);
+                                      return;
+                                    }
+                                  }
+
+                                  // Single day selection flow
+                                  flushSync(() => {
+                                    setTimePeriod('today');
+                                    setSelectedDate(clicked);
                                     setTimeDropdownOpen(false);
-                                });
-                                
-                                console.log('✅ States updated - new date:', newSelectedDate.toLocaleDateString());
-                              } else {
+                                  });
+                                  console.log('✅ Single day selected:', clicked.toLocaleDateString());
+                                } else {
                                 console.log('❌ Future date clicked, ignoring');
                               }
                              })(currentDate)}
