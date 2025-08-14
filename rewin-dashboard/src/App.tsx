@@ -1747,6 +1747,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       if (!user?.uid) return;
 
       console.log('🔍 Fetching points data for time period:', timePeriod);
+      console.log('📅 Selected date:', selectedDate.toLocaleDateString());
       const { startDate, endDate } = getCurrentDateRange();
       console.log('📅 Date range:', startDate.toLocaleDateString(), 'to', endDate.toLocaleDateString());
       
@@ -2355,6 +2356,13 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         console.log('🎯 TIME PERIOD SELECTED:', option.value);
                         console.log('🔄 Changing timePeriod from:', timePeriod, 'to:', option.value);
                         setTimePeriod(option.value);
+                        
+                        // Reset selected date to today when switching to non-specific date periods
+                        if (option.value !== 'today') {
+                          setSelectedDate(new Date());
+                          console.log('📅 Reset selectedDate to today for period:', option.value);
+                        }
+                        
                         setTimeDropdownOpen(false);
                         console.log('✅ Time period updated and modal closed');
                       }}
@@ -2576,16 +2584,17 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                                e.preventDefault();
                                e.stopPropagation();
                                e.nativeEvent.stopImmediatePropagation();
-                               if (!isFutureDate) {
-                                 // Set the specific date and switch to single day view
-                                 setSelectedDate(currentDate);
-                                 setTimePeriod('today'); // Use today mode for single date
-                                 setTimeDropdownOpen(false);
-                                 console.log('📅 Date selected:', currentDate.toLocaleDateString());
-                                 console.log('🔄 Switching to single date view for:', formatDate(currentDate));
-                               } else {
-                                 console.log('❌ Future date clicked, ignoring');
-                               }
+                                                              if (!isFutureDate) {
+                                // Set the specific date and switch to single day view
+                                console.log('📅 Date selected from calendar:', currentDate.toLocaleDateString());
+                                setSelectedDate(currentDate);
+                                setTimePeriod('today'); // Use today mode for single date
+                                setTimeDropdownOpen(false);
+                                console.log('🔄 Switching to single date view for:', currentDate.toLocaleDateString());
+                                console.log('✅ Updated state - selectedDate:', currentDate, 'timePeriod:', 'today');
+                              } else {
+                                console.log('❌ Future date clicked, ignoring');
+                              }
                              }}
                              disabled={isFutureDate}
                              style={{
