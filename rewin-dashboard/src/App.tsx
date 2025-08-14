@@ -2008,7 +2008,23 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                   }}
                 >
                   <h2 style={{ color: 'white', margin: 0, fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
-                    {formatDate(selectedDate)}
+                    {(() => {
+                      const { startDate, endDate } = getCurrentDateRange();
+                      if (timePeriod === 'this_week' || timePeriod === 'last_week') {
+                        const start = startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                        const end = endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                        return `${start} to ${end}`;
+                      }
+                      if (timePeriod === 'this_month') {
+                        return selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                      }
+                      if (timePeriod === 'last_month') {
+                        const lastMonth = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);
+                        return lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                      }
+                      // today / yesterday / default single day
+                      return formatDate(selectedDate);
+                    })()}
                     <svg 
                       width="16" 
                       height="16" 
