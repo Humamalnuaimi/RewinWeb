@@ -2019,7 +2019,9 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                     </svg>
                   </h2>
                   <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
-                    {timePeriod === 'today' ? 'Today' : 
+                    {timePeriod === 'today' ? (
+                      isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`
+                    ) : 
                      timePeriod === 'yesterday' ? 'Yesterday' :
                      timePeriod === 'this_week' ? 'This Week' :
                      timePeriod === 'last_week' ? 'Last Week' :
@@ -2425,7 +2427,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                     const now = new Date();
                     switch (timePeriod) {
                       case 'today':
-                        return `Today - ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+                        return `${isToday(selectedDate) ? 'Today' : 'Selected Date'} - ${selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
                       case 'yesterday':
                         const yesterday = new Date(now);
                         yesterday.setDate(now.getDate() - 1);
