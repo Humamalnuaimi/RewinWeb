@@ -2589,11 +2589,19 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                                if (selectedDay <= today) {
                                 // Set the specific date and switch to single day view
                                 console.log('📅 Date selected from calendar:', selectedDay.toLocaleDateString());
-                                setSelectedDate(new Date(selectedDay));
-                                setTimePeriod('today'); // Use today mode for single date
+                                const newSelectedDate = new Date(selectedDay);
+                                console.log('🎯 Setting selectedDate to:', newSelectedDate.toLocaleDateString());
+                                
+                                // Close modal first, then update date
                                 setTimeDropdownOpen(false);
-                                console.log('🔄 Switching to single date view for:', selectedDay.toLocaleDateString());
-                                console.log('✅ Updated state - selectedDate:', selectedDay, 'timePeriod:', 'today');
+                                
+                                // Force a clean state update
+                                setTimeout(() => {
+                                  setSelectedDate(newSelectedDate);
+                                  setTimePeriod('today'); // Use today mode for single date
+                                  console.log('🔄 Date state updated to:', newSelectedDate.toLocaleDateString());
+                                  console.log('✅ Current page:', currentPage);
+                                }, 50);
                               } else {
                                 console.log('❌ Future date clicked, ignoring');
                               }
