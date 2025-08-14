@@ -428,7 +428,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
   const [showAdminDashboard, setShowAdminDashboard] = useState(false);
   
   // Time period filter states
-  const [timePeriod, setTimePeriod] = useState('today'); // Show only today's data by default
+  const [timePeriod, setTimePeriod] = useState('today'); // 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'custom_day'
   const [timeDropdownOpen, setTimeDropdownOpen] = useState(false);
 
   // Admin functionality - only authorized emails
@@ -2368,6 +2368,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   {[
+                    { value: 'custom_day', label: 'Custom Day' },
                     { value: 'today', label: 'Today' },
                     { value: 'yesterday', label: 'Yesterday' },
                     { value: 'this_week', label: 'This Week' },
@@ -2381,6 +2382,14 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         e.preventDefault();
                         e.stopPropagation();
                         console.log('🎯 TIME PERIOD SELECTED:', option.value);
+                        if (option.value === 'custom_day') {
+                          // Keep the modal open and let the user click a day on the calendar
+                          // Switch to 'today' mode but do not close the modal yet
+                          setTimePeriod('today');
+                          console.log('🗓️ Custom Day mode: select a date from the calendar');
+                          return;
+                        }
+
                         console.log('🔄 Changing timePeriod from:', timePeriod, 'to:', option.value);
                         setTimePeriod(option.value);
                         
@@ -2605,7 +2614,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                          
                          days.push(
                            <button
-                             key={day}
+                              key={day}
                              onClick={((selectedDay) => (e) => {
                                console.log('🔥 CALENDAR BUTTON CLICKED!', selectedDay.getDate(), 'isFutureDate:', selectedDay > today);
                                e.preventDefault();
@@ -2626,7 +2635,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                                 flushSync(() => {
                                   setTimePeriod('today');
                                   setSelectedDate(newSelectedDate);
-                                  setTimeDropdownOpen(false);
+                                    // Close only if we are not in custom picker flow
+                                    setTimeDropdownOpen(false);
                                 });
                                 
                                 console.log('✅ States updated - new date:', newSelectedDate.toLocaleDateString());
