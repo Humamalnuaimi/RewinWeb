@@ -634,6 +634,11 @@ ${expirationText}
             collection(firestore, 'businesses', businessId, 'customerPromotions', customerId, 'promotions')
           );
           batch.set(customerPromotionRef, campaignPromotion);
+          // Mirror to users path for completeness
+          const userMirrorRef = doc(
+            collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions')
+          );
+          batch.set(userMirrorRef, campaignPromotion, { merge: true });
           
           console.log(`💾 Saving promotion to: businesses/${businessId}/customerPromotions/${customerId}/promotions/`);
         }

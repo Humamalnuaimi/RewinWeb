@@ -344,7 +344,7 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
             const customerId = customer.id;
             const outletId = customer.outletId || customer.checkInOutletId || customer.preferredOutlet || customer.lastVisitOutlet || null;
             const detId = `promo_manual_${promotionId}_${customerId}`;
-            await CustomerPromotionService.upsert(customerId, detId, {
+            await CustomerPromotionService.upsertBoth(customerId, detId, {
               title: promotionData.title,
               description: promotionData.description,
               discountType: promotionData.discountType,

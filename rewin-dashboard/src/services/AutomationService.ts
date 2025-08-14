@@ -30,7 +30,7 @@ export class AutomationService {
       const d = dob.toDate ? dob.toDate() : new Date(dob);
       if (String(d.getMonth() + 1).padStart(2, '0') === mm && String(d.getDate()).padStart(2, '0') === dd) {
         const promoId = CampaignService.buildBirthdayPromotionId(docSnap.id, yyyy);
-        await CustomerPromotionService.upsert(docSnap.id, promoId, {
+        await CustomerPromotionService.upsertBoth(docSnap.id, promoId, {
           title: 'Happy Birthday!',
           description: 'Enjoy your special day with a reward',
           discountType: 'percentage',
@@ -75,7 +75,7 @@ export class AutomationService {
       const last = lv.toDate ? lv.toDate() : new Date(lv);
       if (last <= cutoff) {
         const promoId = CampaignService.buildInactivePromotionId(docSnap.id, yyyymmdd);
-        await CustomerPromotionService.upsert(docSnap.id, promoId, {
+        await CustomerPromotionService.upsertBoth(docSnap.id, promoId, {
           title: 'We Miss You!',
           description: 'Come back and enjoy a special reward',
           discountType: 'dollar',

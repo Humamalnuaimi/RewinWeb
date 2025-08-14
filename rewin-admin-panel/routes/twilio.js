@@ -217,7 +217,7 @@ router.get('/customer/twilio/status', async (req, res) => {
 });
 
 // Send SMS campaign (customer)
-router.post('/customer/sms/send', async (req, res) => {
+router.post('/customer/send-sms', async (req, res) => {
   try {
     const userId = req.headers['x-user-id']; // Temporary for testing
     
