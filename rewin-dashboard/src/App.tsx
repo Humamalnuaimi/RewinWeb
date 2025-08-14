@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, type User } from 'firebase/auth';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { auth, firestore } from './firebase/config';
@@ -2598,9 +2599,15 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                                 console.log('🔍 Current selectedDate before update:', selectedDate.toLocaleDateString());
                                 
                                 // Update both states together
-                                setTimePeriod('today');
-                                setSelectedDate(newSelectedDate);
-                                setTimeDropdownOpen(false);
+                                console.log('🎯 About to call setSelectedDate with:', newSelectedDate);
+                                console.log('🎯 Current selectedDate value:', selectedDate);
+                                
+                                // Use flushSync to force immediate state updates
+                                flushSync(() => {
+                                  setTimePeriod('today');
+                                  setSelectedDate(newSelectedDate);
+                                  setTimeDropdownOpen(false);
+                                });
                                 
                                 console.log('✅ States updated - new date:', newSelectedDate.toLocaleDateString());
                               } else {
