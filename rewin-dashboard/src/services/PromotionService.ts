@@ -1,7 +1,37 @@
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, Timestamp, setDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, Timestamp, setDoc, getDoc } from 'firebase/firestore';
 import { firestore, auth } from '../firebase/config';
 
 export class PromotionService {
+  
+  // Get business ID for a user
+  static async getBusinessIdForUser(uid: string): Promise<string | null> {
+    try {
+      // First check if user has a businessId in their profile
+      const userDoc = await getDoc(doc(firestore, 'users', uid));
+      const userData = userDoc.data();
+      if (userData?.businessId) {
+        return userData.businessId;
+      }
+      
+      // Otherwise, query businesses collection
+      const businessQuery = query(
+        collection(firestore, 'businesses'),
+        where('ownerId', '==', uid),
+        where('isActive', '==', true)
+      );
+      const businessSnapshot = await getDocs(businessQuery);
+      
+      if (!businessSnapshot.empty) {
+        return businessSnapshot.docs[0].id;
+      }
+      
+      // Fallback to default if no business found
+      return 'esZRrfTvOdOgqsx9Dvo8';
+    } catch (error) {
+      console.error('Error getting business ID:', error);
+      return null;
+    }
+  }
   
   // Create promotion in your user collection
   static async createPromotion(promotionData) {
@@ -14,36 +44,46 @@ export class PromotionService {
         ? promotionData.targetOutlets
         : (promotionData.targetOutlets === 'ALL' ? [] : []);
 
+      // Get business ID for the user
+      const businessId = await this.getBusinessIdForUser(user.uid);
+      
       const payload = {
-          // Basic promotion data
+          // Required fields for mobile app
           title: promotionData.title,
-          description: promotionData.description,
+          description: promotionData.description || '',
           discountType: promotionData.discountType, // "dollar" or "percentage"
           discountAmount: promotionData.discountAmount,
           minimumPurchase: promotionData.minimumPurchase || 0,
+          isActive: promotionData.isActive ?? true,
           
-          // Targeting options
+          // Date fields
+          startDate: promotionData.startDate || null, // When promotion starts
+          endDate: promotionData.endDate || null,     // When promotion ends
+          expiresAt: promotionData.expiresAt || null, // Expiration timestamp
+          createdAt: promotionData.createdAt || Timestamp.now(),
+          
+          // Targeting fields
+          businessId: businessId || '', // Business ID for business-based system
+          targetOutletId: promotionData.targetOutletId || '', // Single outlet ID
+          targetOutletName: promotionData.targetOutletName || '', // Outlet name for display
+          targetOutlets: normalizedTargetOutlets, // Array of outlet IDs (backward compatibility)
+          
+          // Metadata
+          type: 'PROMOTION', // Required by mobile app
+          source: promotionData.source || 'manual', // 'manual', 'campaign_inactive', etc.
+          createdBy: user.email || user.uid,
+          
+          // User-based targeting fields
           targetAudience: promotionData.targetAudience || 'all', // 'all', 'specific_customers', 'outlet_customers'
-          targetOutlets: normalizedTargetOutlets, // Array of outlet IDs; empty → all
-          targetAllOutlets: Array.isArray(promotionData.targetOutlets) ? false : promotionData.targetOutlets === 'ALL',
           targetCustomers: promotionData.targetCustomers || [], // Array of customer IDs
-          
-          // Eligibility criteria
           minVisitsRequired: promotionData.minVisitsRequired || 0,
           maxDaysSinceLastVisit: promotionData.maxDaysSinceLastVisit || 0,
           minTotalSpent: promotionData.minTotalSpent || 0,
           
-          // Expiration
-          expiresAt: promotionData.expiresAt || null, // Firestore Timestamp or null
-          
-          // System fields
-          createdAt: promotionData.createdAt || Timestamp.now(),
-          createdBy: user.email,
-          isActive: promotionData.isActive ?? true,
-          
           // Campaign linking
           campaignId: promotionData.campaignId || null,
-          source: promotionData.source || 'manual' // 'manual', 'campaign_trigger', 'birthday', 'inactive'
+          
+          // Note: isUsed is NOT included as per mobile app team guidance
         };
 
       // Single source of truth used by the app: users/{uid}/promotions
@@ -70,24 +110,44 @@ export class PromotionService {
         ? promotionData.targetOutlets
         : (promotionData.targetOutlets === 'ALL' ? [] : []);
 
+      // Get business ID for the user
+      const businessId = await this.getBusinessIdForUser(user.uid);
+
       const payload: any = {
+        // Required fields for mobile app
         title: promotionData.title,
         description: promotionData.description || '',
         discountType: promotionData.discountType,
         discountAmount: promotionData.discountAmount,
         minimumPurchase: promotionData.minimumPurchase || 0,
-        targetAudience: promotionData.targetAudience || 'all',
+        isActive: promotionData.isActive ?? true,
+        
+        // Date fields
+        startDate: promotionData.startDate || null,
+        endDate: promotionData.endDate || null,
+        expiresAt: promotionData.expiresAt || null,
+        createdAt: promotionData.createdAt || Timestamp.now(),
+        
+        // Targeting fields
+        businessId: businessId || '',
+        targetOutletId: promotionData.targetOutletId || '',
+        targetOutletName: promotionData.targetOutletName || '',
         targetOutlets: normalizedTargetOutlets,
+        
+        // Metadata
+        type: 'PROMOTION',
+        source: promotionData.source || 'manual',
+        createdBy: promotionData.createdBy || user.email || user.uid,
+        
+        // User-based targeting fields
+        targetAudience: promotionData.targetAudience || 'all',
         targetCustomers: promotionData.targetCustomers || [],
         minVisitsRequired: promotionData.minVisitsRequired || 0,
         maxDaysSinceLastVisit: promotionData.maxDaysSinceLastVisit || 0,
         minTotalSpent: promotionData.minTotalSpent || 0,
-        expiresAt: promotionData.expiresAt || null,
-        createdAt: promotionData.createdAt || Timestamp.now(),
-        createdBy: promotionData.createdBy || user.email,
-        isActive: promotionData.isActive ?? true,
-        campaignId: promotionData.campaignId || null,
-        source: promotionData.source || 'manual'
+        
+        // Campaign linking
+        campaignId: promotionData.campaignId || null
       };
 
       await setDoc(doc(firestore, 'users', user.uid, 'promotions', promotionId), payload, { merge: true });
@@ -343,6 +403,31 @@ export class PromotionService {
 
       analytics.eligibilityBreakdown.all = analytics.eligibleCustomers.length;
       analytics.eligibilityRate = analytics.totalCustomers > 0 ? (analytics.eligibleCustomers.length / analytics.totalCustomers) * 100 : 0;
+
+      // Fallback safeguard: if no explicit constraints and nothing is eligible,
+      // default to include all customers (prevents zero-eligibility due to field drift)
+      const noOutletConstraint = !promotion.targetOutlets || promotion.targetOutlets.length === 0;
+      const noSpecificCustomers = !promotion.targetCustomers || promotion.targetCustomers.length === 0;
+      const noVisitConstraint = !promotion.minVisitsRequired || promotion.minVisitsRequired <= 0;
+      const noSpendConstraint = !promotion.minTotalSpent || promotion.minTotalSpent <= 0;
+      const noRecencyConstraint = !promotion.maxDaysSinceLastVisit || promotion.maxDaysSinceLastVisit <= 0;
+      const notExpired = !promotion.expiresAt || (new Date() <= (promotion.expiresAt.toDate ? promotion.expiresAt.toDate() : new Date(promotion.expiresAt)));
+
+      if (
+        analytics.totalCustomers > 0 &&
+        analytics.eligibleCustomers.length === 0 &&
+        noOutletConstraint &&
+        noSpecificCustomers &&
+        noVisitConstraint &&
+        noSpendConstraint &&
+        noRecencyConstraint &&
+        notExpired
+      ) {
+        analytics.eligibleCustomers = customers;
+        analytics.ineligibleCustomers = [];
+        analytics.eligibilityBreakdown.all = customers.length;
+        analytics.eligibilityRate = 100;
+      }
 
       return analytics;
     } catch (error) {

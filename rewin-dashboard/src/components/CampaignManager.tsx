@@ -117,12 +117,18 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
   // 🗑️ DELETE CONFIRMATION STATE
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [promotionToDelete, setPromotionToDelete] = useState<Promotion | null>(null);
+  
+  // ✅ SUCCESS NOTIFICATION STATE
+  const [successNotification, setSuccessNotification] = useState<{show: boolean, message: string}>({
+    show: false,
+    message: ''
+  });
 
-  // 🤖 NEW: AUTOMATIC PROCESSING STATE
+  // 🤖 NEW: AUTOMATIC PROCESSING STATE (kept for compatibility, UI hidden)
   const [autoProcessing, setAutoProcessing] = useState({
-    enabled: localStorage.getItem('campaignAutoProcessing') === 'true',
-    interval: parseInt(localStorage.getItem('campaignAutoInterval') || '60'), // minutes
-    lastProcessed: localStorage.getItem('campaignLastProcessed') || null,
+    enabled: false,
+    interval: 60,
+    lastProcessed: null as string | null,
     processing: false,
     nextRun: null as Date | null
   });
@@ -161,27 +167,77 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
     targetOutlets: []
   });
 
-  // Dev/test automation triggers
-  const runBirthdayAutomation = async () => {
-    try {
-      const { AutomationService } = await import('../services/AutomationService');
-      const result = await AutomationService.runBirthday();
-      alert(`Birthday automation created ${result.created} promotions.`);
-    } catch (e) {
-      alert(`Failed to run birthday automation: ${e instanceof Error ? e.message : 'Unknown error'}`);
+  // Form error states (inline validation)
+  const [promotionErrors, setPromotionErrors] = useState<Record<string, string>>({});
+  const [campaignErrors, setCampaignErrors] = useState<Record<string, string>>({});
+
+  const validatePromotionForm = (): boolean => {
+    const errors: Record<string, string> = {};
+    if (!promotionForm.title || promotionForm.title.trim().length < 2) {
+      errors.title = 'Title is required';
     }
+    if (!promotionForm.discountType) {
+      errors.discountType = 'Select a discount type';
+    }
+    if (!promotionForm.discountAmount || promotionForm.discountAmount <= 0) {
+      errors.discountAmount = 'Enter a positive discount amount';
+    }
+    if (!Number.isFinite(promotionForm.minimumPurchase) || promotionForm.minimumPurchase < 0) {
+      errors.minimumPurchase = 'Minimum purchase must be 0 or greater';
+    }
+    if (!promotionForm.validityDays || promotionForm.validityDays <= 0) {
+      errors.validityDays = 'Valid for (days) must be greater than 0';
+    }
+    if (promotionForm.hasExpiration && (!promotionForm.expirationDays || promotionForm.expirationDays <= 0)) {
+      errors.expirationDays = 'Expiration days must be greater than 0';
+    }
+    setPromotionErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
-  const runInactiveAutomation = async () => {
-    try {
-      const days = Number(prompt('Days inactive?', '15') || '15');
-      const { AutomationService } = await import('../services/AutomationService');
-      const result = await AutomationService.runInactive({ daysInactive: days });
-      alert(`Inactive automation created ${result.created} promotions.`);
-    } catch (e) {
-      alert(`Failed to run inactive automation: ${e instanceof Error ? e.message : 'Unknown error'}`);
+  const validateCampaignForm = (): boolean => {
+    const errors: Record<string, string> = {};
+    if (!campaignForm.name || campaignForm.name.trim().length < 2) {
+      errors.name = 'Name is required';
     }
+    if (!campaignForm.type) {
+      errors.type = 'Select a campaign type';
+    }
+    if (!campaignForm.discountType) {
+      errors.discountType = 'Select a discount type';
+    }
+    if (!campaignForm.discountAmount || campaignForm.discountAmount <= 0) {
+      errors.discountAmount = 'Enter a positive discount amount';
+    }
+    if (!Number.isFinite(campaignForm.minimumPurchase) || campaignForm.minimumPurchase < 0) {
+      errors.minimumPurchase = 'Minimum purchase must be 0 or greater';
+    }
+    if (campaignForm.type === 'inactive' && (!campaignForm.daysSinceLastVisit || campaignForm.daysSinceLastVisit <= 0)) {
+      errors.daysSinceLastVisit = 'Days inactive must be greater than 0';
+    }
+    if (campaignForm.type === 'spending' && (!campaignForm.minimumSpending || campaignForm.minimumSpending <= 0)) {
+      errors.minimumSpending = 'Minimum spending must be greater than 0';
+    }
+    setCampaignErrors(errors);
+    return Object.keys(errors).length === 0;
   };
+
+  // Resolve businessId for current user (used for business-scoped paths)
+  const getCurrentBusinessId = async (): Promise<string> => {
+    const uid = user?.uid;
+    if (!uid) throw new Error('No authenticated user');
+    const userDoc = await getDoc(doc(firestore, 'users', uid));
+    const data: any = userDoc.exists() ? userDoc.data() : null;
+    const businessId = data?.businessId;
+    if (!businessId) throw new Error('businessId not set on user profile');
+    return businessId;
+  };
+
+  // Minimal UI toggles
+  const [showAdvancedPromotion, setShowAdvancedPromotion] = useState(false);
+
+  // Dev/test automation triggers
+  // Removed manual automation test buttons (not used on this page)
 
   // 🔥 USER-BASED DATA ACCESS - No business ID needed
   const getCurrentUserId = (): string => {
@@ -198,6 +254,7 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
       
       // Get the business ID for this user
       const uid = user.uid;
+      const businessId = await getCurrentBusinessId();
       
       // Find the account and phone number to use for this business
       const accountPhoneNumber = await getAccountPhoneNumberForBusiness(businessId);
@@ -278,9 +335,9 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
     try {
       setLoading(true);
       
-      // Validate required fields
-      if (!promotionForm.title || !promotionForm.discountAmount) {
-        alert('❌ Please fill in required fields (Title and Discount Amount)');
+      // Validate required fields (inline)
+      if (!validatePromotionForm()) {
+        setLoading(false);
         return;
       }
 
@@ -319,7 +376,7 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
       console.log(`📍 Firebase path: /users/${user.uid}/promotions/${promotionId}`);
       
       // Get analytics for the promotion
-      const analytics = await PromotionService.getPromotionAnalytics(promotionId);
+      const analytics: any = await PromotionService.getPromotionAnalytics(promotionId);
       
       // Send SMS if requested
       if (promotionForm.sendSMS && promotionForm.smsMessage) {
@@ -371,7 +428,8 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
         `• Expires: ${promotionData.expiresAt.toLocaleDateString()}` : 
         '• No expiration set';
 
-      alert(`✅ SUCCESS! Promotion "${promotionData.title}" created!
+      // Store the success message for display
+      const successMessage = `✅ SUCCESS! Promotion "${promotionData.title}" created!
 
 📊 ANALYTICS:
 • Will reach: ${analytics.eligibleCustomers.length} out of ${analytics.totalCustomers} customers
@@ -384,9 +442,9 @@ Your customers can now see this promotion in the mobile app!
 • Title: ${promotionData.title}
 • Discount: ${promotionData.discountType === 'percentage' ? promotionData.discountAmount + '%' : '$' + promotionData.discountAmount} off
 ${expirationText}
-• Target: ${promotionData.targetOutlets.length === 0 ? 'All outlets' : promotionData.targetOutlets.length + ' outlets'}`);
+• Target: ${promotionData.targetOutlets.length === 0 ? 'All outlets' : promotionData.targetOutlets.length + ' outlets'}`;
 
-      // Reset form and close
+      // Reset form and close modal first
       setPromotionForm({
         title: '',
         description: '',
@@ -402,6 +460,17 @@ ${expirationText}
       });
       setShowCreatePromotion(false);
       loadPromotions(); // Refresh the list
+      
+      // Show success notification
+      setSuccessNotification({
+        show: true,
+        message: successMessage
+      });
+      
+      // Auto-hide notification after 5 seconds
+      setTimeout(() => {
+        setSuccessNotification({ show: false, message: '' });
+      }, 5000);
       
     } catch (error) {
       console.error('❌ Error creating promotion:', error);
@@ -652,7 +721,7 @@ ${expirationText}
 
           // Save to customer's promotions (using the path where mobile app expects it)
           const customerPromotionRef = doc(
-            collection(firestore, 'users', uid, 'customerPromotions', customerId, 'promotions')
+            collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions')
           );
           batch.set(customerPromotionRef, campaignPromotion);
           
@@ -763,72 +832,6 @@ ${expirationText}
       } else {
         setAutoProcessing(prev => ({ ...prev, processing: false }));
       }
-    }
-  };
-
-  // 🤖 AUTOMATIC PROCESSING FUNCTIONS
-  const startAutoProcessing = () => {
-    if (autoProcessInterval) {
-      clearInterval(autoProcessInterval);
-    }
-
-    const intervalMs = autoProcessing.interval * 60 * 1000; // Convert minutes to milliseconds
-    
-    const interval = setInterval(async () => {
-      console.log('🔄 Running automatic campaign processing...');
-      await processAllCampaigns(true);
-      updateNextRunTime();
-    }, intervalMs);
-
-    setAutoProcessInterval(interval);
-    updateNextRunTime();
-    
-    // Save to localStorage
-    localStorage.setItem('campaignAutoProcessing', 'true');
-    localStorage.setItem('campaignAutoInterval', autoProcessing.interval.toString());
-    
-    console.log(`✅ Automatic processing started (every ${autoProcessing.interval} minutes)`);
-  };
-
-  const stopAutoProcessing = () => {
-    if (autoProcessInterval) {
-      clearInterval(autoProcessInterval);
-      setAutoProcessInterval(null);
-    }
-    
-    setAutoProcessing(prev => ({ ...prev, nextRun: null }));
-    localStorage.setItem('campaignAutoProcessing', 'false');
-    
-    console.log('⏹️ Automatic processing stopped');
-  };
-
-  const updateNextRunTime = () => {
-    const nextRun = new Date(Date.now() + (autoProcessing.interval * 60 * 1000));
-    setAutoProcessing(prev => ({ ...prev, nextRun }));
-  };
-
-  const toggleAutoProcessing = () => {
-    const newEnabled = !autoProcessing.enabled;
-    setAutoProcessing(prev => ({ ...prev, enabled: newEnabled }));
-    
-    if (newEnabled) {
-      startAutoProcessing();
-    } else {
-      stopAutoProcessing();
-    }
-  };
-
-  const updateAutoInterval = (newInterval: number) => {
-    setAutoProcessing(prev => ({ ...prev, interval: newInterval }));
-    localStorage.setItem('campaignAutoInterval', newInterval.toString());
-    
-    // Restart with new interval if currently running
-    if (autoProcessing.enabled) {
-      stopAutoProcessing();
-      setTimeout(() => {
-        setAutoProcessing(prev => ({ ...prev, enabled: true }));
-        startAutoProcessing();
-      }, 100);
     }
   };
 
@@ -1458,61 +1461,15 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
     
     try {
       setLoading(true);
-      console.log('🗑️ Deleting promotion and cleaning up customer assignments:', promotionToDelete.title);
+      console.log('🗑️ Deleting promotion:', promotionToDelete.title);
       
-      const businessId = await getCurrentBusinessId();
       const promotionId = promotionToDelete.id!;
       
-      // Step 1: Find and remove all customer assignments of this promotion
-      // Use the SAME collection that campaign processing uses
-      let allCustomersRef;
-      let customersSnapshot;
+      // Use the PromotionService to delete the promotion
+      // This ensures consistent deletion logic
+      await PromotionService.deletePromotion(promotionId);
       
-      try {
-        // First try the user's customers path (same as campaign processing)
-        allCustomersRef = collection(firestore, 'users', user.uid, 'customers');
-        customersSnapshot = await getDocs(allCustomersRef);
-        console.log(`🔍 Found ${customersSnapshot.docs.length} customers in user collection for promotion cleanup`);
-      } catch (error) {
-        console.log('⚠️ User customers not found. Skipping business fallback (not used).');
-        customersSnapshot = { docs: [] } as any;
-      }
-      
-      const batch = writeBatch(firestore);
-      let cleanupCount = 0;
-      
-      // Step 2: Remove this promotion from each customer's assignments
-      for (const customerDoc of customersSnapshot.docs) {
-        const customerId = customerDoc.id;
-        
-        // Campaign promotions are ALWAYS saved to business collection, regardless of where customers come from
-        const customerPromotionsRef = collection(firestore, 'users', uid, 'customerPromotions', customerId, 'promotions');
-        const promotionsSnapshot = await getDocs(customerPromotionsRef);
-        
-        console.log(`🔍 Customer ${customerId}: Found ${promotionsSnapshot.docs.length} promotions`);
-        
-        promotionsSnapshot.docs.forEach(promotionDoc => {
-          const promotion = promotionDoc.data();
-          const currentPromotionId = promotionDoc.id;
-          
-          // Check if this is the promotion we want to delete
-          if (currentPromotionId === promotionId) {
-            batch.delete(promotionDoc.ref);
-            cleanupCount++;
-            console.log(`✅ DELETING promotion from customer ${customerId}: "${promotion.title}"`);
-          } else {
-            console.log(`⏭️ SKIPPING other promotion: "${promotion.title}"`);
-          }
-        });
-      }
-      
-      // Step 3: Delete from master promotions (users collection)
-      batch.delete(doc(firestore, 'users', uid, 'promotions', promotionId));
-      
-      // Execute all deletions
-      await batch.commit();
-      
-      console.log(`✅ Promotion deleted and ${cleanupCount} customer assignments cleaned up`);
+      console.log(`✅ Promotion deleted successfully`);
       
       // Reload promotions to update the display
       await loadPromotions();
@@ -1521,11 +1478,25 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       setShowDeleteConfirmation(false);
       setPromotionToDelete(null);
       
-      alert(`✅ Promotion "${promotionToDelete.title}" deleted successfully!\n🧹 Cleaned up ${cleanupCount} customer assignments`);
+      // Show success notification
+      setSuccessNotification({
+        show: true,
+        message: `✅ Promotion "${promotionToDelete.title}" deleted successfully!`
+      });
+      
+      // Auto-hide notification after 3 seconds
+      setTimeout(() => {
+        setSuccessNotification({ show: false, message: '' });
+      }, 3000);
       
     } catch (error) {
       console.error('❌ Error deleting promotion:', error);
-      alert('Error deleting promotion: ' + (error as Error).message);
+      setShowDeleteConfirmation(false);
+      setPromotionToDelete(null);
+      
+      // Show more specific error message
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`❌ Error deleting promotion: ${errorMessage}\n\nPlease try again or check the console for more details.`);
     } finally {
       setLoading(false);
     }
@@ -1659,9 +1630,19 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
 
   // 🤖 AUTOMATIC PROCESSING LIFECYCLE
   useEffect(() => {
-    // Add CSS for pulse animation
+    // Add CSS for animations
     const style = document.createElement('style');
     style.textContent = `
+      @keyframes slideIn {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
       @keyframes pulse {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.5; }
@@ -1943,113 +1924,6 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
           >
             🔵 Promotions ({promotions.length})
           </button>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
-            <button
-              onClick={runBirthdayAutomation}
-              style={{
-                padding: '0.5rem 0.75rem',
-                backgroundColor: 'rgba(74, 222, 128, 0.2)',
-                color: '#bbf7d0',
-                border: '1px solid rgba(74, 222, 128, 0.35)',
-                borderRadius: '10px',
-                cursor: 'pointer'
-              }}
-            >
-              Run Birthday Today
-            </button>
-            <button
-              onClick={runInactiveAutomation}
-              style={{
-                padding: '0.5rem 0.75rem',
-                backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                color: '#bfdbfe',
-                border: '1px solid rgba(59, 130, 246, 0.35)',
-                borderRadius: '10px',
-                cursor: 'pointer'
-              }}
-            >
-              Run Inactive…
-            </button>
-          </div>
-        </div>
-
-        {/* Automatic Processing Status */}
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(59, 130, 246, 0.1))',
-          borderRadius: '15px',
-          padding: '1.5rem',
-          marginBottom: '2rem',
-          border: '1px solid rgba(255, 255, 255, 0.2)',
-          backdropFilter: 'blur(20px)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <div style={{
-                width: '12px',
-                height: '12px',
-                borderRadius: '50%',
-                backgroundColor: autoProcessing.enabled ? '#10b981' : '#ef4444',
-                boxShadow: autoProcessing.enabled ? '0 0 10px rgba(16, 185, 129, 0.5)' : '0 0 10px rgba(239, 68, 68, 0.5)',
-                animation: autoProcessing.processing ? 'pulse 2s infinite' : 'none'
-              }} />
-              <div>
-                <h3 style={{ color: 'white', margin: 0, fontSize: '1.2rem' }}>
-                  🤖 Automatic Processing {autoProcessing.enabled ? 'ON' : 'OFF'}
-                </h3>
-                <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0.25rem 0 0 0', fontSize: '0.9rem' }}>
-                  {autoProcessing.enabled ? (
-                    <>
-                      Running every {autoProcessing.interval} minutes
-                      {autoProcessing.nextRun && (
-                        <> • Next run: {autoProcessing.nextRun.toLocaleTimeString()}</>
-                      )}
-                      {autoProcessing.lastProcessed && (
-                        <> • Last: {new Date(autoProcessing.lastProcessed).toLocaleString()}</>
-                      )}
-                    </>
-                  ) : (
-                    'Click to enable automatic campaign processing'
-                  )}
-                </p>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-              <button
-                onClick={toggleAutoProcessing}
-                disabled={loading}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  backgroundColor: autoProcessing.enabled ? '#ef4444' : '#10b981',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  fontSize: '0.9rem',
-                  fontWeight: 'bold',
-                  opacity: loading ? 0.7 : 1,
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                {autoProcessing.enabled ? '⏹️ Stop Auto' : '▶️ Start Auto'}
-              </button>
-              <button
-                onClick={() => setShowAutoSettings(true)}
-                disabled={loading}
-                style={{
-                  padding: '0.75rem 1rem',
-                  backgroundColor: 'rgba(255,255,255,0.2)',
-                  color: 'white',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  borderRadius: '8px',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  fontSize: '0.9rem',
-                  opacity: loading ? 0.7 : 1
-                }}
-              >
-                ⚙️ Settings
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Create Buttons */}
@@ -2077,25 +1951,6 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             }}
           >
             {loading ? '⏳ Processing...' : `+ Create New ${activeTab === 'campaigns' ? 'Campaign' : 'Promotion'}`}
-          </button>
-          
-          <button
-            onClick={() => processAllCampaigns(false)}
-            disabled={loading}
-            style={{
-              padding: '1rem 2rem',
-              backgroundColor: loading ? '#6b7280' : '#f59e0b',
-              color: 'white',
-              border: 'none',
-              borderRadius: '10px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              fontSize: '1rem',
-              fontWeight: 'bold',
-              boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)',
-              opacity: loading ? 0.7 : 1
-            }}
-          >
-            🔄 Process Now
           </button>
         </div>
 
@@ -2522,6 +2377,43 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
         )}
       </main>
 
+      {/* ✅ SUCCESS NOTIFICATION */}
+      {successNotification.show && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          backgroundColor: '#10b981',
+          color: 'white',
+          padding: '1.5rem',
+          borderRadius: '12px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+          maxWidth: '500px',
+          zIndex: 3000,
+          animation: 'slideIn 0.3s ease-out'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '1rem' }}>
+            <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.95rem' }}>
+              {successNotification.message}
+            </div>
+            <button
+              onClick={() => setSuccessNotification({ show: false, message: '' })}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'white',
+                fontSize: '1.5rem',
+                cursor: 'pointer',
+                padding: '0',
+                lineHeight: '1'
+              }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 🎯 PROMOTION CREATION MODAL (Exact as per App Team Spec) */}
       {showCreatePromotion && (
         <div style={{
@@ -2539,31 +2431,33 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
           zIndex: 1000
         }}>
           <div style={{
-            background: 'linear-gradient(180deg, rgba(15,23,42,0.95), rgba(30,41,59,0.92))',
-            border: '1px solid rgba(148,163,184,0.12)',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.35)',
-            borderRadius: '16px',
-            padding: '1.5rem 1.75rem',
-            width: 'min(640px, 92vw)',
-            maxHeight: '88vh',
+            background: 'rgba(13,16,34,0.72)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: '1px solid rgba(148,163,184,0.18)',
+            boxShadow: '0 30px 80px rgba(0,0,0,0.50)',
+            borderRadius: '18px',
+            padding: '1rem 1.25rem',
+            width: 'min(560px, 92vw)',
+            maxHeight: '86vh',
             overflowY: 'auto',
             color: 'white'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-              <h2 style={{ margin: 0, color: '#60a5fa', fontSize: '1.25rem', fontWeight: 700 }}>
-                🎁 Create New Promotion
+              <h2 style={{ margin: 0, color: '#e5e7eb', fontSize: '1.05rem', fontWeight: 700 }}>
+                New Promotion
               </h2>
               <button
                 onClick={() => setShowCreatePromotion(false)}
                 aria-label="Close"
                 style={{
                   appearance: 'none',
-                  background: 'transparent',
-                  border: '1px solid rgba(148,163,184,0.25)',
-                  color: '#cbd5e1',
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: '8px',
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  color: '#e5e7eb',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '10px',
                   cursor: 'pointer'
                 }}
               >
@@ -2572,10 +2466,8 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             </div>
 
             {/* Basic Details */}
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                Promotion Title *
-              </label>
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, opacity: 0.9 }}>Title *</label>
               <input
                 type="text"
                 value={promotionForm.title}
@@ -2584,19 +2476,17 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 style={{
                   width: '100%',
                   padding: '0.75rem',
-                  border: '1px solid #475569',
-                  borderRadius: '8px',
-                  background: 'rgba(30, 41, 59, 0.8)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: '12px',
+                  background: 'rgba(255,255,255,0.06)',
                   color: 'white',
                   fontSize: '1rem'
                 }}
               />
             </div>
 
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                Description
-              </label>
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600, opacity: 0.9 }}>Description</label>
               <textarea
                 value={promotionForm.description}
                 onChange={(e) => setPromotionForm(prev => ({ ...prev, description: e.target.value }))}
@@ -2604,21 +2494,21 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 style={{
                   width: '100%',
                   padding: '0.75rem',
-                  border: '1px solid #475569',
-                  borderRadius: '8px',
-                  background: 'rgba(30, 41, 59, 0.8)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: '12px',
+                  background: 'rgba(255,255,255,0.06)',
                   color: 'white',
                   fontSize: '1rem',
-                  minHeight: '80px',
+                  minHeight: '88px',
                   resize: 'vertical'
                 }}
               />
             </div>
 
             {/* NEW: Discount Type Selection */}
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.75rem', fontWeight: 'bold' }}>
-                Discount Type *
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>
+                Discount *
               </label>
               <div style={{ display: 'flex', gap: '2rem', marginBottom: '0.5rem' }}>
                 <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
@@ -2645,12 +2535,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 </label>
               </div>
               {/* Dynamic Preview Text */}
-              <div style={{ 
-                fontSize: '0.85rem', 
-                color: '#94a3b8', 
-                fontStyle: 'italic',
-                marginTop: '0.25rem'
-              }}>
+              <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '0.25rem' }}>
                 {promotionForm.discountType === 'dollar' 
                   ? `💡 Example: Create $${promotionForm.discountAmount || 5} off $${promotionForm.minimumPurchase || 10} or more deal`
                   : `💡 Example: Create ${promotionForm.discountAmount || 40}% off $${promotionForm.minimumPurchase || 60} or more deal`
@@ -2658,51 +2543,35 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                  {promotionForm.discountType === 'dollar' ? 'Discount Amount ($) *' : 'Discount Percentage (%) *'}
+                <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  {promotionForm.discountType === 'dollar' ? 'Amount ($) *' : 'Percentage (%) *'}
                 </label>
                 <input
                   type="number"
                   value={promotionForm.discountAmount}
                   onChange={(e) => setPromotionForm(prev => ({ ...prev, discountAmount: Number(e.target.value) }))}
                   placeholder={promotionForm.discountType === 'dollar' ? '10' : '40'}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    border: '1px solid #475569',
-                    borderRadius: '8px',
-                    background: 'rgba(30, 41, 59, 0.8)',
-                    color: 'white',
-                    fontSize: '1rem'
-                  }}
+                  style={{ width: '100%', padding: '0.75rem', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '12px', background: 'rgba(255,255,255,0.06)', color: 'white', fontSize: '1rem' }}
                 />
               </div>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                  Minimum Purchase ($)
+                <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  Min Purchase ($)
                 </label>
                 <input
                   type="number"
                   value={promotionForm.minimumPurchase}
                   onChange={(e) => setPromotionForm(prev => ({ ...prev, minimumPurchase: Number(e.target.value) }))}
                   placeholder="25"
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    border: '1px solid #475569',
-                    borderRadius: '8px',
-                    background: 'rgba(30, 41, 59, 0.8)',
-                    color: 'white',
-                    fontSize: '1rem'
-                  }}
+                  style={{ width: '100%', padding: '0.75rem', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '12px', background: 'rgba(255,255,255,0.06)', color: 'white', fontSize: '1rem' }}
                 />
               </div>
             </div>
 
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                 Valid for (Days)
               </label>
               <input
@@ -2710,26 +2579,12 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 value={promotionForm.validityDays}
                 onChange={(e) => setPromotionForm(prev => ({ ...prev, validityDays: Number(e.target.value) }))}
                 placeholder="30"
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  border: '1px solid #475569',
-                  borderRadius: '8px',
-                  background: 'rgba(30, 41, 59, 0.8)',
-                  color: 'white',
-                  fontSize: '1rem'
-                }}
+                style={{ width: '100%', padding: '0.75rem', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '12px', background: 'rgba(255,255,255,0.06)', color: 'white', fontSize: '1rem' }}
               />
             </div>
 
             {/* NEW: Expiration Settings */}
-            <div style={{ 
-              marginBottom: '1rem',
-              background: 'rgba(245, 158, 11, 0.1)',
-              border: '1px solid rgba(245, 158, 11, 0.3)',
-              borderRadius: '8px',
-              padding: '1rem'
-            }}>
+            <div style={{ marginBottom: '0.75rem', background: 'rgba(245, 158, 11, 0.08)', border: '1px dashed rgba(245, 158, 11, 0.35)', borderRadius: '10px', padding: '0.75rem' }}>
               <div style={{ marginBottom: '1rem' }}>
                 <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'bold' }}>
                   <input
@@ -2795,8 +2650,8 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               )}
             </div>
 
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                 Target Outlets
               </label>
               <select
@@ -2808,16 +2663,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                   const targetOutlets = selected.includes('ALL') ? [] : selected;
                   setPromotionForm(prev => ({ ...prev, targetOutlets }));
                 }}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  border: '1px solid #475569',
-                  borderRadius: '8px',
-                  background: 'rgba(30, 41, 59, 0.8)',
-                  color: 'white',
-                  fontSize: '1rem',
-                  minHeight: '100px'
-                }}
+                style={{ width: '100%', padding: '0.75rem', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '12px', background: 'rgba(255,255,255,0.06)', color: 'white', fontSize: '1rem', minHeight: '100px' }}
               >
                 <option value="ALL">All Outlets</option>
                 {outlets.map(outlet => (
@@ -2828,29 +2674,19 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               </select>
             </div>
 
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                 SMS Message (Optional)
               </label>
               <textarea
                 value={promotionForm.smsMessage}
                 onChange={(e) => setPromotionForm(prev => ({ ...prev, smsMessage: e.target.value }))}
                 placeholder="Get 10% off your next visit! Valid for 30 days."
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  border: '1px solid #475569',
-                  borderRadius: '8px',
-                  background: 'rgba(30, 41, 59, 0.8)',
-                  color: 'white',
-                  fontSize: '1rem',
-                  minHeight: '80px',
-                  resize: 'vertical'
-                }}
+                style={{ width: '100%', padding: '0.75rem', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '12px', background: 'rgba(255,255,255,0.06)', color: 'white', fontSize: '1rem', minHeight: '88px', resize: 'vertical' }}
               />
             </div>
 
-            <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ marginBottom: '1rem' }}>
               <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
                 <input
                   type="checkbox"
@@ -2871,7 +2707,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 </label>
             </div>
 
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
               <button
                 onClick={() => setShowCreatePromotion(false)}
                 disabled={loading}
