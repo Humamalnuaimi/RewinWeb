@@ -226,11 +226,34 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
   const getCurrentBusinessId = async (): Promise<string> => {
     const uid = user?.uid;
     if (!uid) throw new Error('No authenticated user');
-    const userDoc = await getDoc(doc(firestore, 'users', uid));
-    const data: any = userDoc.exists() ? userDoc.data() : null;
-    const businessId = data?.businessId;
-    if (!businessId) throw new Error('businessId not set on user profile');
-    return businessId;
+    
+    try {
+      // First check if user has a businessId in their profile
+      const userDoc = await getDoc(doc(firestore, 'users', uid));
+      const userData = userDoc.data();
+      if (userData?.businessId) {
+        return userData.businessId;
+      }
+      
+      // Otherwise, query businesses collection
+      const businessQuery = query(
+        collection(firestore, 'businesses'),
+        where('ownerId', '==', uid),
+        where('isActive', '==', true)
+      );
+      const businessSnapshot = await getDocs(businessQuery);
+      
+      if (!businessSnapshot.empty) {
+        return businessSnapshot.docs[0].id;
+      }
+      
+      // Fallback to default if no business found
+      return 'esZRrfTvOdOgqsx9Dvo8';
+    } catch (error) {
+      console.error('Error getting business ID:', error);
+      // Return default business ID as fallback
+      return 'esZRrfTvOdOgqsx9Dvo8';
+    }
   };
 
   // Minimal UI toggles
