@@ -1199,9 +1199,9 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
         createdAt: Timestamp.now()
       };
       
-      // Save to Firebase: /businesses/{businessId}/campaigns/{campaignId}
+      // Save to Firebase: /users/{userId}/campaigns/{campaignId}
       await addDoc(
-        collection(firestore, 'businesses', businessId, 'campaigns'),
+        collection(firestore, 'users', user.uid, 'campaigns'),
         campaign
       );
       
