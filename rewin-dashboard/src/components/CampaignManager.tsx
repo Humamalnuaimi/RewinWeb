@@ -1321,7 +1321,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       console.log(`🔍 Found campaign: ${campaignToDelete ? 'YES' : 'NO'}`);
       
       console.log(`🔍 Deleting campaign: "${campaignName}" (ID: ${campaignId})`);
-      console.log(`👤 Using user ID: ${uid}`);
+      console.log(`👤 Using user ID: ${user.uid}`);
       console.log(`🎯 Looking for promotions with campaignId: "${campaignId}"`);
       console.log(`🎯 Or promotions with title: "${campaignName}"`);
       
@@ -1332,19 +1332,19 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       
       try {
         // First try the user's customers path (same as campaign processing)
-        allCustomersRef = collection(firestore, 'users', uid, 'customers');
+        allCustomersRef = collection(firestore, 'users', user.uid, 'customers');
         customersSnapshot = await getDocs(allCustomersRef);
         console.log(`🔍 Found ${customersSnapshot.docs.length} customers in user collection (same as campaign processing)`);
       } catch (error) {
         console.log('⚠️ User customers not found, trying web_customers collection...');
         // Fallback to web_customers
-        allCustomersRef = collection(firestore, 'users', uid, 'web_customers');
+        allCustomersRef = collection(firestore, 'users', user.uid, 'web_customers');
         customersSnapshot = await getDocs(allCustomersRef);
         console.log(`🔍 Found ${customersSnapshot.docs.length} customers in web_customers collection`);
       }
       
       // Also check if we have any customers at all
-      const allCustomersDataRef = collection(firestore, 'users', uid, 'web_customers');
+      const allCustomersDataRef = collection(firestore, 'users', user.uid, 'web_customers');
       const allCustomersDataSnapshot = await getDocs(allCustomersDataRef);
       console.log(`📊 Total customers in web_customers database: ${allCustomersDataSnapshot.docs.length}`);
       
@@ -1369,7 +1369,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
          const customerId = customerDoc.id;
          
          // Campaign promotions are ALWAYS saved to business collection, regardless of where customers come from
-          const customerPromotionsRef = collection(firestore, 'users', uid, 'customerPromotions', customerId, 'promotions');
+          const customerPromotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions');
          
          const promotionsSnapshot = await getDocs(customerPromotionsRef);
          
@@ -1413,7 +1413,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
        }
       
       // Step 3: Delete the campaign itself
-      batch.delete(doc(firestore, 'users', uid, 'campaigns', campaignId));
+      batch.delete(doc(firestore, 'users', user.uid, 'campaigns', campaignId));
       
       // Execute all deletions
       await batch.commit();

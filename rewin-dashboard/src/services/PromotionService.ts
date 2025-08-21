@@ -189,12 +189,13 @@ export class PromotionService {
     }
   }
 
-  // Delete promotion
+  // Delete promotion (app handles assignments automatically)
   static async deletePromotion(promotionId) {
     try {
       const user = auth.currentUser;
       if (!user) throw new Error('No authenticated user');
 
+      // Only delete the main promotion - mobile app handles assignment logic
       await deleteDoc(doc(firestore, 'users', user.uid, 'promotions', promotionId));
 
       console.log('✅ Promotion deleted:', promotionId);
