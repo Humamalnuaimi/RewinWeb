@@ -21,11 +21,16 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  /* Prevent unwanted text selection on hover */
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  user-select: none;
+  /* Aggressive prevention for fast mouse movements */
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  -webkit-user-drag: none !important;
+  -moz-user-drag: none !important;
+  user-drag: none !important;
+  -webkit-touch-callout: none !important;
+  -webkit-tap-highlight-color: transparent !important;
 }
 
 html, body {
@@ -145,4 +150,34 @@ textarea:hover,
   -moz-user-select: text !important;
   -ms-user-select: text !important;
   user-select: text !important;
+}
+
+/* Completely disable text selection highlighting */
+*::selection {
+  background: transparent !important;
+  color: inherit !important;
+}
+
+*::-moz-selection {
+  background: transparent !important;
+  color: inherit !important;
+}
+
+/* Disable selection on mousedown and mousemove events */
+*:not(input):not(textarea):not([contenteditable="true"]) {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  pointer-events: auto;
+}
+
+/* Prevent selection during all mouse interaction states */
+*:active:not(input):not(textarea):not([contenteditable="true"]),
+*:focus:not(input):not(textarea):not([contenteditable="true"]),
+*:hover:not(input):not(textarea):not([contenteditable="true"]) {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
 }

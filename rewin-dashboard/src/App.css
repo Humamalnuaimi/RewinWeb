@@ -18,6 +18,9 @@ body {
   -moz-user-select: none !important;
   -ms-user-select: none !important;
   user-select: none !important;
+  /* Prevent text selection on fast mouse movements */
+  -webkit-touch-callout: none !important;
+  -webkit-tap-highlight-color: transparent !important;
   background:
     radial-gradient(1200px 800px at 18% 10%, rgba(120,140,255,0.35), transparent 60%),
     radial-gradient(1100px 700px at 80% 25%, rgba(150,110,220,0.30), transparent 60%),
@@ -122,6 +125,56 @@ input[placeholder*="Search"],
 input[placeholder*="search"],
 .search-input,
 .search-input * {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+}
+
+/* Aggressive prevention for fast mouse movements and drag events */
+* {
+  -webkit-user-drag: none !important;
+  -khtml-user-drag: none !important;
+  -moz-user-drag: none !important;
+  -o-user-drag: none !important;
+  user-drag: none !important;
+  -webkit-touch-callout: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+/* Prevent selection during mouse events */
+*::selection {
+  background: transparent !important;
+}
+
+*::-moz-selection {
+  background: transparent !important;
+}
+
+/* Prevent drag and selection on all elements during mouse events */
+*:active,
+*:focus,
+*:hover,
+*:visited {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  -webkit-user-drag: none !important;
+  -moz-user-drag: none !important;
+  user-drag: none !important;
+}
+
+/* Override for inputs during active states */
+input:active,
+input:focus,
+input:hover,
+textarea:active,
+textarea:focus,
+textarea:hover,
+[contenteditable="true"]:active,
+[contenteditable="true"]:focus,
+[contenteditable="true"]:hover {
   -webkit-user-select: text !important;
   -moz-user-select: text !important;
   -ms-user-select: text !important;
