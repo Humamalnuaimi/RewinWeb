@@ -2251,15 +2251,39 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       borderRadius: '12px',
                       border: '1px solid rgba(255,255,255,0.2)',
                       cursor: 'pointer',
-                      transition: 'all 0.3s ease'
+                      transition: 'all 0.3s ease',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none'
                     }}
                     onMouseEnter={(e) => {
-                      (e.target as HTMLElement).closest('div')!.style.background = 'rgba(255,255,255,0.2)';
-                      (e.target as HTMLElement).closest('div')!.style.transform = 'translateY(-2px)';
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const target = e.currentTarget as HTMLElement;
+                      target.style.background = 'rgba(255,255,255,0.2)';
+                      target.style.transform = 'translateY(-2px)';
                     }}
                     onMouseLeave={(e) => {
-                      (e.target as HTMLElement).closest('div')!.style.background = 'rgba(255,255,255,0.1)';
-                      (e.target as HTMLElement).closest('div')!.style.transform = 'translateY(0)';
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const target = e.currentTarget as HTMLElement;
+                      target.style.background = 'rgba(255,255,255,0.1)';
+                      target.style.transform = 'translateY(0)';
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onSelectStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
+                    }}
+                    onDragStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
                     }}
                   >
                     <div style={{
@@ -2267,9 +2291,37 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       justifyContent: 'space-between',
                       alignItems: 'flex-start',
                       flexWrap: 'wrap',
-                      gap: '1rem'
+                      gap: '1rem',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none'
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onSelectStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
                     }}>
-                                             <div style={{ flex: 1 }}>
+                                             <div style={{ 
+                        flex: 1,
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        MozUserSelect: 'none',
+                        msUserSelect: 'none'
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
+                      }}>
                          <h4 style={{ 
                            color: 'white', 
                            margin: '0 0 0.5rem 0', 
@@ -2279,34 +2331,135 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                            WebkitUserSelect: 'none',
                            MozUserSelect: 'none',
                            msUserSelect: 'none'
+                         }}
+                         onMouseDown={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                         }}
+                         onSelectStart={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                           return false;
                          }}>
                            {transaction.customerDisplay}
                          </h4>
-                         <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0 0 0.5rem 0', fontSize: '0.9rem' }}>
+                         <p style={{ 
+                           color: 'rgba(255,255,255,0.8)', 
+                           margin: '0 0 0.5rem 0', 
+                           fontSize: '0.9rem',
+                           userSelect: 'none',
+                           WebkitUserSelect: 'none',
+                           MozUserSelect: 'none',
+                           msUserSelect: 'none'
+                         }}
+                         onMouseDown={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                         }}
+                         onSelectStart={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                           return false;
+                         }}>
                            {transaction.timestamp.toLocaleString()}
                          </p>
-                         <p style={{ color: 'rgba(255,255,255,0.7)', margin: 0, fontSize: '0.8rem' }}>
+                         <p style={{ 
+                           color: 'rgba(255,255,255,0.7)', 
+                           margin: 0, 
+                           fontSize: '0.8rem',
+                           userSelect: 'none',
+                           WebkitUserSelect: 'none',
+                           MozUserSelect: 'none',
+                           msUserSelect: 'none'
+                         }}
+                         onMouseDown={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                         }}
+                         onSelectStart={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                           return false;
+                         }}>
                            {transaction.transactionType} • {transaction.isManualTransaction ? 'Manual' : 'Automatic'}
                          </p>
                          <p style={{ 
                            color: 'rgba(255,255,255,0.6)', 
                            margin: '0.25rem 0 0 0', 
                            fontSize: '0.75rem',
-                           fontStyle: 'italic' 
+                           fontStyle: 'italic',
+                           userSelect: 'none',
+                           WebkitUserSelect: 'none',
+                           MozUserSelect: 'none',
+                           msUserSelect: 'none'
+                         }}
+                         onMouseDown={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                         }}
+                         onSelectStart={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                           return false;
                          }}>
                            Click for full transaction history →
                          </p>
                        </div>
-                      <div style={{ textAlign: 'right' }}>
+                      <div style={{ 
+                        textAlign: 'right',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        MozUserSelect: 'none',
+                        msUserSelect: 'none'
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
+                      }}>
                         <p style={{ 
                           color: transaction.pointsChanged > 0 ? '#4ade80' : '#f87171',
                           margin: 0,
                           fontSize: '1.2rem',
-                          fontWeight: '600'
+                          fontWeight: '600',
+                          userSelect: 'none',
+                          WebkitUserSelect: 'none',
+                          MozUserSelect: 'none',
+                          msUserSelect: 'none'
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onSelectStart={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          return false;
                         }}>
                           {transaction.pointsChanged > 0 ? '+' : ''}{transaction.pointsChanged}
                         </p>
-                        <p style={{ color: 'rgba(255,255,255,0.7)', margin: '0.25rem 0 0 0', fontSize: '0.8rem' }}>
+                        <p style={{ 
+                          color: 'rgba(255,255,255,0.7)', 
+                          margin: '0.25rem 0 0 0', 
+                          fontSize: '0.8rem',
+                          userSelect: 'none',
+                          WebkitUserSelect: 'none',
+                          MozUserSelect: 'none',
+                          msUserSelect: 'none'
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onSelectStart={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          return false;
+                        }}>
                           points
                         </p>
                       </div>
@@ -4456,15 +4609,57 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                     WebkitUserSelect: 'none',
                     MozUserSelect: 'none',
                     msUserSelect: 'none'
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onSelectStart={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
+                  }}
+                  onDragStart={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
                   }}>
                     <div style={{
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'flex-start',
                       flexWrap: 'wrap',
-                      gap: '1rem'
+                      gap: '1rem',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none'
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onSelectStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
                     }}>
-                      <div style={{ flex: 1 }}>
+                      <div style={{ 
+                        flex: 1,
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        MozUserSelect: 'none',
+                        msUserSelect: 'none'
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
+                      }}>
                         <h4 style={{ 
                           color: 'white', 
                           margin: '0 0 0.5rem 0',
@@ -4473,6 +4668,15 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                           WebkitUserSelect: 'none',
                           MozUserSelect: 'none',
                           msUserSelect: 'none'
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onSelectStart={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          return false;
                         }}>
                           {transaction.description || 'Transaction'}
                         </h4>
@@ -4484,29 +4688,92 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                           WebkitUserSelect: 'none',
                           MozUserSelect: 'none',
                           msUserSelect: 'none'
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onSelectStart={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          return false;
                         }}>
                           {transaction.timestamp?.toLocaleString() || 'Unknown date'}
                         </p>
                         <p style={{ 
                           color: 'rgba(255,255,255,0.7)', 
                           margin: 0,
-                          fontSize: '0.8rem'
+                          fontSize: '0.8rem',
+                          userSelect: 'none',
+                          WebkitUserSelect: 'none',
+                          MozUserSelect: 'none',
+                          msUserSelect: 'none'
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onSelectStart={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          return false;
                         }}>
                           Outlet: {transaction.outletDisplayName}
                         </p>
                       </div>
-                      <div style={{ textAlign: 'right' }}>
+                      <div style={{ 
+                        textAlign: 'right',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        MozUserSelect: 'none',
+                        msUserSelect: 'none'
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
+                      }}>
                                                  <div style={{
                            display: 'inline-block',
                            padding: '0.5rem 1rem',
                            borderRadius: '8px',
                            backgroundColor: transaction.pointsChanged > 0 ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                           border: transaction.pointsChanged > 0 ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)'
+                           border: transaction.pointsChanged > 0 ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
+                           userSelect: 'none',
+                           WebkitUserSelect: 'none',
+                           MozUserSelect: 'none',
+                           msUserSelect: 'none'
+                         }}
+                         onMouseDown={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                         }}
+                         onSelectStart={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                           return false;
                          }}>
                            <span style={{
                              color: transaction.pointsChanged > 0 ? '#22c55e' : '#ef4444',
                              fontWeight: '600',
-                             fontSize: '1.1rem'
+                             fontSize: '1.1rem',
+                             userSelect: 'none',
+                             WebkitUserSelect: 'none',
+                             MozUserSelect: 'none',
+                             msUserSelect: 'none'
+                           }}
+                           onMouseDown={(e) => {
+                             e.preventDefault();
+                             e.stopPropagation();
+                           }}
+                           onSelectStart={(e) => {
+                             e.preventDefault();
+                             e.stopPropagation();
+                             return false;
                            }}>
                              {transaction.pointsChanged > 0 ? '+' : ''}{transaction.pointsChanged || 0} pts
                            </span>
@@ -4514,7 +4781,20 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         <div style={{
                           color: 'rgba(255,255,255,0.6)',
                           fontSize: '0.8rem',
-                          marginTop: '0.25rem'
+                          marginTop: '0.25rem',
+                          userSelect: 'none',
+                          WebkitUserSelect: 'none',
+                          MozUserSelect: 'none',
+                          msUserSelect: 'none'
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onSelectStart={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          return false;
                         }}>
                           {transaction.transactionType || 'Unknown'}
                         </div>
