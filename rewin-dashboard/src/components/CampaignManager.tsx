@@ -735,12 +735,18 @@ ${expirationText}
           customer.data.optedInForSMS === true
         ).length;
 
-        // Send SMS to eligible customers (placeholder for now)
-        qualifyingCustomers.forEach(customer => {
-          if (customer.data.optedInForSMS) {
-            console.log(`📱 [SMS] Would send to ${customer.data.name || customer.id}: "${campaign.name} - Special offer!"`);
+        // Send SMS to eligible customers
+        for (const customer of qualifyingCustomers) {
+          if (customer.data.optedInForSMS && customer.data.phoneNumber) {
+            try {
+              const smsMessage = `🎉 ${campaign.name}! Get ${campaign.discountAmount}${campaign.discountType === 'percentage' ? '%' : '$'} off your next visit. Valid for 7 days. Show this message in-store.`;
+              await sendSMSMessage(customer.data.phoneNumber, smsMessage);
+              console.log(`📱 SMS sent to ${customer.data.name || customer.id}: ${customer.data.phoneNumber}`);
+            } catch (error) {
+              console.error(`❌ Failed to send SMS to ${customer.id}:`, error);
+            }
           }
-        });
+        }
 
         return { assigned: qualifyingCustomers.length, smsEligible: smsEligibleCount };
       } else {
@@ -1503,6 +1509,36 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
     setPromotionToDelete(null);
   };
 
+  // 🎯 PROCESS SINGLE CAMPAIGN
+  const processSingleCampaign = async (campaign: Campaign) => {
+    try {
+      setLoading(true);
+      console.log('🎯 Processing single campaign:', campaign.name);
+      
+      // Process this specific campaign
+      const result = await assignCampaignToCustomers(user.uid, campaign);
+      
+      // Show success message
+      setSuccessNotification({
+        show: true,
+        message: `✅ Campaign "${campaign.name}" processed successfully!\n\n📊 Results:\n• ${result.assigned} customers received promotions\n• Promotions are now visible in the mobile app\n• SMS notifications sent to eligible customers`
+      });
+      
+      // Auto-hide notification after 5 seconds
+      setTimeout(() => {
+        setSuccessNotification({ show: false, message: '' });
+      }, 5000);
+      
+    } catch (error) {
+      console.error('❌ Error processing campaign:', error);
+      alert(`❌ Error processing campaign: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+
   // 🔄 TOGGLE CAMPAIGN ACTIVE STATUS
   const toggleCampaignStatus = async (campaignId: string, currentStatus: boolean) => {
     try {
@@ -1953,9 +1989,41 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
         {/* Content Area - Real Data Display */}
         {activeTab === 'campaigns' ? (
           <div>
-            <h2 style={{ color: 'white', marginBottom: '1.5rem' }}>
-              🟢 Campaigns ({campaigns.length})
-            </h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ color: 'white', margin: 0 }}>
+                🟢 Campaigns ({campaigns.length})
+              </h2>
+              {campaigns.length > 0 && (
+                <button
+                  onClick={() => processAllCampaigns(false)}
+                  disabled={loading}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    backgroundColor: '#16a34a',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: 'bold',
+                    opacity: loading ? 0.7 : 1,
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseOver={(e) => {
+                    if (!loading) {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(22,163,74,0.4)';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  🚀 Process All Active Campaigns
+                </button>
+              )}
+            </div>
             <div style={{
               background: 'rgba(255,255,255,0.1)',
               borderRadius: '15px',
@@ -2118,6 +2186,35 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                           }}
                         >
                           {campaign.isActive ? 'Deactivate' : 'Activate'}
+                        </button>
+                        <button
+                          onClick={() => processSingleCampaign(campaign)}
+                          disabled={loading}
+                          style={{
+                            flex: 1,
+                            padding: '0.75rem 1.5rem',
+                            backgroundColor: '#16a34a',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '12px',
+                            cursor: loading ? 'not-allowed' : 'pointer',
+                            fontSize: '0.9rem',
+                            fontWeight: 'bold',
+                            opacity: loading ? 0.7 : 1,
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseOver={(e) => {
+                            if (!loading) {
+                              e.currentTarget.style.transform = 'translateY(-2px)';
+                              e.currentTarget.style.boxShadow = '0 4px 12px rgba(22,163,74,0.4)';
+                            }
+                          }}
+                          onMouseOut={(e) => {
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = 'none';
+                          }}
+                        >
+                          🎯 Process Now
                         </button>
                         <button
                           onClick={() => deleteCampaign(campaign.id!)}
