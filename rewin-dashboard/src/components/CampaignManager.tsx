@@ -1173,23 +1173,26 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       
       // Map campaign type to proper trigger type
       let triggerType: 'birthday' | 'inactive_15' | 'inactive_30' | 'inactive_custom' = 'birthday';
-      let daysSinceLastVisit: number | undefined = undefined;
+      let daysSinceLastVisit: number = 0; // Default to 0 instead of undefined
       
       switch (campaignForm.type) {
         case 'inactive':
           // Use custom trigger type and store the actual days
           triggerType = 'inactive_custom';
-          daysSinceLastVisit = campaignForm.daysSinceLastVisit;
+          daysSinceLastVisit = campaignForm.daysSinceLastVisit || 0;
           break;
         case 'birthday':
           triggerType = 'birthday';
+          daysSinceLastVisit = 0; // Not applicable for birthday campaigns
           break;
         case 'spending':
           // For now, map spending campaigns to inactive (you can adjust this later)
           triggerType = 'inactive_15';
+          daysSinceLastVisit = 15; // Default for spending campaigns
           break;
         default:
           triggerType = 'birthday';
+          daysSinceLastVisit = 0; // Default for unknown types
       }
       
       const campaign: Campaign = {
