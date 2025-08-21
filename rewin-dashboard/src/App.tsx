@@ -1568,12 +1568,27 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                     setCurrentPage('customers');
                   }}
                   onMouseEnter={(e) => {
-                    (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.2)';
-                    (e.target as HTMLElement).style.transform = 'translateY(-2px)';
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const target = e.currentTarget as HTMLElement;
+                    target.style.background = 'rgba(255,255,255,0.2)';
+                    target.style.transform = 'translateY(-2px)';
                   }}
                   onMouseLeave={(e) => {
-                    (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.1)';
-                    (e.target as HTMLElement).style.transform = 'translateY(0)';
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const target = e.currentTarget as HTMLElement;
+                    target.style.background = 'rgba(255,255,255,0.1)';
+                    target.style.transform = 'translateY(0)';
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onSelectStart={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
                   }}
                   >
                     <div style={{
@@ -4797,12 +4812,27 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                   }}
                   onClick={() => handleCustomerClick(customer)}
                   onMouseEnter={(e) => {
-                    (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.2)';
-                    (e.target as HTMLElement).style.transform = 'translateY(-2px)';
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const target = e.currentTarget as HTMLElement;
+                    target.style.background = 'rgba(255,255,255,0.2)';
+                    target.style.transform = 'translateY(-2px)';
                   }}
                   onMouseLeave={(e) => {
-                    (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.1)';
-                    (e.target as HTMLElement).style.transform = 'translateY(0)';
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const target = e.currentTarget as HTMLElement;
+                    target.style.background = 'rgba(255,255,255,0.1)';
+                    target.style.transform = 'translateY(0)';
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onSelectStart={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
                   }}
                   >
                     <div style={{
@@ -5760,6 +5790,45 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Prevent text selection during fast mouse movements
+  useEffect(() => {
+    const preventSelectStart = (e: Event) => {
+      const target = e.target as HTMLElement;
+      // Allow selection only for input elements
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.contentEditable === 'true') {
+        return true;
+      }
+      e.preventDefault();
+      return false;
+    };
+
+    const preventDragStart = (e: DragEvent) => {
+      e.preventDefault();
+      return false;
+    };
+
+    const preventMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && target.contentEditable !== 'true') {
+        // Only prevent default for non-input elements during fast movements
+        if (e.detail > 1) { // Multiple rapid clicks
+          e.preventDefault();
+        }
+      }
+    };
+
+    // Add global event listeners
+    document.addEventListener('selectstart', preventSelectStart);
+    document.addEventListener('dragstart', preventDragStart);
+    document.addEventListener('mousedown', preventMouseDown);
+
+    return () => {
+      document.removeEventListener('selectstart', preventSelectStart);
+      document.removeEventListener('dragstart', preventDragStart);
+      document.removeEventListener('mousedown', preventMouseDown);
+    };
+  }, []);
 
   useEffect(() => {
     // Listen for authentication state changes
