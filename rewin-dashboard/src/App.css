@@ -91,6 +91,43 @@ div[style*="backdrop-filter: blur"], div[style*="backdrop-filter: blur"] * {
   user-select: none !important;
 }
 
+/* Comprehensive text selection prevention for all dashboard elements */
+.dashboard-container,
+.dashboard-container *,
+.customer-list,
+.customer-list *,
+.customer-card,
+.customer-card *,
+.stats-container,
+.stats-container *,
+.page-content,
+.page-content * {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+}
+
+/* Prevent selection on hover for all elements */
+*:hover:not(input):not(textarea):not([contenteditable="true"]) {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+}
+
+/* Ensure search inputs remain selectable */
+input[type="search"],
+input[placeholder*="Search"],
+input[placeholder*="search"],
+.search-input,
+.search-input * {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+}
+
 .logo {
   height: 6em;
   padding: 1.5em;
