@@ -39,7 +39,30 @@ export class PromotionService {
       const user = auth.currentUser;
       if (!user) throw new Error('No authenticated user');
 
-      // Normalize targetOutlets: empty array means "all outlets"; convert "ALL" to []
+      // Validate required fields to prevent creating incomplete promotions
+      if (!promotionData.title || !promotionData.title.trim()) {
+        throw new Error('Promotion title is required');
+      }
+      
+      if (!promotionData.description || !promotionData.description.trim()) {
+        throw new Error('Promotion description is required');
+      }
+      
+      if (!promotionData.discountAmount || promotionData.discountAmount <= 0) {
+        throw new Error('Discount amount must be greater than 0');
+      }
+      
+      if (!promotionData.discountType || !['dollar', 'percentage'].includes(promotionData.discountType)) {
+        throw new Error('Valid discount type (dollar or percentage) is required');
+      }
+      
+      if (promotionData.discountType === 'percentage' && promotionData.discountAmount > 100) {
+        throw new Error('Percentage discount cannot exceed 100%');
+      }
+
+      // Mobile App Targeting Specification:
+      // - Empty array [] = "All customers everywhere"
+      // - Array with outlet IDs = "All customers in specific outlets"
       const normalizedTargetOutlets = Array.isArray(promotionData.targetOutlets)
         ? promotionData.targetOutlets
         : (promotionData.targetOutlets === 'ALL' ? [] : []);
@@ -73,9 +96,8 @@ export class PromotionService {
           source: promotionData.source || 'manual', // 'manual', 'campaign_inactive', etc.
           createdBy: user.email || user.uid,
           
-          // User-based targeting fields
-          targetAudience: promotionData.targetAudience || 'all', // 'all', 'specific_customers', 'outlet_customers'
-          targetCustomers: promotionData.targetCustomers || [], // Array of customer IDs
+          // User-based targeting fields (SIMPLIFIED - customer-specific targeting removed)
+          targetAudience: promotionData.targetAudience || 'all', // Only 'all' supported now
           minVisitsRequired: promotionData.minVisitsRequired || 0,
           maxDaysSinceLastVisit: promotionData.maxDaysSinceLastVisit || 0,
           minTotalSpent: promotionData.minTotalSpent || 0,

@@ -166,30 +166,47 @@ div[style*="backdrop-filter: blur"], div[style*="backdrop-filter: blur"] * {
 }
 
 .auth-form {
-  margin-top: 18px;
-  display: grid;
-  gap: 14px;
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .input-with-icon {
   display: grid;
   grid-template-columns: 18px 1fr auto;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: 12px;
+  padding: 14px 16px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.05);
+  position: relative;
+  z-index: 1;
+  transition: all 0.25s ease;
+}
+
+.input-with-icon:focus-within {
+  border-color: rgba(139, 92, 246, 0.5);
   background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
 }
 
 .input-with-icon svg {
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .input-with-icon .form-input {
   padding: 0;
   border: none;
-  background: transparent;
+  background: transparent !important;
+  color: white !important;
+  font-size: 14px;
+  font-weight: 400;
+  -webkit-text-fill-color: white !important;
+  -webkit-box-shadow: none !important;
+  outline: none !important;
+  font-family: inherit;
 }
 
 .toggle-visibility {
@@ -432,15 +449,35 @@ div[style*="backdrop-filter: blur"], div[style*="backdrop-filter: blur"] * {
 }
 
 /* Form Styles */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.form-label {
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  display: block;
+  z-index: 2;
+  position: relative;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  letter-spacing: 0.01em;
+}
+
 .form-input {
-  background: rgba(255, 255, 255, 0.1);
+  background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 12px;
   padding: 0.75rem 1rem;
   color: white;
-  font-size: 0.9rem;
-  backdrop-filter: blur(10px);
+  font-size: 14px;
   transition: all 0.25s ease;
+  outline: none;
 }
 
 .form-input:focus {
@@ -450,7 +487,53 @@ div[style*="backdrop-filter: blur"], div[style*="backdrop-filter: blur"] * {
 }
 
 .form-input::placeholder {
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.input-with-icon .form-input::placeholder {
+  color: rgba(255, 255, 255, 0.6) !important;
+  opacity: 1 !important;
+}
+
+/* Comprehensive input state styling */
+.input-with-icon .form-input:focus,
+.input-with-icon .form-input:active,
+.input-with-icon .form-input:valid,
+.input-with-icon .form-input[value]:not([value=""]) {
+  background: transparent !important;
+  color: white !important;
+  -webkit-text-fill-color: white !important;
+  box-shadow: none !important;
+  -webkit-box-shadow: none !important;
+}
+
+/* Prevent browser autofill styling - comprehensive coverage */
+.input-with-icon .form-input:-webkit-autofill,
+.input-with-icon .form-input:-webkit-autofill:hover,
+.input-with-icon .form-input:-webkit-autofill:focus,
+.input-with-icon .form-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px transparent inset !important;
+  -webkit-text-fill-color: white !important;
+  background-color: transparent !important;
+  background: transparent !important;
+  color: white !important;
+  transition: background-color 5000s ease-in-out 0s;
+  -webkit-transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Firefox autofill prevention */
+.input-with-icon .form-input:-moz-autofill {
+  background: transparent !important;
+  color: white !important;
+}
+
+/* Edge/IE autofill prevention */
+.input-with-icon .form-input:-ms-input-placeholder {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.input-with-icon .form-input::-ms-input-placeholder {
+  color: rgba(255, 255, 255, 0.6) !important;
 }
 
 /* Table Styles */

@@ -1640,22 +1640,23 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
   const toggleCampaignStatus = async (campaignId: string, currentStatus: boolean) => {
     try {
       setLoading(true);
-      const uid = user.uid;
-      const campaignRef = doc(firestore, 'users', uid, 'campaigns', campaignId);
-      
       const newStatus = !currentStatus;
       console.log(`🔄 ${newStatus ? 'Activating' : 'Deactivating'} campaign ${campaignId}`);
       
-      // Update the campaign status in Firebase
-      await updateDoc(campaignRef, {
+      // Update the campaign status using CampaignService
+      await CampaignService.updateCampaign(campaignId, {
         isActive: newStatus
       });
       
       console.log(`✅ Campaign ${newStatus ? 'activated' : 'deactivated'} successfully`);
       
+      // Note: When deactivating a campaign, we don't remove existing promotions
+      // The campaign will simply stop creating NEW promotions for future triggers
+      // Existing customer promotions remain active until they expire naturally
+      
       // Reload campaigns to update the display
       await loadCampaigns();
-      alert(`Campaign ${newStatus ? 'activated' : 'deactivated'} successfully!`);
+      alert(`Campaign ${newStatus ? 'activated' : 'deactivated'} successfully!${!newStatus ? '\n\n📝 Note: Existing customer promotions will remain active until they expire naturally. The campaign will stop creating new promotions.' : ''}`);
       
     } catch (error) {
       console.error('❌ Error toggling campaign status:', error);
@@ -1674,9 +1675,8 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       const newStatus = !currentStatus;
       console.log(`🔄 ${newStatus ? 'Activating' : 'Deactivating'} promotion ${promotionId}`);
       
-      // Step 1: Update the master promotion status
-      const promotionRef = doc(firestore, 'users', uid, 'promotions', promotionId);
-      await updateDoc(promotionRef, {
+      // Step 1: Update the master promotion status using PromotionService
+      await PromotionService.updatePromotion(promotionId, {
         isActive: newStatus
       });
       

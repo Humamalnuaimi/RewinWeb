@@ -49,6 +49,7 @@ interface PromotionForm {
   minimumPurchase: number;
   expirationDays: number;
   hasExpiration: boolean;
+  targetingMode: 'all_customers' | 'specific_outlets';
   targetOutlets: string[];
   smsMessage: string;
   sendSMS: boolean;
@@ -93,6 +94,7 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
     minimumPurchase: 0,
     expirationDays: 30,
     hasExpiration: true,
+    targetingMode: 'all_customers',
     targetOutlets: [],
     smsMessage: '',
     sendSMS: true
@@ -192,19 +194,64 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
     try {
       setError(null);
       
-      // Prepare promotion data (App Team format)
+      // Validate required fields
+      if (!promotionForm.title.trim()) {
+        setError('Promotion title is required');
+        return;
+      }
+      
+      if (!promotionForm.description.trim()) {
+        setError('Promotion description is required');
+        return;
+      }
+      
+      if (!promotionForm.discountAmount || promotionForm.discountAmount <= 0) {
+        setError('Discount amount must be greater than 0');
+        return;
+      }
+      
+      if (promotionForm.discountType === 'percentage' && promotionForm.discountAmount > 100) {
+        setError('Percentage discount cannot exceed 100%');
+        return;
+      }
+      
+      if (promotionForm.minimumPurchase < 0) {
+        setError('Minimum purchase cannot be negative');
+        return;
+      }
+      
+      // Validate targeting requirements based on simplified mobile app specification
+      if (promotionForm.targetingMode === 'specific_outlets' && promotionForm.targetOutlets.length === 0) {
+        setError('Please select at least one outlet for outlet-specific targeting');
+        return;
+      }
+      
+      // Prepare promotion data (Mobile App Targeting Specification Compliant)
       const promotionData: any = {
         title: promotionForm.title,
         description: promotionForm.description,
         discountType: promotionForm.discountType,
         discountAmount: promotionForm.discountAmount,
         minimumPurchase: promotionForm.minimumPurchase,
-        targetOutlets: promotionForm.targetOutlets.length === 0 ? 'ALL' : promotionForm.targetOutlets,
         isActive: true,
         createdAt: Timestamp.now(),
         source: "manual",
         createdBy: "dashboard"
       };
+
+      // Apply Simplified Mobile App Targeting Specification:
+      // ONLY TWO MODES SUPPORTED (customer-specific targeting REMOVED)
+      if (promotionForm.targetingMode === 'all_customers') {
+        // Scenario: "All Customers Everywhere"
+        promotionData.targetAudience = "all";
+        promotionData.targetOutlets = []; // Empty array = all customers everywhere
+      } else if (promotionForm.targetingMode === 'specific_outlets') {
+        // Scenario: "All Customers in Specific Outlets"
+        promotionData.targetAudience = "all";
+        promotionData.targetOutlets = promotionForm.targetOutlets; // Array of outlet IDs
+      }
+      
+      // ❌ REMOVED: Customer-specific targeting no longer supported by mobile app
 
       // Add optional fields only if they have values
       if (promotionForm.targetOutlets.length === 1) {
@@ -261,6 +308,7 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
         minimumPurchase: 0,
         expirationDays: 30,
         hasExpiration: true,
+        targetingMode: 'all_customers',
         targetOutlets: [],
         smsMessage: '',
         sendSMS: true
@@ -454,33 +502,48 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
               padding: '2rem',
               color: 'white'
             }}>
-              <h2 style={{ margin: '0 0 1.5rem 0', color: 'white' }}>🎁 Create New Promotion</h2>
+              <h2 style={{ margin: '0 0 1rem 0', color: 'white' }}>🎁 Create New Promotion</h2>
+              <p style={{ margin: '0 0 1.5rem 0', color: 'rgba(255,255,255,0.8)', fontSize: '0.9rem' }}>
+                Fields marked with * are required. All fields must be properly filled before creating a promotion.
+              </p>
+              <div style={{ 
+                margin: '0 0 1.5rem 0', 
+                padding: '1rem', 
+                backgroundColor: 'rgba(34, 197, 94, 0.1)', 
+                border: '1px solid rgba(34, 197, 94, 0.3)', 
+                borderRadius: '8px',
+                color: 'rgba(255,255,255,0.9)',
+                fontSize: '0.85rem'
+              }}>
+                ✅ <strong>System Simplified:</strong> Customer-specific targeting removed to eliminate duplicate promotions. 
+                Only outlet-based and business-wide targeting supported.
+              </div>
               
               <div style={{ display: 'grid', gap: '1rem' }}>
                 <input
                   type="text"
-                  placeholder="Promotion Title"
+                  placeholder="Promotion Title *"
                   value={promotionForm.title}
                   onChange={(e) => setPromotionForm({...promotionForm, title: e.target.value})}
                   style={{
                     padding: '0.75rem',
                     backgroundColor: 'rgba(255,255,255,0.1)',
                     color: 'white',
-                    border: '1px solid rgba(255,255,255,0.3)',
+                    border: `1px solid ${!promotionForm.title.trim() ? 'rgba(255,100,100,0.5)' : 'rgba(255,255,255,0.3)'}`,
                     borderRadius: '8px',
                     fontSize: '1rem'
                   }}
                 />
                 
                 <textarea
-                  placeholder="Description"
+                  placeholder="Description *"
                   value={promotionForm.description}
                   onChange={(e) => setPromotionForm({...promotionForm, description: e.target.value})}
                   style={{
                     padding: '0.75rem',
                     backgroundColor: 'rgba(255,255,255,0.1)',
                     color: 'white',
-                    border: '1px solid rgba(255,255,255,0.3)',
+                    border: `1px solid ${!promotionForm.description.trim() ? 'rgba(255,100,100,0.5)' : 'rgba(255,255,255,0.3)'}`,
                     borderRadius: '8px',
                     fontSize: '1rem',
                     minHeight: '80px',
@@ -507,14 +570,16 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
 
                   <input
                     type="number"
-                    placeholder="Discount Amount"
+                    placeholder="Discount Amount *"
                     value={promotionForm.discountAmount}
                     onChange={(e) => setPromotionForm({...promotionForm, discountAmount: Number(e.target.value)})}
+                    min="0.01"
+                    step="0.01"
                     style={{
                       padding: '0.75rem',
                       backgroundColor: 'rgba(255,255,255,0.1)',
                       color: 'white',
-                      border: '1px solid rgba(255,255,255,0.3)',
+                      border: `1px solid ${!promotionForm.discountAmount || promotionForm.discountAmount <= 0 ? 'rgba(255,100,100,0.5)' : 'rgba(255,255,255,0.3)'}`,
                       borderRadius: '8px',
                       fontSize: '1rem'
                     }}
@@ -535,6 +600,67 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
                     fontSize: '1rem'
                   }}
                 />
+
+                {/* Mobile App Targeting Specification Compliant Selector */}
+                <div style={{ marginTop: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'white', fontSize: '0.9rem', fontWeight: '600' }}>
+                    🎯 Target Audience (Simplified System - No Customer Duplicates)
+                  </label>
+                  <select
+                    value={promotionForm.targetingMode}
+                    onChange={(e) => setPromotionForm({...promotionForm, targetingMode: e.target.value as 'all_customers' | 'specific_outlets'})}
+                    style={{
+                      padding: '0.75rem',
+                      backgroundColor: 'rgba(255,255,255,0.1)',
+                      color: 'white',
+                      border: '1px solid rgba(255,255,255,0.3)',
+                      borderRadius: '8px',
+                      fontSize: '1rem',
+                      width: '100%'
+                    }}
+                  >
+                    <option value="all_customers" style={{ color: '#333' }}>📱 All Customers Everywhere</option>
+                    <option value="specific_outlets" style={{ color: '#333' }}>🏪 All Customers in Specific Outlets</option>
+                  </select>
+                </div>
+
+                {/* Conditional Fields Based on Targeting Mode */}
+                {promotionForm.targetingMode === 'specific_outlets' && (
+                  <div style={{ marginTop: '1rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'white', fontSize: '0.9rem', fontWeight: '600' }}>
+                      Select Target Outlets
+                    </label>
+                    <select
+                      multiple
+                      value={promotionForm.targetOutlets}
+                      onChange={(e) => {
+                        const selectedOutlets = Array.from(e.target.selectedOptions, option => option.value);
+                        setPromotionForm({...promotionForm, targetOutlets: selectedOutlets});
+                      }}
+                      style={{
+                        padding: '0.75rem',
+                        backgroundColor: 'rgba(255,255,255,0.1)',
+                        color: 'white',
+                        border: '1px solid rgba(255,255,255,0.3)',
+                        borderRadius: '8px',
+                        fontSize: '1rem',
+                        width: '100%',
+                        minHeight: '100px'
+                      }}
+                    >
+                      {outlets.map(outlet => (
+                        <option key={outlet.id} value={outlet.id} style={{ color: '#333' }}>
+                          {outlet.name || outlet.id}
+                        </option>
+                      ))}
+                    </select>
+                    <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginTop: '0.5rem' }}>
+                      Hold Cmd/Ctrl to select multiple outlets
+                    </div>
+                  </div>
+                )}
+
+
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <input
@@ -590,14 +716,14 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
 
                 <button
                   onClick={handleCreatePromotion}
-                  disabled={!promotionForm.title || !promotionForm.description}
+                  disabled={!promotionForm.title || !promotionForm.description || !promotionForm.discountAmount || promotionForm.discountAmount <= 0}
                   style={{
                     padding: '1rem',
-                    backgroundColor: promotionForm.title && promotionForm.description ? '#4CAF50' : 'rgba(255,255,255,0.2)',
+                    backgroundColor: (promotionForm.title && promotionForm.description && promotionForm.discountAmount > 0) ? '#4CAF50' : 'rgba(255,255,255,0.2)',
                     color: 'white',
                     border: 'none',
                     borderRadius: '12px',
-                    cursor: promotionForm.title && promotionForm.description ? 'pointer' : 'not-allowed',
+                    cursor: (promotionForm.title && promotionForm.description && promotionForm.discountAmount > 0) ? 'pointer' : 'not-allowed',
                     fontWeight: '600',
                     fontSize: '1rem',
                     transition: 'all 0.2s'
