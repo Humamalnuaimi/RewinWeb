@@ -3734,10 +3734,43 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       borderBottom: index === transactionsData.transactions.length - 1 ? 'none' : '1px solid rgba(255,255,255,0.1)',
                       display: 'flex',
                       justifyContent: 'space-between',
-                      alignItems: 'center'
+                      alignItems: 'center',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none'
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onSelectStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
+                    }}
+                    onDragStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
                     }}
                   >
-                    <div style={{ flex: 1 }}>
+                    <div style={{ 
+                      flex: 1,
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none'
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onSelectStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
+                    }}>
                       <p style={{ 
                         color: 'white', 
                         margin: 0, 
@@ -3788,19 +3821,60 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       <p style={{ 
                         color: 'rgba(255,255,255,0.7)', 
                         margin: '0.25rem 0 0 0', 
-                        fontSize: '0.9rem' 
+                        fontSize: '0.9rem',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        MozUserSelect: 'none',
+                        msUserSelect: 'none'
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
                       }}>
                         {transaction.transactionDate.toLocaleDateString()} at {transaction.transactionDate.toLocaleTimeString()} • {transaction.outletDisplayName}
                       </p>
                       <p style={{ 
                         color: 'rgba(255,255,255,0.6)', 
                         margin: '0.25rem 0 0 0', 
-                        fontSize: '0.8rem' 
+                        fontSize: '0.8rem',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        MozUserSelect: 'none',
+                        msUserSelect: 'none'
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
                       }}>
                         {transaction.transactionType || 'EARNED'} • {transaction.isManualTransaction ? 'Manual' : 'Automatic'}
                       </p>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
+                    <div style={{ 
+                      textAlign: 'right',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none'
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onSelectStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
+                    }}>
                       <div style={{
                         padding: '0.5rem 1rem',
                         backgroundColor: transaction.pointsChanged > 0 ? 'rgba(74, 222, 128, 0.2)' : 'rgba(248, 113, 113, 0.2)',
@@ -3808,14 +3882,40 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         borderRadius: '20px',
                         fontSize: '1rem',
                         fontWeight: '600',
-                        marginBottom: '0.5rem'
+                        marginBottom: '0.5rem',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        MozUserSelect: 'none',
+                        msUserSelect: 'none'
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
                       }}>
                         {transaction.pointsChanged > 0 ? '+' : ''}{transaction.pointsChanged || 0}
                       </div>
                       <p style={{ 
                         color: 'rgba(255,255,255,0.7)', 
                         margin: 0, 
-                        fontSize: '0.8rem' 
+                        fontSize: '0.8rem',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        MozUserSelect: 'none',
+                        msUserSelect: 'none'
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
                       }}>
                         points
                       </p>
