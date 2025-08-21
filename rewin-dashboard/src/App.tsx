@@ -1053,10 +1053,25 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 transition: 'all 0.2s'
               }}
               onMouseEnter={(e) => {
-                (e.target as HTMLElement).style.backgroundColor = 'rgba(255,255,255,0.2)';
+                e.preventDefault();
+                e.stopPropagation();
+                const target = e.currentTarget as HTMLElement;
+                target.style.backgroundColor = 'rgba(255,255,255,0.2)';
               }}
               onMouseLeave={(e) => {
-                (e.target as HTMLElement).style.backgroundColor = 'rgba(255,255,255,0.1)';
+                e.preventDefault();
+                e.stopPropagation();
+                const target = e.currentTarget as HTMLElement;
+                target.style.backgroundColor = 'rgba(255,255,255,0.1)';
+              }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onSelectStart={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
               }}
             >
               {filter}
@@ -3204,12 +3219,27 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         setCurrentPage('customers');
                       }}
                       onMouseEnter={(e) => {
-                        (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.2)';
-                        (e.target as HTMLElement).style.transform = 'translateY(-2px)';
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const target = e.currentTarget as HTMLElement;
+                        target.style.background = 'rgba(255,255,255,0.2)';
+                        target.style.transform = 'translateY(-2px)';
                       }}
                       onMouseLeave={(e) => {
-                        (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.1)';
-                        (e.target as HTMLElement).style.transform = 'translateY(0)';
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const target = e.currentTarget as HTMLElement;
+                        target.style.background = 'rgba(255,255,255,0.1)';
+                        target.style.transform = 'translateY(0)';
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
                       }}
                     >
                       <div>
@@ -3732,10 +3762,25 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         setCurrentPage('customers');
                       }}
                       onMouseEnter={(e) => {
-                        (e.target as HTMLElement).style.color = 'rgba(255,255,255,0.8)';
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const target = e.currentTarget as HTMLElement;
+                        target.style.color = 'rgba(255,255,255,0.8)';
                       }}
                       onMouseLeave={(e) => {
-                        (e.target as HTMLElement).style.color = 'white';
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const target = e.currentTarget as HTMLElement;
+                        target.style.color = 'white';
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
                       }}
                       >
                         {transaction.customerDisplay}
@@ -5755,12 +5800,27 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                     transform: 'translateY(0)'
                   }}
                   onMouseEnter={(e) => {
-                    (e.target as HTMLElement).style.transform = 'translateY(-5px)';
-                    (e.target as HTMLElement).style.boxShadow = '0 12px 40px rgba(255,215,0,0.4)';
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const target = e.currentTarget as HTMLElement;
+                    target.style.transform = 'translateY(-5px)';
+                    target.style.boxShadow = '0 12px 40px rgba(255,215,0,0.4)';
                   }}
                   onMouseLeave={(e) => {
-                    (e.target as HTMLElement).style.transform = 'translateY(0)';
-                    (e.target as HTMLElement).style.boxShadow = '0 8px 32px rgba(255,215,0,0.3)';
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const target = e.currentTarget as HTMLElement;
+                    target.style.transform = 'translateY(0)';
+                    target.style.boxShadow = '0 8px 32px rgba(255,215,0,0.3)';
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onSelectStart={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
                   }}
                 >
                   <div style={{ 
