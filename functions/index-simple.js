@@ -5,68 +5,6 @@ const admin = require('firebase-admin');
 admin.initializeApp();
 const db = admin.firestore();
 
-// 🤖 CALLABLE FUNCTION - Manual trigger from dashboard
-exports.processCampaignsManual = functions.https.onCall(async (data, context) => {
-  console.log('🚀 Manual campaign processing triggered');
-  
-  if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'Must be authenticated');
-  }
-  
-  const userId = context.auth.uid;
-  console.log(`👤 Processing campaigns for user: ${userId}`);
-  
-  try {
-    let totalAssigned = 0;
-    
-    // Get active campaigns for this user
-    const campaignsSnapshot = await db
-      .collection('users')
-      .doc(userId)
-      .collection('campaigns')
-      .where('isActive', '==', true)
-      .get();
-    
-    for (const campaignDoc of campaignsSnapshot.docs) {
-      const campaign = campaignDoc.data();
-      const campaignId = campaignDoc.id;
-      
-      console.log(`🎯 Processing: ${campaign.name}`);
-      
-      let result = { assigned: 0 };
-      
-      // Process based on trigger type
-      if (campaign.triggerType === 'birthday') {
-        result = await processBirthdayCampaign(userId, campaignId, campaign);
-      } else if (campaign.triggerType.includes('inactive')) {
-        const days = campaign.daysSinceLastVisit || 30;
-        result = await processInactiveCampaign(userId, campaignId, campaign, days);
-      }
-      
-      totalAssigned += result.assigned;
-      
-      // Update campaign
-      await db
-        .collection('users')
-        .doc(userId)
-        .collection('campaigns')
-        .doc(campaignId)
-        .update({
-          lastProcessed: admin.firestore.FieldValue.serverTimestamp(),
-          lastProcessedBy: 'cloud_function_manual',
-          lastRunResult: `Manual: ${result.assigned} assigned`
-        });
-    }
-    
-    console.log(`✅ Complete: ${totalAssigned} total assigned`);
-    return { success: true, assigned: totalAssigned };
-    
-  } catch (error) {
-    console.error('❌ Error:', error);
-    throw new functions.https.HttpsError('internal', 'Processing failed');
-  }
-});
-
 // 🕐 SCHEDULED FUNCTION - Runs every hour automatically
 exports.processCampaigns = functions.scheduler.onSchedule('0 * * * *', async (event) => {
   console.log('⏰ Automated campaign processing started...');
@@ -118,7 +56,7 @@ exports.processCampaigns = functions.scheduler.onSchedule('0 * * * *', async (ev
         
         let result = { assigned: 0 };
         
-        // Process based on trigger type using the same logic as manual function
+        // Process based on trigger type
         if (campaign.triggerType === 'birthday') {
           result = await processBirthdayCampaign(userId, campaignId, campaign);
         } else if (campaign.triggerType.includes('inactive')) {
@@ -150,16 +88,6 @@ exports.processCampaigns = functions.scheduler.onSchedule('0 * * * *', async (ev
     
     console.log(`🎉 Automated processing complete! Processed ${totalProcessed} campaigns, assigned ${totalAssigned} promotions`);
     
-    // Log summary to a system collection for monitoring
-    await db.collection('system').doc('automationLogs').collection('runs').add({
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      type: 'scheduled_automation',
-      totalUsers: usersSnapshot.docs.length,
-      totalCampaignsProcessed: totalProcessed,
-      totalAssignments: totalAssigned,
-      status: 'success'
-    });
-    
     return { 
       success: true, 
       processed: totalProcessed, 
@@ -169,28 +97,16 @@ exports.processCampaigns = functions.scheduler.onSchedule('0 * * * *', async (ev
     
   } catch (error) {
     console.error('❌ Automated processing error:', error);
-    
-    // Log error to system collection
-    await db.collection('system').doc('automationLogs').collection('runs').add({
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      type: 'scheduled_automation',
-      status: 'error',
-      error: error.message,
-      stack: error.stack
-    });
-    
-    // Don't throw - let the function complete gracefully
     return { success: false, error: error.message };
   }
 });
 
-// Helper: Process birthday campaigns
+// Helper functions (simplified versions)
 async function processBirthdayCampaign(userId, campaignId, campaign) {
   const today = new Date();
   const todayMM = String(today.getMonth() + 1).padStart(2, '0');
   const todayDD = String(today.getDate()).padStart(2, '0');
   const todayMMDD = `${todayMM}-${todayDD}`;
-  const currentYear = today.getFullYear();
   
   console.log(`🎂 Birthday check for ${todayMMDD}`);
   
@@ -222,39 +138,10 @@ async function processBirthdayCampaign(userId, campaignId, campaign) {
     
     if (!matchesBirthday) continue;
     
-    // Check if customer already has an ACTIVE birthday promotion this year from this campaign
-    // Now that app sets isActive: false on redemption, this is simple and efficient!
-    const existingBirthdayQuery = await db
-      .collection('users')
-      .doc(userId)
-      .collection('customerPromotions')
-      .doc(customerId)
-      .collection('promotions')
-      .where('campaignId', '==', campaignId)
-      .where('source', '==', 'campaign_birthday')
-      .where('isActive', '==', true)
-      .get();
-    
-    // Check if any existing ACTIVE birthday promotion is from this year
-    let hasActiveThisYearPromo = false;
-    for (const doc of existingBirthdayQuery.docs) {
-      const promoData = doc.data();
-      const promoCreatedAt = promoData.createdAt?.toDate?.() || new Date(promoData.createdAt);
-      
-      if (promoCreatedAt.getFullYear() === currentYear) {
-        hasActiveThisYearPromo = true;
-        console.log(`⏭️ Customer ${customerId} has active birthday promotion from this year`);
-        break;
-      }
-    }
-    
-    if (hasActiveThisYearPromo) continue;
-    
-    // Create unique promotion ID with timestamp
-    const timestamp = Date.now();
-    const promotionId = `promo_birthday_${customerId}_${campaignId}_${currentYear}_${timestamp}`;
-    
     // Create promotion
+    const timestamp = Date.now();
+    const promotionId = `promo_birthday_${customerId}_${campaignId}_${new Date().getFullYear()}_${timestamp}`;
+    
     await db
       .collection('users')
       .doc(userId)
@@ -286,7 +173,6 @@ async function processBirthdayCampaign(userId, campaignId, campaign) {
   return { assigned };
 }
 
-// Helper: Process inactive customer campaigns
 async function processInactiveCampaign(userId, campaignId, campaign, inactiveDays) {
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - inactiveDays);
@@ -314,28 +200,10 @@ async function processInactiveCampaign(userId, campaignId, campaign, inactiveDay
     const lastVisitDate = lastVisit instanceof Date ? lastVisit : new Date(lastVisit);
     if (lastVisitDate > cutoffDate) continue;
     
-    // Check if customer already has an ACTIVE promotion from this campaign
-    // Now that app sets isActive: false on redemption, this is simple and efficient!
-    const existingActivePromosQuery = await db
-      .collection('users')
-      .doc(userId)
-      .collection('customerPromotions')
-      .doc(customerId)
-      .collection('promotions')
-      .where('campaignId', '==', campaignId)
-      .where('isActive', '==', true)
-      .get();
-    
-    if (!existingActivePromosQuery.empty) {
-      console.log(`⏭️ Customer ${customerId} already has active promotion from this campaign`);
-      continue; // Skip - customer already has active (unused) promotion from this campaign
-    }
-    
-    // Create unique promotion ID with timestamp to allow multiple assignments over time
+    // Create promotion
     const timestamp = Date.now();
     const promotionId = `promo_inactive_${customerId}_${campaignId}_${timestamp}`;
     
-    // Create promotion
     await db
       .collection('users')
       .doc(userId)
