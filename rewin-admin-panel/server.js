@@ -11,15 +11,31 @@ const admin = require('firebase-admin');
 
 // Initialize Firebase Admin with service account file
 try {
-  const serviceAccount = require('./serviceAccountKey.json');
+  // Try to load from secure location first, then fallback to environment variable
+  let serviceAccount;
+  const keyPath = process.env.FIREBASE_SERVICE_ACCOUNT_KEY_PATH || `${require('os').homedir()}/firebase-keys/serviceAccountKey.json`;
+  
+  try {
+    serviceAccount = require(keyPath);
+    console.log('✅ Service account loaded from:', keyPath);
+  } catch (fileError) {
+    // Fallback to environment variable (for production deployment)
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+      console.log('✅ Service account loaded from environment variable');
+    } else {
+      throw new Error('No service account key found. Please set FIREBASE_SERVICE_ACCOUNT_KEY_PATH or FIREBASE_SERVICE_ACCOUNT_KEY environment variable.');
+    }
+  }
   
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    databaseURL: `https://${process.env.FIREBASE_PROJECT_ID}.firebaseio.com`
+    databaseURL: `https://${process.env.FIREBASE_PROJECT_ID || 'rewin-f4ca1'}-default-rtdb.firebaseio.com`
   });
   console.log('✅ Firebase Admin SDK initialized successfully');
 } catch (error) {
   console.error('❌ Firebase Admin SDK initialization failed:', error);
+  console.error('💡 Make sure your service account key is at ~/firebase-keys/serviceAccountKey.json');
 }
 
 const app = express();
