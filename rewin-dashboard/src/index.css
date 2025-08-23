@@ -7,9 +7,9 @@
   color: rgba(255, 255, 255, 0.92);
   /* Match admin panel theme: layered dark gradients with subtle lighting */
   background:
-    radial-gradient(1200px 800px at 18% 10%, rgba(120,140,255,0.35), transparent 60%),
-    radial-gradient(1100px 700px at 80% 25%, rgba(150,110,220,0.30), transparent 60%),
-    linear-gradient(135deg, #0c1020 0%, #161a33 100%);
+    radial-gradient(1400px 900px at 18% 10%, rgba(109, 40, 217, 0.28), transparent 62%),
+    radial-gradient(1200px 700px at 80% 15%, rgba(59, 130, 246, 0.22), transparent 60%),
+    linear-gradient(135deg, #0b1021 0%, #151a33 40%, #0a1126 100%);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;

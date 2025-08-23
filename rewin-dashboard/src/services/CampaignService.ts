@@ -68,8 +68,8 @@ export class CampaignService {
     return `promo_birthday_${customerId}_${year}`;
   }
 
-  static buildInactivePromotionId(customerId: string, yyyymmdd: string) {
-    return `promo_inactive_${customerId}_${yyyymmdd}`;
+  static buildInactivePromotionId(customerId: string, campaignId: string) {
+    return `promo_inactive_${customerId}_${campaignId}`;
   }
 
   // Get all your campaigns

@@ -13,7 +13,7 @@
  * - /users/{userId}/customers/{customerId}
  * - /users/{userId}/outlets/{outletId}
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { type User } from 'firebase/auth';
 import { firestore, auth } from '../firebase/config';
 import {
@@ -28,14 +28,20 @@ import {
   deleteDoc,
   where,
   updateDoc,
-  getDoc
+  getDoc,
+  serverTimestamp
 } from 'firebase/firestore';
 import { PromotionService } from '../services/PromotionService';
 import { CampaignService } from '../services/CampaignService';
+import { AutomationService } from '../services/AutomationService';
+import { CampaignAutomationService } from '../services/CampaignAutomationService';
 
 interface CampaignManagerProps {
   user: User;
   onBack: () => void;
+  currentPage?: string;
+  setCurrentPage?: (page: string) => void;
+  setSelectedCampaignId?: (id: string) => void;
 }
 
 // 🎯 FIREBASE DATA INTERFACES (Exact as per App Team Specification)
@@ -110,7 +116,7 @@ interface CampaignForm {
   targetOutlets: string[] | 'ALL';
 }
 
-const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
+const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack, currentPage, setCurrentPage, setSelectedCampaignId: propSetSelectedCampaignId }) => {
   const [activeTab, setActiveTab] = useState<'campaigns' | 'promotions'>('campaigns');
   const [showCreateCampaign, setShowCreateCampaign] = useState(false);
   const [showCreatePromotion, setShowCreatePromotion] = useState(false);
@@ -149,8 +155,12 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack }) => {
     interval: 60,
     lastProcessed: null as string | null,
     processing: false,
-    nextRun: null as Date | null
+    nextRun: null as Date | null,
+    intervalHours: 24
   });
+
+  // Timer ref for auto-processing
+  const autoProcessingTimer = useRef<NodeJS.Timer | null>(null);
   const [autoProcessInterval, setAutoProcessInterval] = useState<NodeJS.Timeout | null>(null);
   const [showAutoSettings, setShowAutoSettings] = useState(false);
   
@@ -551,12 +561,12 @@ ${expirationText}
       console.log(`\n🎯 STARTING CUSTOMER QUALIFICATION PROCESS...`);
 
       // Filter customers based on campaign trigger type
-      customersSnapshot.docs.forEach((customerDoc: any) => {
+      for (const customerDoc of customersSnapshot.docs) {
         const customerData = customerDoc.data();
         const customerId = customerDoc.id;
 
         // Check if customer is active (default to true if not specified)
-        if (customerData.isActive === false) return;
+        if (customerData.isActive === false) continue;
 
         // Check outlet targeting for campaigns (skip if customer's outlet doesn't match)
         if (campaign.outletIds && campaign.outletIds.length > 0 && !campaign.outletIds.includes('all')) {
@@ -714,6 +724,21 @@ ${expirationText}
         }
 
         if (qualifies) {
+                  // 🔍 CHECK FOR DUPLICATE PROMOTION (Prevent multiple assignments)
+        const duplicateCheckId = campaign.triggerType === 'birthday' 
+          ? `promo_birthday_${customerId}_${new Date().getFullYear()}`
+          : `promo_inactive_${customerId}_${campaign.id!}`;
+          
+          try {
+            const existingPromo = await getDoc(doc(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions', duplicateCheckId));
+            if (existingPromo.exists()) {
+              console.log(`   ⏭️ SKIPPING ${customerData.firstName || customerId} - already has ${campaign.triggerType} promotion`);
+              continue; // Skip this customer - they already have this promotion
+            }
+          } catch (error) {
+            console.warn(`⚠️ Could not check for duplicate promotion for ${customerId}:`, error);
+          }
+          
           qualifyingCustomers.push({ id: customerId, data: customerData });
 
           // Create campaign-generated promotion for this customer
@@ -734,15 +759,15 @@ ${expirationText}
             targetOutlets: campaign.outletIds || ['ALL']
           };
 
-          // Save to customer's promotions (using the path where mobile app expects it)
+          // Save to customer's promotions (using consistent duplicate-prevention ID)
           const customerPromotionRef = doc(
-            collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions')
+            firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions', duplicateCheckId
           );
           batch.set(customerPromotionRef, campaignPromotion);
           
           console.log(`💾 Saving promotion to: businesses/${businessId}/customerPromotions/${customerId}/promotions/`);
         }
-      });
+      }
 
       // Execute batch write
       if (qualifyingCustomers.length > 0) {
@@ -780,6 +805,7 @@ ${expirationText}
   };
 
   // 🔄 PROCESS ALL CAMPAIGNS (Daily Automation)
+  // 🚀 PROCESS ALL CAMPAIGNS (Now using Cloud Functions for production)
   const processAllCampaigns = async (isAutomatic = false) => {
     try {
       if (!isAutomatic) {
@@ -788,63 +814,71 @@ ${expirationText}
         setAutoProcessing(prev => ({ ...prev, processing: true }));
       }
       
-      console.log(`🤖 Starting campaign automation process... (${isAutomatic ? 'Automatic' : 'Manual'})`);
+      console.log(`🚀 Starting campaign processing via Cloud Function... (${isAutomatic ? 'Automatic' : 'Manual'})`);
 
-      const uid = user.uid;
+      // 🔥 Process all active campaigns using the same logic as "Process Now"
+      console.log('🚀 Processing all active campaigns...');
       
       // Get all active campaigns
-      const campaignsRef = collection(firestore, 'users', uid, 'campaigns');
-      const campaignsSnapshot = await getDocs(campaignsRef);
+      const campaignsRef = collection(firestore, 'users', user.uid, 'campaigns');
+      const activeCampaignsQuery = query(campaignsRef, where('isActive', '==', true));
+      const campaignsSnapshot = await getDocs(activeCampaignsQuery);
       
-      if (campaignsSnapshot.size === 0) {
-        if (!isAutomatic) {
-          alert('ℹ️ No campaigns found to process');
-        }
-        return { processed: 0, assigned: 0 };
-      }
-
       let totalProcessed = 0;
       let totalAssigned = 0;
-
+      
+      // Process each active campaign
       for (const campaignDoc of campaignsSnapshot.docs) {
         const campaign = { id: campaignDoc.id, ...campaignDoc.data() } as Campaign;
+        console.log(`📢 Processing campaign: ${campaign.name}`);
         
-        if (!campaign.isActive) {
-          console.log(`⏸️ Skipping inactive campaign: ${campaign.name}`);
-          continue;
+        try {
+          const result = await assignCampaignToCustomers(user.uid, campaign);
+          totalAssigned += result.assigned;
+          totalProcessed++;
+          
+          // Update last processed time and source
+          await updateDoc(doc(firestore, 'users', user.uid, 'campaigns', campaign.id!), {
+            lastProcessed: serverTimestamp(),
+            lastProcessedBy: 'dashboard_manual',
+            lastRunResult: `Dashboard: ${result.assigned} assigned`
+          });
+        } catch (error) {
+          console.error(`❌ Error processing campaign ${campaign.name}:`, error);
         }
-
-        console.log(`🎯 Processing campaign: ${campaign.name} (Type: ${campaign.triggerType})`);
-        
-        const result = await assignCampaignToCustomers(uid, campaign);
-        totalAssigned += result.assigned;
-        totalProcessed++;
-
-        // Update campaign's lastProcessed timestamp
-        await getDocs(query(collection(firestore, 'users', uid, 'campaigns'), limit(1))).then(async () => {
-          // Update the campaign document with lastProcessed timestamp
-          const campaignRef = doc(firestore, 'users', uid, 'campaigns', campaign.id!);
-          // Note: You might want to use updateDoc here, but keeping it simple for now
-        });
       }
-
+      
+      const result = { processed: totalProcessed, assigned: totalAssigned };
+      console.log('✅ All campaigns processed successfully');
+      
       // Update last processed time
       const now = new Date().toISOString();
       localStorage.setItem('campaignLastProcessed', now);
       setAutoProcessing(prev => ({ ...prev, lastProcessed: now }));
 
       if (!isAutomatic) {
-        alert(`✅ Campaign Processing Complete!\n\n📊 Results:\n• ${totalProcessed} campaigns processed\n• ${totalAssigned} promotions assigned\n\nCheck the mobile app to see the new promotions!`);
+        alert(`✅ Campaign Processing Complete!\n\n📊 Results:\n• ${result.processed} campaigns processed\n• ${result.assigned} promotions assigned`);
       } else {
-        console.log(`✅ Auto-processing complete: ${totalProcessed} campaigns, ${totalAssigned} assignments`);
+        console.log(`✅ Automation processing complete: ${result.processed} campaigns, ${result.assigned} assignments`);
       }
 
-      return { processed: totalProcessed, assigned: totalAssigned };
+      return { processed: result.processed, assigned: result.assigned };
       
     } catch (error) {
-      console.error('❌ Error processing campaigns:', error);
+      console.error('❌ Error calling Cloud Function:', error);
+      
+      // If Cloud Function fails, show helpful error message
+      let errorMessage = 'Unknown error';
+      if (error.code === 'functions/not-found') {
+        errorMessage = 'Cloud Functions not deployed. Please deploy functions first.';
+      } else if (error.code === 'functions/unauthenticated') {
+        errorMessage = 'Authentication required. Please log in again.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       if (!isAutomatic) {
-        alert(`❌ Error processing campaigns: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        alert(`❌ Error processing campaigns via Cloud Function:\n\n${errorMessage}\n\nNote: Cloud Functions provide production-ready automation that works even when the website is closed.`);
       }
       return { processed: 0, assigned: 0 };
     } finally {
@@ -853,6 +887,67 @@ ${expirationText}
       } else {
         setAutoProcessing(prev => ({ ...prev, processing: false }));
       }
+    }
+  };
+
+  // (Cloud-only) local processing removed
+
+  // 🔄 START AUTO-PROCESSING
+  const startAutoProcessing = () => {
+    // Start the automation service
+    CampaignAutomationService.startAutomation();
+    
+    // Set up interval for client-side checking
+    if (autoProcessingTimer.current) {
+      clearInterval(autoProcessingTimer.current);
+    }
+
+    const intervalMs = (autoProcessing.intervalHours || 24) * 60 * 60 * 1000;
+    autoProcessingTimer.current = setInterval(() => {
+      processAllCampaigns(true);
+    }, intervalMs);
+
+    updateNextRunTime();
+    console.log('✅ Auto-processing started');
+  };
+
+  // ⏹️ STOP AUTO-PROCESSING
+  const stopAutoProcessing = () => {
+    // Stop the automation service
+    CampaignAutomationService.stopAutomation();
+    
+    if (autoProcessingTimer.current) {
+      clearInterval(autoProcessingTimer.current);
+      autoProcessingTimer.current = null;
+    }
+    console.log('⏹️ Auto-processing stopped');
+  };
+
+  // 🕐 UPDATE NEXT RUN TIME
+  const updateNextRunTime = () => {
+    const now = new Date();
+    const intervalHours = autoProcessing.intervalHours || 24;
+    const nextRun = new Date(now.getTime() + intervalHours * 60 * 60 * 1000);
+    setAutoProcessing(prev => ({ ...prev, nextRun: nextRun.toISOString() }));
+  };
+
+  // 🔄 TOGGLE AUTO PROCESSING
+  const toggleAutoProcessing = () => {
+    if (autoProcessing.enabled) {
+      stopAutoProcessing();
+      setAutoProcessing(prev => ({ ...prev, enabled: false }));
+    } else {
+      setAutoProcessing(prev => ({ ...prev, enabled: true }));
+      startAutoProcessing();
+    }
+  };
+
+  // ⚙️ UPDATE AUTO INTERVAL
+  const updateAutoInterval = (hours: number) => {
+    setAutoProcessing(prev => ({ ...prev, intervalHours: hours }));
+    if (autoProcessing.enabled) {
+      stopAutoProcessing();
+      setTimeout(() => startAutoProcessing(), 100);
     }
   };
 
@@ -1224,7 +1319,16 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
         outletIds: campaignForm.outletIds.length === 0 ? ['all'] : campaignForm.outletIds,
         expirationDays: 7, // Default 7-day expiration
         isActive: true,
-        createdAt: Timestamp.now()
+        createdAt: Timestamp.now(),
+        // 🤖 AUTO-ENABLE 24-HOUR CLOUD AUTOMATION
+        autoProcessing: {
+          enabled: true,
+          intervalHours: 24,
+          lastRun: null
+        },
+        lastProcessed: null,
+        lastProcessedBy: null,
+        lastRunResult: 'Campaign created - awaiting first run'
       };
       
       // Save to Firebase: /users/{userId}/campaigns/{campaignId}
@@ -2144,16 +2248,54 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                   marginTop: '1rem'
                 }}>
                   {campaigns.filter(campaign => campaign && campaign.id).map((campaign) => (
-                    <div key={campaign.id} style={{
-                      backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                      borderRadius: '20px',
-                      padding: '2rem',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      backdropFilter: 'blur(15px)',
-                      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-                      position: 'relative',
-                      overflow: 'hidden'
-                    }}>
+                    <div 
+                      key={campaign.id} 
+                      onClick={(e) => {
+                        // Only navigate if not clicking a button
+                        const target = e.target as HTMLElement;
+                        if (target.tagName !== 'BUTTON' && !target.closest('button')) {
+                          console.log('Campaign card clicked:', campaign.id);
+                          console.log('propSetSelectedCampaignId:', propSetSelectedCampaignId);
+                          console.log('setCurrentPage:', setCurrentPage);
+                          
+                          if (propSetSelectedCampaignId && campaign.id) {
+                            try {
+                              propSetSelectedCampaignId(campaign.id);
+                              console.log('Set campaign ID:', campaign.id);
+                            } catch (error) {
+                              console.error('Error setting campaign ID:', error);
+                            }
+                          }
+                          if (setCurrentPage) {
+                            try {
+                              setCurrentPage('campaignDetails');
+                              console.log('Set page to campaignDetails');
+                            } catch (error) {
+                              console.error('Error setting page:', error);
+                            }
+                          }
+                        }
+                      }}
+                      style={{
+                        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                        borderRadius: '20px',
+                        padding: '2rem',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        backdropFilter: 'blur(15px)',
+                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+                        position: 'relative',
+                        overflow: 'hidden',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease'
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.4)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.3)';
+                      }}>
                       {/* STATUS BADGE */}
                       <div style={{
                         position: 'absolute',

@@ -1,0 +1,131 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 🔒 COMPLETE USER ISOLATION - Each user only accesses their own data
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      // 🤖 ADD: Allow Cloud Functions (Admin SDK) full access
+      allow read, write: if request.auth == null;
+      
+      // Mobile app collections
+      match /customers/{customerId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+        // 🤖 ADD: Allow Cloud Functions access for campaign processing
+        allow read, write: if request.auth == null;
+      }
+      match /transactions/{transactionId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+        // 🤖 ADD: Allow Cloud Functions access
+        allow read, write: if request.auth == null;
+      }
+      match /checkins/{checkinId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+        // 🤖 ADD: Allow Cloud Functions access
+        allow read, write: if request.auth == null;
+      }
+      match /outlets/{outletId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+        // 🤖 ADD: Allow Cloud Functions access
+        allow read, write: if request.auth == null;
+      }
+      match /rewards/{rewardId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+        // 🤖 ADD: Allow Cloud Functions access
+        allow read, write: if request.auth == null;
+      }
+      match /messages/{messageId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+        // 🤖 ADD: Allow Cloud Functions access
+        allow read, write: if request.auth == null;
+      }
+      match /templates/{templateId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+        // 🤖 ADD: Allow Cloud Functions access
+        allow read, write: if request.auth == null;
+      }
+      
+      // Web dashboard collections (existing)
+      match /web_transactions/{transactionId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+        // 🤖 ADD: Allow Cloud Functions access
+        allow read, write: if request.auth == null;
+      }
+      match /web_customers/{customerId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+        // 🤖 ADD: Allow Cloud Functions access
+        allow read, write: if request.auth == null;
+      }
+      match /web_visits/{visitId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+        // 🤖 ADD: Allow Cloud Functions access
+        allow read, write: if request.auth == null;
+      }
+      match /web_outlet_stats/{statId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+        // 🤖 ADD: Allow Cloud Functions access
+        allow read, write: if request.auth == null;
+      }
+      
+      // 🔄 UPDATED: Shared promotions & campaigns (web writes, mobile reads)
+      match /promotions/{promotionId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+        // 🤖 ADD: Allow Cloud Functions access for campaign automation
+        allow read, write: if request.auth == null;
+      }
+      match /campaigns/{campaignId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+        // 🤖 ADD: Allow Cloud Functions access for campaign automation
+        allow read, write: if request.auth == null;
+      }
+      
+      // 🆕 ADD THIS: Promotion usage tracking
+      match /promotionUsage/{usageId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+        // 🤖 ADD: Allow Cloud Functions access
+        allow read, write: if request.auth == null;
+      }
+      
+      // 🆕 ADD THIS: Customer-specific promotions (from campaigns)
+      match /customerPromotions/{customerId}/promotions/{promotionId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+        // 🤖 ADD: Allow Cloud Functions access for campaign automation
+        allow read, write: if request.auth == null;
+      }
+    }
+    
+    // 🏢 KEEP EXISTING BUSINESS COLLECTION (for mobile app compatibility)
+    match /businesses/{businessId} {
+      allow read, write: if request.auth != null && 
+        resource.data.ownerId == request.auth.uid;
+      // 🤖 ADD: Allow Cloud Functions access
+      allow read, write: if request.auth == null;
+      
+      match /promotions/{promotionId} {
+        allow read, write: if request.auth != null && 
+          get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerId == request.auth.uid;
+        // 🤖 ADD: Allow Cloud Functions access
+        allow read, write: if request.auth == null;
+      }
+      
+      match /customerPromotions/{customerId} {
+        allow read, write: if request.auth != null && 
+          get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerId == request.auth.uid;
+        // 🤖 ADD: Allow Cloud Functions access
+        allow read, write: if request.auth == null;
+        
+        match /promotions/{promotionId} {
+          allow read, write: if request.auth != null && 
+            get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerId == request.auth.uid;
+          // 🤖 ADD: Allow Cloud Functions access
+          allow read, write: if request.auth == null;
+        }
+      }
+    }
+    
+    // 🚫 BLOCK ALL OTHER ACCESS
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
