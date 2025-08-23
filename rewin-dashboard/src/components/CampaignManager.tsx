@@ -1502,11 +1502,23 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       setLoading(true);
       const businessId = await getCurrentBusinessId();
       
-      console.log('🗑️ Deleting campaign and cleaning up customer promotions...');
+      console.log('🗑️ Using CampaignService to delete campaign properly...');
       
-      // Step 1: Get campaign details for better matching
-      const campaignName = campaignToDelete?.name || '';
+      // Use the proper CampaignService method that only deletes promotions with matching campaignId
       const campaignId = campaignToDelete.id;
+      const campaignName = campaignToDelete?.name || '';
+      
+      await CampaignService.deleteCampaign(campaignId);
+      
+      console.log(`✅ Campaign "${campaignName}" deleted successfully using secure deletion method`);
+      
+      loadCampaigns();
+      alert(`✅ Campaign "${campaignName}" deleted successfully!\n🧹 Only promotions from this specific campaign were removed.`);
+      
+      setLoading(false);
+      setShowCampaignDeleteConfirmation(false);
+      setCampaignToDelete(null);
+      return; // Exit early to avoid the old deletion logic
       
       console.log(`🔍 Available campaigns in state:`);
       campaigns.forEach(c => {
@@ -2381,9 +2393,18 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                               ? `Every ${campaign.autoProcessing.intervalHours}h` 
                               : 'Manual only'
                           }
-                          {campaign.autoProcessing?.enabled && campaign.autoProcessing?.nextRun && (
+                          {campaign.autoProcessing?.enabled && (
                             <div style={{ fontSize: '0.9rem', color: '#9ca3af', marginTop: '0.25rem' }}>
-                              Next: {new Date(campaign.autoProcessing.nextRun.seconds * 1000).toLocaleString()}
+                              Next: {(() => {
+                                if (campaign.lastProcessed) {
+                                  const lastProcessed = campaign.lastProcessed.toDate ? campaign.lastProcessed.toDate() : new Date(campaign.lastProcessed);
+                                  const intervalHours = campaign.autoProcessing?.intervalHours || 24;
+                                  const nextRun = new Date(lastProcessed.getTime() + (intervalHours * 60 * 60 * 1000));
+                                  return nextRun.toLocaleString();
+                                } else {
+                                  return 'Ready to run now';
+                                }
+                              })()}
                             </div>
                           )}
                         </div>
