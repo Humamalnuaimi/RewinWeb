@@ -1973,96 +1973,68 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       }}>
         <div style={{
           display: 'flex',
-          justifyContent: 'space-between',
           alignItems: 'center',
+          gap: '2rem',
           maxWidth: '1400px',
           margin: '0 auto'
         }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: '1.8rem', fontWeight: '700' }}>
-              🎯 Three-Tier Rewards System 🔒
-            </h1>
-            <p style={{ margin: 0, opacity: 0.9, fontSize: '0.9rem' }}>
-              Secure Multi-Tenant • Campaigns, Promotions & Point Rewards
-            </p>
-            <p style={{ margin: '0.25rem 0 0 0', opacity: 0.7, fontSize: '0.8rem' }}>
-              Business ID: Ready for app team connection
-            </p>
-          </div>
-          
           <button
             onClick={onBack}
             style={{
-              padding: '0.5rem 1rem',
-              backgroundColor: 'rgba(255,255,255,0.2)',
+              padding: '0.75rem 1.25rem',
+              backgroundColor: 'rgba(255,255,255,0.1)',
               color: 'white',
-              border: '1px solid rgba(255,255,255,0.3)',
-              borderRadius: '8px',
+              border: '1px solid rgba(255,255,255,0.2)',
+              borderRadius: '12px',
               cursor: 'pointer',
-              fontSize: '0.9rem'
+              fontSize: '0.9rem',
+              fontWeight: '500',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              transition: 'all 0.2s ease',
+              backdropFilter: 'blur(10px)'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+              e.currentTarget.style.transform = 'translateY(0)';
             }}
           >
             ← Back to Dashboard
           </button>
+          
+          <div>
+            <h1 style={{ 
+              margin: 0, 
+              fontSize: '2rem', 
+              fontWeight: '800',
+              background: 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text'
+            }}>
+              Rewards System
+            </h1>
+            <p style={{ 
+              margin: '0.25rem 0 0 0', 
+              opacity: 0.8, 
+              fontSize: '1rem',
+              fontWeight: '400'
+            }}>
+              Campaign & Promotion Management
+            </p>
+          </div>
         </div>
       </header>
 
       {/* Main Content */}
       <main style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
         
-        {/* 🔍 Customer Lookup Tool */}
-        <div style={{
-          background: 'rgba(255, 255, 255, 0.1)',
-          borderRadius: '15px',
-          padding: '1.5rem',
-          marginBottom: '2rem',
-          border: '1px solid rgba(255, 255, 255, 0.2)',
-          backdropFilter: 'blur(10px)'
-        }}>
-          <h3 style={{ color: 'white', fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '1rem' }}>
-            🔍 Customer Lookup Tool
-          </h3>
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            <input
-              type="text"
-              placeholder="Enter customer ID (e.g., j0AQ1MwNMtpKJXTdIeKm)"
-              style={{
-                flex: 1,
-                padding: '0.75rem 1rem',
-                border: '1px solid rgba(255, 255, 255, 0.3)',
-                borderRadius: '8px',
-                backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                color: 'white',
-                fontSize: '0.9rem'
-              }}
-              id="customerLookupInput"
-            />
-            <button
-              onClick={() => {
-                const input = document.getElementById('customerLookupInput') as HTMLInputElement;
-                const customerId = input.value.trim();
-                if (customerId) {
-                  lookupCustomer(customerId);
-                } else {
-                  alert('Please enter a customer ID');
-                }
-              }}
-              style={{
-                padding: '0.75rem 1.5rem',
-                backgroundColor: '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '0.9rem',
-                fontWeight: 'bold'
-              }}
-            >
-              🔍 Lookup
-            </button>
-          </div>
-        </div>
-        
+
         {/* Three-Tier System Overview */}
         <div style={{
           display: 'grid',
