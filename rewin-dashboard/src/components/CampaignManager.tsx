@@ -1536,21 +1536,32 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       console.log('✅ Main campaign deleted');
 
       // Step 2: Delete all customer promotions from this campaign
-      const customerPromotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions');
-      const customerPromotionsSnapshot = await getDocs(customerPromotionsRef);
+      console.log('🔍 STEP 2: Starting customer promotion cleanup...');
       
-      console.log(`🔍 Found ${customerPromotionsSnapshot.size} customers to check for promotions`);
-      
-      let deletedPromotions = 0;
-      
-      for (const customerDoc of customerPromotionsSnapshot.docs) {
-        const customerId = customerDoc.id;
-        console.log(`🔍 Checking customer: ${customerId}`);
+      try {
+        const customerPromotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions');
+        console.log(`🔍 Accessing collection: users/${user.uid}/customerPromotions`);
         
-        const customerPromotionsCollectionRef = collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions');
-        const allPromotionsSnapshot = await getDocs(customerPromotionsCollectionRef);
+        const customerPromotionsSnapshot = await getDocs(customerPromotionsRef);
+        console.log(`🔍 Found ${customerPromotionsSnapshot.size} customers to check for promotions`);
         
-        console.log(`   📋 Customer ${customerId} has ${allPromotionsSnapshot.size} total promotions`);
+        let deletedPromotions = 0;
+        
+        for (const customerDoc of customerPromotionsSnapshot.docs) {
+          const customerId = customerDoc.id;
+          console.log(`🔍 Checking customer: ${customerId}`);
+          
+          try {
+            const customerPromotionsCollectionRef = collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions');
+            console.log(`🔍 Accessing promotions: users/${user.uid}/customerPromotions/${customerId}/promotions`);
+            
+            const allPromotionsSnapshot = await getDocs(customerPromotionsCollectionRef);
+            console.log(`   📋 Customer ${customerId} has ${allPromotionsSnapshot.size} total promotions`);
+            
+            if (allPromotionsSnapshot.size === 0) {
+              console.log(`   ⏭️ No promotions for customer ${customerId}, skipping`);
+              continue;
+            }
         
         for (const promotionDoc of allPromotionsSnapshot.docs) {
           const promotionData = promotionDoc.data();
@@ -1578,9 +1589,20 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             console.log(`   ⏭️ KEEPING promotion ${promotionDoc.id} - no match found`);
           }
         }
+        
+          } catch (customerError) {
+            console.error(`❌ Error accessing promotions for customer ${customerId}:`, customerError);
+            console.log(`   ⚠️ Skipping customer ${customerId} due to permissions error`);
+          }
+        }
+        
+        console.log(`✅ Deleted ${deletedPromotions} promotions from campaign "${campaignName}"`);
+        
+      } catch (promotionCleanupError) {
+        console.error('❌ Error during promotion cleanup:', promotionCleanupError);
+        console.log('⚠️ Main campaign was deleted, but promotion cleanup failed');
+        console.log('💡 This might be due to Firebase permissions or the promotions were already cleaned up');
       }
-      
-      console.log(`✅ Deleted ${deletedPromotions} promotions from campaign "${campaignName}"`);
       
       console.log(`✅ Campaign "${campaignName}" deleted successfully using secure deletion method`);
       
