@@ -2250,52 +2250,100 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
 
         {/* Tab Navigation */}
         <div style={{
-          background: 'rgba(255,255,255,0.1)',
-          borderRadius: '15px',
-          padding: '0.5rem',
-          marginBottom: '2rem',
-          display: 'flex',
-          gap: '0.5rem',
-          backdropFilter: 'blur(20px)'
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '1rem',
+          marginBottom: '3rem'
         }}>
           <button
             onClick={() => setActiveTab('campaigns')}
             style={{
-              flex: 1,
-              padding: '1rem',
-              backgroundColor: activeTab === 'campaigns' ? 'rgba(16, 185, 129, 0.8)' : 'transparent',
+              background: activeTab === 'campaigns' 
+                ? 'rgba(16, 185, 129, 0.15)' 
+                : 'rgba(255, 255, 255, 0.05)',
+              border: activeTab === 'campaigns' 
+                ? '2px solid rgba(16, 185, 129, 0.4)' 
+                : '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '20px',
+              padding: '1.5rem 2rem',
               color: 'white',
-              border: 'none',
-              borderRadius: '10px',
               cursor: 'pointer',
-              fontSize: '1rem',
-              fontWeight: activeTab === 'campaigns' ? 'bold' : 'normal',
-              transition: 'all 0.3s ease'
+              fontSize: '1.1rem',
+              fontWeight: activeTab === 'campaigns' ? '700' : '500',
+              transition: 'all 0.3s ease',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              boxShadow: activeTab === 'campaigns' 
+                ? '0 8px 32px rgba(16, 185, 129, 0.2)' 
+                : '0 4px 20px rgba(0, 0, 0, 0.1)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.75rem'
+            }}
+            onMouseEnter={(e) => {
+              if (activeTab !== 'campaigns') {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (activeTab !== 'campaigns') {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }
             }}
           >
-            🟢 Campaigns ({campaigns.length})
+            <span style={{ fontSize: '1.2rem' }}>🟢</span>
+            <span>Campaigns ({campaigns.length})</span>
           </button>
+          
           <button
             onClick={() => setActiveTab('promotions')}
             style={{
-              flex: 1,
-              padding: '1rem',
-              backgroundColor: activeTab === 'promotions' ? 'rgba(59, 130, 246, 0.8)' : 'transparent',
+              background: activeTab === 'promotions' 
+                ? 'rgba(59, 130, 246, 0.15)' 
+                : 'rgba(255, 255, 255, 0.05)',
+              border: activeTab === 'promotions' 
+                ? '2px solid rgba(59, 130, 246, 0.4)' 
+                : '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '20px',
+              padding: '1.5rem 2rem',
               color: 'white',
-              border: 'none',
-              borderRadius: '10px',
               cursor: 'pointer',
-              fontSize: '1rem',
-              fontWeight: activeTab === 'promotions' ? 'bold' : 'normal',
-              transition: 'all 0.3s ease'
+              fontSize: '1.1rem',
+              fontWeight: activeTab === 'promotions' ? '700' : '500',
+              transition: 'all 0.3s ease',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              boxShadow: activeTab === 'promotions' 
+                ? '0 8px 32px rgba(59, 130, 246, 0.2)' 
+                : '0 4px 20px rgba(0, 0, 0, 0.1)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.75rem'
+            }}
+            onMouseEnter={(e) => {
+              if (activeTab !== 'promotions') {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (activeTab !== 'promotions') {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }
             }}
           >
-            🔵 Promotions ({promotions.length})
+            <span style={{ fontSize: '1.2rem' }}>🔵</span>
+            <span>Promotions ({promotions.length})</span>
           </button>
         </div>
 
-        {/* Create Buttons */}
-        <div style={{ marginBottom: '2rem', textAlign: 'center', display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+        {/* Create Button */}
+        <div style={{ marginBottom: '3rem', textAlign: 'center' }}>
           <button
             onClick={() => {
               if (activeTab === 'campaigns') {
@@ -2306,19 +2354,54 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             }}
             disabled={loading}
             style={{
-              padding: '1rem 2rem',
-              backgroundColor: loading ? '#6b7280' : (activeTab === 'campaigns' ? '#10b981' : '#3b82f6'),
-              color: 'white',
+              background: loading 
+                ? 'rgba(107, 114, 128, 0.3)' 
+                : (activeTab === 'campaigns' 
+                  ? 'linear-gradient(135deg, #10b981, #059669)' 
+                  : 'linear-gradient(135deg, #3b82f6, #2563eb)'),
               border: 'none',
-              borderRadius: '10px',
-              cursor: loading ? 'not-allowed' : 'pointer',
+              borderRadius: '16px',
+              padding: '1.25rem 2.5rem',
+              color: 'white',
               fontSize: '1.1rem',
-              fontWeight: 'bold',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-              opacity: loading ? 0.7 : 1
+              fontWeight: '700',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'all 0.3s ease',
+              boxShadow: loading 
+                ? 'none' 
+                : (activeTab === 'campaigns' 
+                  ? '0 8px 32px rgba(16, 185, 129, 0.3)' 
+                  : '0 8px 32px rgba(59, 130, 246, 0.3)'),
+              opacity: loading ? 0.6 : 1,
+              backdropFilter: 'blur(10px)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              margin: '0 auto'
+            }}
+            onMouseEnter={(e) => {
+              if (!loading) {
+                e.currentTarget.style.transform = 'translateY(-3px)';
+                e.currentTarget.style.boxShadow = activeTab === 'campaigns' 
+                  ? '0 12px 40px rgba(16, 185, 129, 0.4)' 
+                  : '0 12px 40px rgba(59, 130, 246, 0.4)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!loading) {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = activeTab === 'campaigns' 
+                  ? '0 8px 32px rgba(16, 185, 129, 0.3)' 
+                  : '0 8px 32px rgba(59, 130, 246, 0.3)';
+              }
             }}
           >
-            {loading ? '⏳ Processing...' : `+ Create New ${activeTab === 'campaigns' ? 'Campaign' : 'Promotion'}`}
+            <span style={{ fontSize: '1.2rem' }}>
+              {loading ? '⏳' : '+'}
+            </span>
+            <span>
+              {loading ? 'Processing...' : `Create New ${activeTab === 'campaigns' ? 'Campaign' : 'Promotion'}`}
+            </span>
           </button>
         </div>
 
@@ -2360,28 +2443,40 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 </button>
               )}
             </div>
-            <div style={{
-              background: 'rgba(255,255,255,0.1)',
-              borderRadius: '15px',
-              padding: '2rem',
-              backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255,255,255,0.2)'
-            }}>
-              {campaigns.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '2rem' }}>
-                  <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📈</div>
-                  <h3 style={{ color: 'white', margin: '0 0 1rem 0' }}>No Campaigns Yet</h3>
-                  <p style={{ color: 'rgba(255,255,255,0.8)', margin: 0 }}>
-                    Create your first automated campaign to reach customers with targeted promotions
-                  </p>
-                </div>
-              ) : (
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))',
-                  gap: '2rem',
-                  marginTop: '1rem'
+            {campaigns.length === 0 ? (
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '24px',
+                padding: '4rem 2rem',
+                textAlign: 'center',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)'
+              }}>
+                <div style={{ fontSize: '4rem', marginBottom: '1.5rem' }}>📈</div>
+                <h3 style={{ 
+                  color: 'white', 
+                  margin: '0 0 1rem 0', 
+                  fontSize: '1.5rem',
+                  fontWeight: '700'
                 }}>
+                  No Campaigns Yet
+                </h3>
+                <p style={{ 
+                  color: 'rgba(255,255,255,0.7)', 
+                  margin: 0,
+                  fontSize: '1.1rem',
+                  lineHeight: '1.6'
+                }}>
+                  Create your first automated campaign to reach customers with targeted promotions
+                </p>
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))',
+                gap: '2rem'
+              }}>
                   {campaigns.filter(campaign => campaign && campaign.id).map((campaign) => (
                     <div 
                       key={campaign.id} 
@@ -2412,24 +2507,27 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                         }
                       }}
                       style={{
-                        backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                        borderRadius: '20px',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '24px',
                         padding: '2rem',
-                        border: '1px solid rgba(255, 255, 255, 0.15)',
-                        backdropFilter: 'blur(15px)',
-                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+                        backdropFilter: 'blur(20px)',
+                        WebkitBackdropFilter: 'blur(20px)',
+                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
                         position: 'relative',
                         overflow: 'hidden',
                         cursor: 'pointer',
                         transition: 'all 0.3s ease'
                       }}
                       onMouseOver={(e) => {
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.4)';
+                        e.currentTarget.style.transform = 'translateY(-5px)';
+                        e.currentTarget.style.boxShadow = '0 20px 60px rgba(0, 0, 0, 0.15)';
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
                       }}
                       onMouseOut={(e) => {
                         e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.3)';
+                        e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.1)';
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
                       }}>
                       {/* STATUS BADGE */}
                       <div style={{
@@ -2689,7 +2787,6 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                   ))}
                 </div>
               )}
-            </div>
           </div>
         ) : (
           <div>
