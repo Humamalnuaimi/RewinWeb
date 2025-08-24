@@ -87,10 +87,16 @@ service cloud.firestore {
       }
       
       // 🆕 ADD THIS: Customer-specific promotions (from campaigns)
-      match /customerPromotions/{customerId}/promotions/{promotionId} {
+      match /customerPromotions/{customerId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
         // 🤖 ADD: Allow Cloud Functions access for campaign automation
         allow read, write: if request.auth == null;
+        
+        match /promotions/{promotionId} {
+          allow read, write: if request.auth != null && request.auth.uid == userId;
+          // 🤖 ADD: Allow Cloud Functions access for campaign automation
+          allow read, write: if request.auth == null;
+        }
       }
     }
     
