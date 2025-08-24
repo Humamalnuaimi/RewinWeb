@@ -89,24 +89,19 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
       // First, collect all promotion IDs that belong to this specific campaign
       const campaignPromotionIds = new Set();
       
-      for (const customerDoc of customersSnapshot.docs) {
-        const customerId = customerDoc.id;
+      // NEW FLAT STRUCTURE: Query promotions directly by campaignId (much more efficient!)
+      const promotionsQuery = query(
+        collection(firestore, 'users', user.uid, 'customerPromotions'),
+        where('campaignId', '==', campaignId)
+      );
+      const promotionsSnapshot = await getDocs(promotionsQuery);
+      
+      for (const promoDoc of promotionsSnapshot.docs) {
+        const promo = promoDoc.data();
+        const promoId = promoDoc.id;
         
-        // Check customer promotions for this campaign
-        const promotionsSnapshot = await getDocs(
-          collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions')
-        );
-        
-        for (const promoDoc of promotionsSnapshot.docs) {
-          const promo = promoDoc.data();
-          const promoId = promoDoc.id;
-          
-          // Only collect promotions that belong to THIS specific campaign
-          if (promo.campaignId === campaignId) {
-            campaignPromotionIds.add(promoId);
-            console.log('🎯 Found campaign promotion:', promoId, 'for campaign:', campaignId);
-          }
-        }
+        campaignPromotionIds.add(promoId);
+        console.log('🎯 Found campaign promotion:', promoId, 'for campaign:', campaignId);
       }
       
       console.log('📋 Total promotions for this campaign:', campaignPromotionIds.size);
@@ -130,44 +125,37 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
       
       console.log('🎯 Found', usedPromotions, 'used promotions from THIS campaign only');
       
-      // Now build the final stats and recent assignments from the campaign promotions we found
-      for (const customerDoc of customersSnapshot.docs) {
-        const customerId = customerDoc.id;
-        const customerData = customerDoc.data();
+      // Now build the final stats and recent assignments from the campaign promotions we already found
+      // We already have all promotions for this campaign from the previous query, so let's reuse them
+      for (const promoDoc of promotionsSnapshot.docs) {
+        const promo = promoDoc.data();
+        const promoId = promoDoc.id;
+        const customerId = promo.customerId; // NEW: Get customerId from the promotion data
         
-        // Check customer promotions for this campaign
-        const promotionsSnapshot = await getDocs(
-          collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions')
-        );
+        // Get customer data for display purposes
+        const customerDoc = customersSnapshot.docs.find(doc => doc.id === customerId);
+        const customerData = customerDoc?.data() || {};
         
-        for (const promoDoc of promotionsSnapshot.docs) {
-          const promo = promoDoc.data();
-          const promoId = promoDoc.id;
-          
-          // ONLY process promotions that belong to THIS specific campaign
-          if (promo.campaignId === campaignId) {
-            totalAssignments++;
-            
-            // Check if this promotion was used (from promotionUsage collection)
-            const wasUsed = usedPromotionIds.has(promoId);
-            
-            if (!wasUsed && promo.isActive) {
-              activePromotions++;
-            }
-            
-            // Add to recent assignments (last 10)
-            if (recentAssignments.length < 10) {
-              recentAssignments.push({
-                customerName: customerData.firstName || customerData.name || customerId,
-                createdAt: promo.createdAt,
-                isActive: !wasUsed && promo.isActive,
-                isUsed: wasUsed,
-                discountAmount: promo.discountAmount,
-                discountType: promo.discountType,
-                promotionId: promoId
-              });
-            }
-          }
+        totalAssignments++;
+        
+        // Check if this promotion was used (from promotionUsage collection)
+        const wasUsed = usedPromotionIds.has(promoId);
+        
+        if (!wasUsed && promo.isActive) {
+          activePromotions++;
+        }
+        
+        // Add to recent assignments (last 10)
+        if (recentAssignments.length < 10) {
+          recentAssignments.push({
+            customerName: customerData.firstName || customerData.name || customerId,
+            createdAt: promo.createdAt,
+            isActive: !wasUsed && promo.isActive,
+            isUsed: wasUsed,
+            discountAmount: promo.discountAmount,
+            discountType: promo.discountType,
+            promotionId: promoId
+          });
         }
       }
       
