@@ -1562,33 +1562,46 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             console.log(`   📋 STEP 4: Customer ${customerId} has ${promotionsSnapshot.size} promotions`);
             
             if (promotionsSnapshot.size > 0) {
+              console.log(`   🎯 STEP 5: Found ${promotionsSnapshot.size} promotions for customer ${customerId}`);
+              
               // STEP 5: Check each promotion's campaignId
               for (const promotionDoc of promotionsSnapshot.docs) {
                 const promotionData = promotionDoc.data();
                 const promotionId = promotionDoc.id;
                 
-                console.log(`   📄 STEP 5: Analyzing promotion ${promotionId}`);
-                console.log(`       🆔 Promotion campaignId: "${promotionData.campaignId}"`);
-                console.log(`       🎯 Target campaignId: "${campaignId}"`);
+                console.log(`\n   📄 === ANALYZING PROMOTION ${promotionId} ===`);
+                console.log(`       📋 Full promotion data:`, promotionData);
+                console.log(`       🆔 Promotion campaignId: "${promotionData.campaignId}" (type: ${typeof promotionData.campaignId})`);
+                console.log(`       🎯 Target campaignId: "${campaignId}" (type: ${typeof campaignId})`);
                 console.log(`       📊 Source: "${promotionData.source}"`);
                 console.log(`       📝 Title: "${promotionData.title}"`);
+                console.log(`       ✅ IsActive: ${promotionData.isActive}`);
+                console.log(`       📅 CreatedAt: ${promotionData.createdAt}`);
                 
                 // STEP 6: Check if campaignId matches (EXACT comparison)
                 const campaignIdMatch = promotionData.campaignId === campaignId;
+                const campaignIdStringMatch = String(promotionData.campaignId) === String(campaignId);
                 console.log(`       🔍 CampaignId EXACT match: ${campaignIdMatch}`);
+                console.log(`       🔍 CampaignId STRING match: ${campaignIdStringMatch}`);
                 
-                if (campaignIdMatch) {
+                if (campaignIdMatch || campaignIdStringMatch) {
                   console.log(`   🗑️ STEP 6: DELETING promotion ${promotionId} - campaignId matches!`);
-                  console.log(`       🔥 Deleting: users/${user.uid}/customerPromotions/${customerId}/promotions/${promotionId}`);
-                  await deleteDoc(promotionDoc.ref);
-                  totalDeletedPromotions++;
-                  console.log(`   ✅ Successfully deleted promotion ${promotionId}`);
+                  console.log(`       🔥 Deleting path: users/${user.uid}/customerPromotions/${customerId}/promotions/${promotionId}`);
+                  
+                  try {
+                    await deleteDoc(promotionDoc.ref);
+                    totalDeletedPromotions++;
+                    console.log(`   ✅ SUCCESS: Deleted promotion ${promotionId}`);
+                  } catch (deleteError) {
+                    console.error(`   ❌ FAILED to delete promotion ${promotionId}:`, deleteError);
+                  }
                 } else {
                   console.log(`   ⏭️ KEEPING promotion ${promotionId} - different campaignId`);
+                  console.log(`       💡 "${promotionData.campaignId}" !== "${campaignId}"`);
                 }
               }
             } else {
-              console.log(`   ✅ Customer ${customerId}: No promotions found`);
+              console.log(`   ✅ Customer ${customerId}: No promotions found in subcollection`);
             }
           } catch (customerError) {
             console.error(`   ❌ Error accessing promotions for customer ${customerId}:`, customerError);
