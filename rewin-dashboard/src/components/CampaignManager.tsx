@@ -1554,15 +1554,28 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
         
         for (const promotionDoc of allPromotionsSnapshot.docs) {
           const promotionData = promotionDoc.data();
-          console.log(`   🔍 Checking promotion:`, promotionDoc.id, promotionData);
+          console.log(`   🔍 CHECKING PROMOTION ${promotionDoc.id}:`);
+          console.log(`       📋 Campaign ID we're deleting: "${campaignId}"`);
+          console.log(`       📋 Promotion campaignId: "${promotionData.campaignId}"`);
+          console.log(`       📋 Promotion source: "${promotionData.source}"`);
+          console.log(`       📋 Promotion title: "${promotionData.title}"`);
+          console.log(`       📋 Full promotion data:`, promotionData);
           
-          // Check if this promotion belongs to the campaign we're deleting
-          if (promotionData.campaignId === campaignId) {
-            console.log(`   🗑️ DELETING promotion ${promotionDoc.id} - matches campaignId`);
+          // Check multiple ways the promotion might be linked to the campaign
+          const matchesCampaignId = promotionData.campaignId === campaignId;
+          const matchesSource = promotionData.source && promotionData.source.includes('campaign');
+          const matchesTitle = promotionData.title === campaignName;
+          
+          console.log(`       🎯 Matches campaignId: ${matchesCampaignId}`);
+          console.log(`       🎯 Has campaign source: ${matchesSource}`);
+          console.log(`       🎯 Matches campaign name: ${matchesTitle}`);
+          
+          if (matchesCampaignId || (matchesSource && matchesTitle)) {
+            console.log(`   🗑️ DELETING promotion ${promotionDoc.id} - matches campaign`);
             await deleteDoc(promotionDoc.ref);
             deletedPromotions++;
           } else {
-            console.log(`   ⏭️ KEEPING promotion ${promotionDoc.id} - different campaignId: ${promotionData.campaignId}`);
+            console.log(`   ⏭️ KEEPING promotion ${promotionDoc.id} - no match found`);
           }
         }
       }
