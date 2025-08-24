@@ -106,20 +106,17 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
       
       console.log('📋 Total promotions for this campaign:', campaignPromotionIds.size);
       
-      // Now check promotion usage, but ONLY for promotions that belong to this campaign
-      console.log('📊 Checking promotion usage collection...');
-      const promotionUsageSnapshot = await getDocs(collection(firestore, 'users', user.uid, 'promotionUsage'));
+      // Check promotion usage directly from isUsed field (app team updates this when promotion is redeemed)
+      console.log('📊 Checking promotion usage from isUsed field...');
       
-      for (const usageDoc of promotionUsageSnapshot.docs) {
-        const usage = usageDoc.data();
+      for (const promoDoc of promotionsSnapshot.docs) {
+        const promo = promoDoc.data();
+        const promoId = promoDoc.id;
         
-        // ONLY count usage if the promotion ID belongs to THIS campaign
-        if (campaignPromotionIds.has(usage.promotionId)) {
-          console.log('💳 Found usage for THIS campaign:', usage.promotionId);
-          usedPromotionIds.add(usage.promotionId);
+        if (promo.isUsed) {
+          usedPromotionIds.add(promoId);
           usedPromotions++;
-        } else {
-          console.log('⏭️ Skipping usage for different campaign/promotion:', usage.promotionId);
+          console.log('✅ Found used promotion:', promoId, 'from campaign:', campaignId);
         }
       }
       
@@ -138,8 +135,8 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
         
         totalAssignments++;
         
-        // Check if this promotion was used (from promotionUsage collection)
-        const wasUsed = usedPromotionIds.has(promoId);
+        // Check if this promotion was used (app team updates isUsed field when redeemed)
+        const wasUsed = promo.isUsed;
         
         if (!wasUsed && promo.isActive) {
           activePromotions++;
