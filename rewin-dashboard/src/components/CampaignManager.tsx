@@ -1537,66 +1537,58 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
 
       // Step 2: Delete all customer promotions from this campaign
       console.log('🔍 STEP 2: Starting customer promotion cleanup...');
+      console.log(`🎯 Looking for promotions with campaignId: "${campaignId}"`);
+      
+      // DIRECT APPROACH: Try to find and delete promotions directly
+      let totalDeletedPromotions = 0;
       
       try {
-        const customerPromotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions');
-        console.log(`🔍 Accessing collection: users/${user.uid}/customerPromotions`);
+        // Get all customers who might have promotions
+        const allCustomersRef = collection(firestore, 'users', user.uid, 'customers');
+        const allCustomersSnapshot = await getDocs(allCustomersRef);
+        console.log(`🔍 Found ${allCustomersSnapshot.size} total customers to check`);
         
-        const customerPromotionsSnapshot = await getDocs(customerPromotionsRef);
-        console.log(`🔍 Found ${customerPromotionsSnapshot.size} customers to check for promotions`);
-        
-        let deletedPromotions = 0;
-        
-        for (const customerDoc of customerPromotionsSnapshot.docs) {
+        for (const customerDoc of allCustomersSnapshot.docs) {
           const customerId = customerDoc.id;
-          console.log(`🔍 Checking customer: ${customerId}`);
+          console.log(`🔍 Checking customer: ${customerId} for promotions...`);
           
           try {
-            const customerPromotionsCollectionRef = collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions');
-            console.log(`🔍 Accessing promotions: users/${user.uid}/customerPromotions/${customerId}/promotions`);
+            // Try to access this customer's promotions
+            const promotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions');
+            const promotionsSnapshot = await getDocs(promotionsRef);
             
-            const allPromotionsSnapshot = await getDocs(customerPromotionsCollectionRef);
-            console.log(`   📋 Customer ${customerId} has ${allPromotionsSnapshot.size} total promotions`);
+            console.log(`   📋 Customer ${customerId}: Found ${promotionsSnapshot.size} promotions`);
             
-            if (allPromotionsSnapshot.size === 0) {
-              console.log(`   ⏭️ No promotions for customer ${customerId}, skipping`);
-              continue;
+            if (promotionsSnapshot.size > 0) {
+              for (const promotionDoc of promotionsSnapshot.docs) {
+                const promotionData = promotionDoc.data();
+                const promotionId = promotionDoc.id;
+                
+                console.log(`   🔍 Analyzing promotion ${promotionId}:`);
+                console.log(`       📋 campaignId: "${promotionData.campaignId}"`);
+                console.log(`       📋 title: "${promotionData.title}"`);
+                console.log(`       📋 source: "${promotionData.source}"`);
+                
+                // Check if this promotion belongs to the deleted campaign
+                const belongsToCampaign = (
+                  promotionData.campaignId === campaignId ||
+                  (promotionData.title === campaignName && promotionData.source && promotionData.source.includes('campaign'))
+                );
+                
+                if (belongsToCampaign) {
+                  console.log(`   🗑️ DELETING promotion ${promotionId} - belongs to deleted campaign`);
+                  await deleteDoc(promotionDoc.ref);
+                  totalDeletedPromotions++;
+                } else {
+                  console.log(`   ⏭️ KEEPING promotion ${promotionId} - different campaign`);
+                }
+              }
             }
-        
-        for (const promotionDoc of allPromotionsSnapshot.docs) {
-          const promotionData = promotionDoc.data();
-          console.log(`   🔍 CHECKING PROMOTION ${promotionDoc.id}:`);
-          console.log(`       📋 Campaign ID we're deleting: "${campaignId}"`);
-          console.log(`       📋 Promotion campaignId: "${promotionData.campaignId}"`);
-          console.log(`       📋 Promotion source: "${promotionData.source}"`);
-          console.log(`       📋 Promotion title: "${promotionData.title}"`);
-          console.log(`       📋 Full promotion data:`, promotionData);
-          
-          // Check multiple ways the promotion might be linked to the campaign
-          const matchesCampaignId = promotionData.campaignId === campaignId;
-          const matchesSource = promotionData.source && promotionData.source.includes('campaign');
-          const matchesTitle = promotionData.title === campaignName;
-          
-          console.log(`       🎯 Matches campaignId: ${matchesCampaignId}`);
-          console.log(`       🎯 Has campaign source: ${matchesSource}`);
-          console.log(`       🎯 Matches campaign name: ${matchesTitle}`);
-          
-          if (matchesCampaignId || (matchesSource && matchesTitle)) {
-            console.log(`   🗑️ DELETING promotion ${promotionDoc.id} - matches campaign`);
-            await deleteDoc(promotionDoc.ref);
-            deletedPromotions++;
-          } else {
-            console.log(`   ⏭️ KEEPING promotion ${promotionDoc.id} - no match found`);
-          }
-        }
-        
           } catch (customerError) {
-            console.error(`❌ Error accessing promotions for customer ${customerId}:`, customerError);
-            console.log(`   ⚠️ Skipping customer ${customerId} due to permissions error`);
+            console.log(`   ⚠️ Could not access promotions for customer ${customerId}:`, customerError.message);
           }
         }
         
-        console.log(`✅ Deleted ${deletedPromotions} promotions from campaign "${campaignName}"`);
         
       } catch (promotionCleanupError) {
         console.error('❌ Error during promotion cleanup:', promotionCleanupError);
