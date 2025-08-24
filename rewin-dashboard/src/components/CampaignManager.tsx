@@ -2038,61 +2038,212 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
         {/* Three-Tier System Overview */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-          gap: '1.5rem',
-          marginBottom: '2rem'
+          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          gap: '2rem',
+          marginBottom: '3rem'
         }}>
           <div style={{
-            background: 'linear-gradient(135deg, #10b981, #059669)',
+            background: 'rgba(16, 185, 129, 0.1)',
+            border: '1px solid rgba(16, 185, 129, 0.3)',
             color: 'white',
-            padding: '2rem',
-            borderRadius: '15px',
+            padding: '2.5rem 2rem',
+            borderRadius: '20px',
             textAlign: 'center',
-            boxShadow: '0 8px 32px rgba(16, 185, 129, 0.3)'
-          }}>
-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🟢</div>
-            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.3rem' }}>Campaigns</h3>
-            <p style={{ margin: 0, opacity: 0.9, fontSize: '0.9rem' }}>
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: '0 8px 40px rgba(16, 185, 129, 0.15)',
+            position: 'relative',
+            overflow: 'hidden',
+            transition: 'all 0.3s ease',
+            cursor: 'pointer'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-5px)';
+            e.currentTarget.style.boxShadow = '0 12px 50px rgba(16, 185, 129, 0.25)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 8px 40px rgba(16, 185, 129, 0.15)';
+          }}
+          >
+            <div style={{
+              position: 'absolute',
+              top: '20px',
+              right: '20px',
+              width: '60px',
+              height: '60px',
+              background: 'linear-gradient(135deg, #10b981, #059669)',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 20px rgba(16, 185, 129, 0.4)'
+            }}>
+              <span style={{ fontSize: '24px' }}>🟢</span>
+            </div>
+            <h3 style={{ 
+              margin: '0 0 1rem 0', 
+              fontSize: '1.5rem', 
+              fontWeight: '700',
+              color: '#10b981'
+            }}>
+              Campaigns
+            </h3>
+            <p style={{ 
+              margin: '0 0 1.5rem 0', 
+              opacity: 0.8, 
+              fontSize: '1rem',
+              lineHeight: '1.5',
+              color: 'rgba(255,255,255,0.9)'
+            }}>
               Long-term marketing initiatives with various offer types
             </p>
-            <div style={{ marginTop: '1rem', fontSize: '2rem', fontWeight: 'bold' }}>
+            <div style={{ 
+              fontSize: '3rem', 
+              fontWeight: '800',
+              background: 'linear-gradient(135deg, #10b981, #059669)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text'
+            }}>
               {campaigns.length}
             </div>
           </div>
 
           <div style={{
-            background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+            background: 'rgba(59, 130, 246, 0.1)',
+            border: '1px solid rgba(59, 130, 246, 0.3)',
             color: 'white',
-            padding: '2rem',
-            borderRadius: '15px',
+            padding: '2.5rem 2rem',
+            borderRadius: '20px',
             textAlign: 'center',
-            boxShadow: '0 8px 32px rgba(59, 130, 246, 0.3)'
-          }}>
-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔵</div>
-            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.3rem' }}>Promotions</h3>
-            <p style={{ margin: 0, opacity: 0.9, fontSize: '0.9rem' }}>
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: '0 8px 40px rgba(59, 130, 246, 0.15)',
+            position: 'relative',
+            overflow: 'hidden',
+            transition: 'all 0.3s ease',
+            cursor: 'pointer'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-5px)';
+            e.currentTarget.style.boxShadow = '0 12px 50px rgba(59, 130, 246, 0.25)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 8px 40px rgba(59, 130, 246, 0.15)';
+          }}
+          >
+            <div style={{
+              position: 'absolute',
+              top: '20px',
+              right: '20px',
+              width: '60px',
+              height: '60px',
+              background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 20px rgba(59, 130, 246, 0.4)'
+            }}>
+              <span style={{ fontSize: '24px' }}>🔵</span>
+            </div>
+            <h3 style={{ 
+              margin: '0 0 1rem 0', 
+              fontSize: '1.5rem', 
+              fontWeight: '700',
+              color: '#3b82f6'
+            }}>
+              Promotions
+            </h3>
+            <p style={{ 
+              margin: '0 0 1.5rem 0', 
+              opacity: 0.8, 
+              fontSize: '1rem',
+              lineHeight: '1.5',
+              color: 'rgba(255,255,255,0.9)'
+            }}>
               Time-limited special discount offers
             </p>
-            <div style={{ marginTop: '1rem', fontSize: '2rem', fontWeight: 'bold' }}>
+            <div style={{ 
+              fontSize: '3rem', 
+              fontWeight: '800',
+              background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text'
+            }}>
               {promotions.length}
             </div>
           </div>
 
           <div style={{
-            background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+            background: 'rgba(245, 158, 11, 0.1)',
+            border: '1px solid rgba(245, 158, 11, 0.3)',
             color: 'white',
-            padding: '2rem',
-            borderRadius: '15px',
+            padding: '2.5rem 2rem',
+            borderRadius: '20px',
             textAlign: 'center',
-            boxShadow: '0 8px 32px rgba(245, 158, 11, 0.3)'
-          }}>
-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🟡</div>
-            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.3rem' }}>Point Rewards</h3>
-            <p style={{ margin: 0, opacity: 0.9, fontSize: '0.9rem' }}>
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: '0 8px 40px rgba(245, 158, 11, 0.15)',
+            position: 'relative',
+            overflow: 'hidden',
+            transition: 'all 0.3s ease',
+            cursor: 'pointer'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-5px)';
+            e.currentTarget.style.boxShadow = '0 12px 50px rgba(245, 158, 11, 0.25)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 8px 40px rgba(245, 158, 11, 0.15)';
+          }}
+          >
+            <div style={{
+              position: 'absolute',
+              top: '20px',
+              right: '20px',
+              width: '60px',
+              height: '60px',
+              background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 20px rgba(245, 158, 11, 0.4)'
+            }}>
+              <span style={{ fontSize: '24px' }}>🟡</span>
+            </div>
+            <h3 style={{ 
+              margin: '0 0 1rem 0', 
+              fontSize: '1.5rem', 
+              fontWeight: '700',
+              color: '#f59e0b'
+            }}>
+              Point Rewards
+            </h3>
+            <p style={{ 
+              margin: '0 0 1.5rem 0', 
+              opacity: 0.8, 
+              fontSize: '1rem',
+              lineHeight: '1.5',
+              color: 'rgba(255,255,255,0.9)'
+            }}>
               Existing loyalty system (unchanged)
             </p>
-            <div style={{ marginTop: '1rem', fontSize: '1.2rem', fontWeight: 'bold' }}>
-              Active ✅
+            <div style={{ 
+              fontSize: '1.5rem', 
+              fontWeight: '700',
+              color: '#10b981',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem'
+            }}>
+              Active <span style={{ fontSize: '1.2rem' }}>✅</span>
             </div>
           </div>
         </div>
