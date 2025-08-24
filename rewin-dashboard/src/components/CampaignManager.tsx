@@ -1521,9 +1521,8 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       setLoading(true);
       const businessId = await getCurrentBusinessId();
       
-      console.log('🗑️ Using CampaignService to delete campaign properly...');
+      console.log('🗑️ DIRECT CAMPAIGN DELETION - Bypassing CampaignService...');
       
-      // Use the proper CampaignService method that only deletes promotions with matching campaignId
       const campaignId = campaignToDelete.id;
       const campaignName = campaignToDelete?.name || '';
       
@@ -1532,7 +1531,43 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       console.log(`   📋 Campaign Name: "${campaignName}"`);
       console.log(`   📋 Campaign Object:`, campaignToDelete);
       
-      await CampaignService.deleteCampaign(campaignId);
+      // Step 1: Delete the main campaign
+      await deleteDoc(doc(firestore, 'users', user.uid, 'campaigns', campaignId));
+      console.log('✅ Main campaign deleted');
+
+      // Step 2: Delete all customer promotions from this campaign
+      const customerPromotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions');
+      const customersSnapshot = await getDocs(customerPromotionsRef);
+      
+      console.log(`🔍 Found ${customersSnapshot.size} customers to check for promotions`);
+      
+      let deletedPromotions = 0;
+      
+      for (const customerDoc of customersSnapshot.docs) {
+        const customerId = customerDoc.id;
+        console.log(`🔍 Checking customer: ${customerId}`);
+        
+        const customerPromotionsCollectionRef = collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions');
+        const allPromotionsSnapshot = await getDocs(customerPromotionsCollectionRef);
+        
+        console.log(`   📋 Customer ${customerId} has ${allPromotionsSnapshot.size} total promotions`);
+        
+        for (const promotionDoc of allPromotionsSnapshot.docs) {
+          const promotionData = promotionDoc.data();
+          console.log(`   🔍 Checking promotion:`, promotionDoc.id, promotionData);
+          
+          // Check if this promotion belongs to the campaign we're deleting
+          if (promotionData.campaignId === campaignId) {
+            console.log(`   🗑️ DELETING promotion ${promotionDoc.id} - matches campaignId`);
+            await deleteDoc(promotionDoc.ref);
+            deletedPromotions++;
+          } else {
+            console.log(`   ⏭️ KEEPING promotion ${promotionDoc.id} - different campaignId: ${promotionData.campaignId}`);
+          }
+        }
+      }
+      
+      console.log(`✅ Deleted ${deletedPromotions} promotions from campaign "${campaignName}"`);
       
       console.log(`✅ Campaign "${campaignName}" deleted successfully using secure deletion method`);
       
