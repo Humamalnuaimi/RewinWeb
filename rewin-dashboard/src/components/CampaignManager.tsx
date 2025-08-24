@@ -970,7 +970,7 @@ ${expirationText}
       let assignedCount = 0;
       let smsEligibleCount = 0;
 
-      customersSnapshot.docs.forEach((customerDoc: any) => {
+      for (const customerDoc of customersSnapshot.docs) {
         const customerData = customerDoc.data();
         const customerId = customerDoc.id;
 
@@ -1005,7 +1005,7 @@ ${expirationText}
         } else {
           console.log(`⏭️ Skipping inactive customer: ${customerData.name || customerId}`);
         }
-      });
+      }
 
       await batch.commit();
       console.log(`✅ Successfully assigned promotion to ${assignedCount} active customers`);
@@ -1085,7 +1085,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       const expiresAt = promotion.expiresAt ? promotion.expiresAt.toDate() : null;
       
       // Assign to each customer with graceful field handling
-      userCustomersSnapshot.docs.forEach((customerDoc: any) => {
+      for (const customerDoc of userCustomersSnapshot.docs) {
         const customer = customerDoc.data();
         const customerId = customerDoc.id;
         
@@ -1173,7 +1173,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             sendSMSMessage(customer.phoneNumber, promotionForm.smsMessage);
           }, 100);
         }
-      });
+      }
       
       // Execute batch
       await batch.commit();
