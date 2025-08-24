@@ -1544,18 +1544,18 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       let totalDeletedPromotions = 0;
       
       try {
-        // FIXED APPROACH: Get customers from the customers collection, then check their promotions
-        // This is the approach that was working before
-        const customersRef = collection(firestore, 'users', user.uid, 'customers');
-        const customersSnapshot = await getDocs(customersRef);
-        console.log(`🔍 Found ${customersSnapshot.size} total customers to check for promotions`);
+        // CORRECT APPROACH: Get customerPromotions collection (which contains customer IDs)
+        // Structure: users → [userId] → customerPromotions → [customerId] → promotions
+        const customerPromotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions');
+        const customerPromotionsSnapshot = await getDocs(customerPromotionsRef);
+        console.log(`🔍 Found ${customerPromotionsSnapshot.size} customers with promotion data in customerPromotions collection`);
         
-        for (const customerDoc of customersSnapshot.docs) {
-          const customerId = customerDoc.id;
+        for (const customerPromotionDoc of customerPromotionsSnapshot.docs) {
+          const customerId = customerPromotionDoc.id;
           console.log(`\n🔍 === CHECKING CUSTOMER: ${customerId} ===`);
           
           try {
-            // Check if this customer has any promotions
+            // Check this customer's promotions subcollection
             const promotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions');
             const allPromotionsSnapshot = await getDocs(promotionsRef);
             console.log(`   📋 Customer ${customerId} has ${allPromotionsSnapshot.size} total promotions`);
