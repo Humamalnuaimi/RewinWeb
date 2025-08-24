@@ -138,7 +138,7 @@ async function processBirthdayCampaign(userId, campaignId, campaign) {
     
     if (!matchesBirthday) continue;
     
-    // Create promotion
+    // Create promotion - NEW FLAT STRUCTURE
     const timestamp = Date.now();
     const promotionId = `promo_birthday_${customerId}_${campaignId}_${new Date().getFullYear()}_${timestamp}`;
     
@@ -146,8 +146,6 @@ async function processBirthdayCampaign(userId, campaignId, campaign) {
       .collection('users')
       .doc(userId)
       .collection('customerPromotions')
-      .doc(customerId)
-      .collection('promotions')
       .doc(promotionId)
       .set({
         title: campaign.name || 'Happy Birthday!',
@@ -155,6 +153,7 @@ async function processBirthdayCampaign(userId, campaignId, campaign) {
         discountType: campaign.discountType || 'percentage',
         discountAmount: campaign.discountAmount || 20,
         minimumPurchase: campaign.minimumPurchase || 0,
+        customerId: customerId, // NEW: Add customerId as field
         isActive: true,
         isUsed: false,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -200,7 +199,7 @@ async function processInactiveCampaign(userId, campaignId, campaign, inactiveDay
     const lastVisitDate = lastVisit instanceof Date ? lastVisit : new Date(lastVisit);
     if (lastVisitDate > cutoffDate) continue;
     
-    // Create promotion
+    // Create promotion - NEW FLAT STRUCTURE
     const timestamp = Date.now();
     const promotionId = `promo_inactive_${customerId}_${campaignId}_${timestamp}`;
     
@@ -208,8 +207,6 @@ async function processInactiveCampaign(userId, campaignId, campaign, inactiveDay
       .collection('users')
       .doc(userId)
       .collection('customerPromotions')
-      .doc(customerId)
-      .collection('promotions')
       .doc(promotionId)
       .set({
         title: campaign.name || 'We Miss You!',
@@ -217,6 +214,7 @@ async function processInactiveCampaign(userId, campaignId, campaign, inactiveDay
         discountType: campaign.discountType || 'dollar',
         discountAmount: campaign.discountAmount || 5,
         minimumPurchase: campaign.minimumPurchase || 10,
+        customerId: customerId, // NEW: Add customerId as field
         isActive: true,
         isUsed: false,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),

@@ -248,31 +248,31 @@ async function processBirthdayCampaign(userId, campaignId, campaign) {
     
     console.log(`🎉 Birthday match for ${customer.firstName || customerId}`);
     
-    // Check if already has promotion this year
+    // Check if already has promotion this year - NEW FLAT STRUCTURE
     const promotionId = `promo_birthday_${customerId}_${currentYear}`;
-    const existingPromo = await db
+    const existingPromosQuery = await db
       .collection('users')
       .doc(userId)
       .collection('customerPromotions')
-      .doc(customerId)
-      .collection('promotions')
-      .doc(promotionId)
+      .where('campaignId', '==', campaignId)
+      .where('customerId', '==', customerId)
+      .where('source', '==', 'campaign_birthday')
+      .where('isActive', '==', true)
       .get();
     
-    if (existingPromo.exists) {
+    if (!existingPromosQuery.empty) {
       console.log(`⏭️ Already has birthday promotion`);
       continue;
     }
     
-    // Create promotion
+    // Create promotion - NEW FLAT STRUCTURE
     await db
       .collection('users')
       .doc(userId)
       .collection('customerPromotions')
-      .doc(customerId)
-      .collection('promotions')
       .doc(promotionId)
       .set({
+        customerId: customerId, // NEW: Add customerId as field
         title: campaign.name || 'Happy Birthday!',
         description: 'Special Birthday Offer!',
         discountType: campaign.discountType || 'percentage',
@@ -338,29 +338,29 @@ async function processInactiveCampaign(userId, campaignId, campaign, inactiveDay
     
     // Check if already has this campaign's promotion
     const promotionId = `promo_inactive_${customerId}_${campaignId}`;
-    const existingPromo = await db
+    const existingPromosQuery = await db
       .collection('users')
       .doc(userId)
       .collection('customerPromotions')
-      .doc(customerId)
-      .collection('promotions')
-      .doc(promotionId)
+      .where('campaignId', '==', campaignId)
+      .where('customerId', '==', customerId)
+      .where('source', '==', 'campaign_inactive')
+      .where('isActive', '==', true)
       .get();
     
-    if (existingPromo.exists && existingPromo.data().isActive) {
+    if (!existingPromosQuery.empty) {
       console.log(`⏭️ Already has inactive promotion`);
       continue;
     }
     
-    // Create promotion
+    // Create promotion - NEW FLAT STRUCTURE
     await db
       .collection('users')
       .doc(userId)
       .collection('customerPromotions')
-      .doc(customerId)
-      .collection('promotions')
       .doc(promotionId)
       .set({
+        customerId: customerId, // NEW: Add customerId as field
         title: campaign.name || 'We Miss You!',
         description: 'Special Welcome Back Offer!',
         discountType: campaign.discountType || 'dollar',

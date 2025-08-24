@@ -223,14 +223,13 @@ async function processBirthdayCampaign(userId, campaignId, campaign) {
     if (!matchesBirthday) continue;
     
     // Check if customer already has an ACTIVE birthday promotion this year from this campaign
-    // Now that app sets isActive: false on redemption, this is simple and efficient!
+    // NEW FLAT STRUCTURE: Query customerPromotions collection with customerId field
     const existingBirthdayQuery = await db
       .collection('users')
       .doc(userId)
       .collection('customerPromotions')
-      .doc(customerId)
-      .collection('promotions')
       .where('campaignId', '==', campaignId)
+      .where('customerId', '==', customerId)
       .where('source', '==', 'campaign_birthday')
       .where('isActive', '==', true)
       .get();
@@ -254,13 +253,11 @@ async function processBirthdayCampaign(userId, campaignId, campaign) {
     const timestamp = Date.now();
     const promotionId = `promo_birthday_${customerId}_${campaignId}_${currentYear}_${timestamp}`;
     
-    // Create promotion
+    // Create promotion - NEW FLAT STRUCTURE
     await db
       .collection('users')
       .doc(userId)
       .collection('customerPromotions')
-      .doc(customerId)
-      .collection('promotions')
       .doc(promotionId)
       .set({
         title: campaign.name || 'Happy Birthday!',
@@ -268,6 +265,7 @@ async function processBirthdayCampaign(userId, campaignId, campaign) {
         discountType: campaign.discountType || 'percentage',
         discountAmount: campaign.discountAmount || 20,
         minimumPurchase: campaign.minimumPurchase || 0,
+        customerId: customerId, // NEW: Add customerId as field
         isActive: true,
         isUsed: false,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -315,14 +313,13 @@ async function processInactiveCampaign(userId, campaignId, campaign, inactiveDay
     if (lastVisitDate > cutoffDate) continue;
     
     // Check if customer already has an ACTIVE promotion from this campaign
-    // Now that app sets isActive: false on redemption, this is simple and efficient!
+    // NEW FLAT STRUCTURE: Query customerPromotions collection with customerId field
     const existingActivePromosQuery = await db
       .collection('users')
       .doc(userId)
       .collection('customerPromotions')
-      .doc(customerId)
-      .collection('promotions')
       .where('campaignId', '==', campaignId)
+      .where('customerId', '==', customerId)
       .where('isActive', '==', true)
       .get();
     
@@ -335,13 +332,11 @@ async function processInactiveCampaign(userId, campaignId, campaign, inactiveDay
     const timestamp = Date.now();
     const promotionId = `promo_inactive_${customerId}_${campaignId}_${timestamp}`;
     
-    // Create promotion
+    // Create promotion - NEW FLAT STRUCTURE
     await db
       .collection('users')
       .doc(userId)
       .collection('customerPromotions')
-      .doc(customerId)
-      .collection('promotions')
       .doc(promotionId)
       .set({
         title: campaign.name || 'We Miss You!',
@@ -349,6 +344,7 @@ async function processInactiveCampaign(userId, campaignId, campaign, inactiveDay
         discountType: campaign.discountType || 'dollar',
         discountAmount: campaign.discountAmount || 5,
         minimumPurchase: campaign.minimumPurchase || 10,
+        customerId: customerId, // NEW: Add customerId as field
         isActive: true,
         isUsed: false,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
