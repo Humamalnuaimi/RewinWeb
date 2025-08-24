@@ -1544,84 +1544,54 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       let totalDeletedPromotions = 0;
       
       try {
-        // CORRECT APPROACH: Get customerPromotions collection (which contains customer IDs)
-        // Structure: users → [userId] → customerPromotions → [customerId] → promotions
+        // EXACT FIREBASE PATH: users → [userId] → customerPromotions → [customerId] → promotions
+        console.log(`🔍 STEP 1: Accessing users/${user.uid}/customerPromotions`);
         const customerPromotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions');
         const customerPromotionsSnapshot = await getDocs(customerPromotionsRef);
-        console.log(`🔍 Found ${customerPromotionsSnapshot.size} customers with promotion data in customerPromotions collection`);
+        console.log(`🔍 STEP 2: Found ${customerPromotionsSnapshot.size} customer documents in customerPromotions`);
         
-        for (const customerPromotionDoc of customerPromotionsSnapshot.docs) {
-          const customerId = customerPromotionDoc.id;
-          console.log(`\n🔍 === CHECKING CUSTOMER: ${customerId} ===`);
+        for (const customerDoc of customerPromotionsSnapshot.docs) {
+          const customerId = customerDoc.id;
+          console.log(`\n🔍 === STEP 3: CHECKING CUSTOMER ${customerId} ===`);
+          console.log(`🔍 Path: users/${user.uid}/customerPromotions/${customerId}/promotions`);
           
           try {
-            // Check this customer's promotions subcollection
+            // STEP 4: Access the promotions subcollection for this customer
             const promotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions');
-            const allPromotionsSnapshot = await getDocs(promotionsRef);
-            console.log(`   📋 Customer ${customerId} has ${allPromotionsSnapshot.size} total promotions`);
+            const promotionsSnapshot = await getDocs(promotionsRef);
+            console.log(`   📋 STEP 4: Customer ${customerId} has ${promotionsSnapshot.size} promotions`);
             
-            if (allPromotionsSnapshot.size > 0) {
-              // Debug: Show all promotions for this customer
-              for (const promotionDoc of allPromotionsSnapshot.docs) {
+            if (promotionsSnapshot.size > 0) {
+              // STEP 5: Check each promotion's campaignId
+              for (const promotionDoc of promotionsSnapshot.docs) {
                 const promotionData = promotionDoc.data();
-                console.log(`   📄 Promotion ${promotionDoc.id}:`);
-                console.log(`       🆔 campaignId: "${promotionData.campaignId}" (type: ${typeof promotionData.campaignId})`);
-                console.log(`       🎯 TARGET campaignId: "${campaignId}" (type: ${typeof campaignId})`);
-                console.log(`       📝 title: "${promotionData.title}"`);
-                console.log(`       📊 source: "${promotionData.source}"`);
-                console.log(`       ✅ isActive: ${promotionData.isActive}`);
-                console.log(`       🔍 EXACT MATCH? ${promotionData.campaignId === campaignId}`);
-                console.log(`       🔍 STRING COMPARISON? "${String(promotionData.campaignId)}" === "${String(campaignId)}"`);
+                const promotionId = promotionDoc.id;
                 
-                // Check if this promotion should be deleted (multiple ways)
-                const shouldDelete = (
-                  promotionData.campaignId === campaignId ||
-                  String(promotionData.campaignId) === String(campaignId) ||
-                  (promotionData.title === campaignName && promotionData.source && promotionData.source.includes('campaign'))
-                );
-                console.log(`       🗑️ SHOULD DELETE? ${shouldDelete}`);
-              }
-              
-              // METHOD 1: Try Firestore query first (EFFICIENT!)
-              const campaignPromotionsQuery = query(promotionsRef, where('campaignId', '==', campaignId));
-              const matchingPromotions = await getDocs(campaignPromotionsQuery);
-              
-              if (matchingPromotions.size > 0) {
-                console.log(`   🎯 QUERY METHOD: Found ${matchingPromotions.size} promotions matching campaignId "${campaignId}"`);
+                console.log(`   📄 STEP 5: Analyzing promotion ${promotionId}`);
+                console.log(`       🆔 Promotion campaignId: "${promotionData.campaignId}"`);
+                console.log(`       🎯 Target campaignId: "${campaignId}"`);
+                console.log(`       📊 Source: "${promotionData.source}"`);
+                console.log(`       📝 Title: "${promotionData.title}"`);
                 
-                for (const promotionDoc of matchingPromotions.docs) {
-                  const promotionData = promotionDoc.data();
-                  console.log(`   🗑️ DELETING (QUERY) promotion ${promotionDoc.id} - exact campaignId match`);
+                // STEP 6: Check if campaignId matches (EXACT comparison)
+                const campaignIdMatch = promotionData.campaignId === campaignId;
+                console.log(`       🔍 CampaignId EXACT match: ${campaignIdMatch}`);
+                
+                if (campaignIdMatch) {
+                  console.log(`   🗑️ STEP 6: DELETING promotion ${promotionId} - campaignId matches!`);
+                  console.log(`       🔥 Deleting: users/${user.uid}/customerPromotions/${customerId}/promotions/${promotionId}`);
                   await deleteDoc(promotionDoc.ref);
                   totalDeletedPromotions++;
-                }
-              } else {
-                console.log(`   ❌ QUERY METHOD: No promotions found with campaignId "${campaignId}"`);
-                console.log(`   🔄 FALLBACK: Trying manual deletion method...`);
-                
-                // METHOD 2: Manual deletion (FALLBACK)
-                for (const promotionDoc of allPromotionsSnapshot.docs) {
-                  const promotionData = promotionDoc.data();
-                  
-                  // Check if this promotion should be deleted (multiple ways)
-                  const shouldDelete = (
-                    promotionData.campaignId === campaignId ||
-                    String(promotionData.campaignId) === String(campaignId) ||
-                    (promotionData.title === campaignName && promotionData.source && promotionData.source.includes('campaign'))
-                  );
-                  
-                  if (shouldDelete) {
-                    console.log(`   🗑️ DELETING (MANUAL) promotion ${promotionDoc.id} - manual match`);
-                    await deleteDoc(promotionDoc.ref);
-                    totalDeletedPromotions++;
-                  }
+                  console.log(`   ✅ Successfully deleted promotion ${promotionId}`);
+                } else {
+                  console.log(`   ⏭️ KEEPING promotion ${promotionId} - different campaignId`);
                 }
               }
             } else {
-              console.log(`   ✅ Customer ${customerId}: No promotions at all`);
+              console.log(`   ✅ Customer ${customerId}: No promotions found`);
             }
           } catch (customerError) {
-            console.log(`   ⚠️ Could not query promotions for customer ${customerId}:`, customerError.message);
+            console.error(`   ❌ Error accessing promotions for customer ${customerId}:`, customerError);
           }
         }
         
