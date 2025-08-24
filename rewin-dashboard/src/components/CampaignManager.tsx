@@ -2408,40 +2408,10 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
         {/* Content Area - Real Data Display */}
         {activeTab === 'campaigns' ? (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+            <div style={{ marginBottom: '1.5rem' }}>
               <h2 style={{ color: 'white', margin: 0 }}>
-              🟢 Campaigns ({campaigns.length})
-            </h2>
-              {campaigns.length > 0 && (
-                <button
-                  onClick={() => processAllCampaigns(false)}
-                  disabled={loading}
-                  style={{
-                    padding: '0.75rem 1.5rem',
-                    backgroundColor: '#16a34a',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '12px',
-                    cursor: loading ? 'not-allowed' : 'pointer',
-                    fontSize: '0.9rem',
-                    fontWeight: 'bold',
-                    opacity: loading ? 0.7 : 1,
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseOver={(e) => {
-                    if (!loading) {
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(22,163,74,0.4)';
-                    }
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
-                >
-                  🚀 Process All Active Campaigns
-                </button>
-              )}
+                🟢 Campaigns ({campaigns.length})
+              </h2>
             </div>
             {campaigns.length === 0 ? (
               <div style={{
