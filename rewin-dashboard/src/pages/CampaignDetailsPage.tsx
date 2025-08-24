@@ -145,7 +145,7 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
         // Add to recent assignments (last 10)
         if (recentAssignments.length < 10) {
           recentAssignments.push({
-            customerName: customerData.firstName || customerData.name || customerId,
+            customerName: customerData.phoneNumber || customerData.phone || customerData.firstName || customerData.name || customerId,
             createdAt: promo.createdAt,
             isActive: !wasUsed && promo.isActive,
             isUsed: wasUsed,
