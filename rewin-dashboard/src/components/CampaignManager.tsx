@@ -1539,56 +1539,42 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       console.log('🔍 STEP 2: Starting customer promotion cleanup...');
       console.log(`🎯 Looking for promotions with campaignId: "${campaignId}"`);
       
-      // DIRECT APPROACH: Try to find and delete promotions directly
+      // EFFICIENT APPROACH: Use direct queries instead of reading all customers
       let totalDeletedPromotions = 0;
       
       try {
-        // Get all customers who might have promotions
-        const allCustomersRef = collection(firestore, 'users', user.uid, 'customers');
-        const allCustomersSnapshot = await getDocs(allCustomersRef);
-        console.log(`🔍 Found ${allCustomersSnapshot.size} total customers to check`);
+        // Get only customers who have promotions (much more efficient!)
+        const customerPromotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions');
+        const customerPromotionsSnapshot = await getDocs(customerPromotionsRef);
+        console.log(`🔍 Found ${customerPromotionsSnapshot.size} customers with promotion data`);
         
-        for (const customerDoc of allCustomersSnapshot.docs) {
+        for (const customerDoc of customerPromotionsSnapshot.docs) {
           const customerId = customerDoc.id;
-          console.log(`🔍 Checking customer: ${customerId} for promotions...`);
           
           try {
-            // Try to access this customer's promotions
+            // EFFICIENT: Query promotions directly by campaignId (single query per customer)
             const promotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions');
-            const promotionsSnapshot = await getDocs(promotionsRef);
+            const campaignPromotionsQuery = query(promotionsRef, where('campaignId', '==', campaignId));
+            const matchingPromotions = await getDocs(campaignPromotionsQuery);
             
-            console.log(`   📋 Customer ${customerId}: Found ${promotionsSnapshot.size} promotions`);
-            
-            if (promotionsSnapshot.size > 0) {
-              for (const promotionDoc of promotionsSnapshot.docs) {
+            if (matchingPromotions.size > 0) {
+              console.log(`🎯 Customer ${customerId}: Found ${matchingPromotions.size} promotions with campaignId "${campaignId}"`);
+              
+              for (const promotionDoc of matchingPromotions.docs) {
                 const promotionData = promotionDoc.data();
-                const promotionId = promotionDoc.id;
-                
-                console.log(`   🔍 Analyzing promotion ${promotionId}:`);
-                console.log(`       📋 campaignId: "${promotionData.campaignId}"`);
-                console.log(`       📋 title: "${promotionData.title}"`);
-                console.log(`       📋 source: "${promotionData.source}"`);
-                
-                // Check if this promotion belongs to the deleted campaign
-                const belongsToCampaign = (
-                  promotionData.campaignId === campaignId ||
-                  (promotionData.title === campaignName && promotionData.source && promotionData.source.includes('campaign'))
-                );
-                
-                if (belongsToCampaign) {
-                  console.log(`   🗑️ DELETING promotion ${promotionId} - belongs to deleted campaign`);
-                  await deleteDoc(promotionDoc.ref);
-                  totalDeletedPromotions++;
-                } else {
-                  console.log(`   ⏭️ KEEPING promotion ${promotionId} - different campaign`);
-                }
+                console.log(`   🗑️ DELETING promotion ${promotionDoc.id} - exact campaignId match`);
+                await deleteDoc(promotionDoc.ref);
+                totalDeletedPromotions++;
               }
+            } else {
+              console.log(`   ✅ Customer ${customerId}: No promotions match campaignId "${campaignId}"`);
             }
           } catch (customerError) {
-            console.log(`   ⚠️ Could not access promotions for customer ${customerId}:`, customerError.message);
+            console.log(`   ⚠️ Could not query promotions for customer ${customerId}:`, customerError.message);
           }
         }
         
+        console.log(`🚀 EFFICIENT cleanup complete: ${totalDeletedPromotions} promotions deleted with targeted queries!`);
         
       } catch (promotionCleanupError) {
         console.error('❌ Error during promotion cleanup:', promotionCleanupError);
