@@ -1316,7 +1316,16 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
         minimumPurchase: campaignForm.minimumPurchase,
         triggerType: triggerType,
         daysSinceLastVisit: daysSinceLastVisit, // Store custom days
-        outletIds: campaignForm.outletIds.length === 0 ? ['all'] : campaignForm.outletIds,
+        outletIds: (() => {
+          // Handle targetOutlets conversion to outletIds
+          if (campaignForm.targetOutlets === 'ALL') {
+            return ['all'];
+          } else if (Array.isArray(campaignForm.targetOutlets) && campaignForm.targetOutlets.length > 0) {
+            return campaignForm.targetOutlets;
+          } else {
+            return ['all']; // Default to all outlets if none selected
+          }
+        })(),
         expirationDays: 7, // Default 7-day expiration
         isActive: true,
         createdAt: Timestamp.now(),
