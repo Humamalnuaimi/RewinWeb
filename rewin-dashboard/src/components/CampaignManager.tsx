@@ -22,11 +22,11 @@ import {
   addDoc,
   getDocs,
   query,
+  where,
   Timestamp,
   writeBatch,
   limit,
   deleteDoc,
-  where,
   updateDoc,
   getDoc,
   serverTimestamp
@@ -584,7 +584,7 @@ ${expirationText}
           
           if (!hasMatchingOutlet) {
             console.log(`   ⏭️ SKIPPING customer ${customerId} - outlet doesn't match`);
-            return; // Skip this customer
+            continue; // Skip this customer
           }
         }
 
@@ -724,19 +724,29 @@ ${expirationText}
         }
 
         if (qualifies) {
-                  // 🔍 CHECK FOR DUPLICATE PROMOTION (Prevent multiple assignments)
-        const duplicateCheckId = campaign.triggerType === 'birthday' 
-          ? `promo_birthday_${customerId}_${new Date().getFullYear()}`
-          : `promo_inactive_${customerId}_${campaign.id!}`;
+          // 🔍 ENHANCED DUPLICATE PREVENTION (Check for any unredeemed promotions from this campaign)
+          const duplicateCheckId = campaign.triggerType === 'birthday' 
+            ? `promo_birthday_${customerId}_${new Date().getFullYear()}`
+            : `promo_inactive_${customerId}_${campaign.id!}_${Date.now()}`;
           
           try {
-            const existingPromo = await getDoc(doc(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions', duplicateCheckId));
-            if (existingPromo.exists()) {
-              console.log(`   ⏭️ SKIPPING ${customerData.firstName || customerId} - already has ${campaign.triggerType} promotion`);
-              continue; // Skip this customer - they already have this promotion
+            // Check for ANY existing unredeemed promotions from this campaign
+            const customerPromotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions');
+            const existingPromosQuery = query(
+              customerPromotionsRef,
+              where('campaignId', '==', campaign.id),
+              where('isUsed', '==', false),
+              where('isActive', '==', true)
+            );
+            const existingPromosSnapshot = await getDocs(existingPromosQuery);
+            
+            if (!existingPromosSnapshot.empty) {
+              console.log(`   ⏭️ SKIPPING ${customerData.firstName || customerId} - already has ${existingPromosSnapshot.size} unredeemed promotion(s) from this campaign`);
+              continue; // Skip this customer - they already have unredeemed promotions from this campaign
             }
           } catch (error) {
             console.warn(`⚠️ Could not check for duplicate promotion for ${customerId}:`, error);
+            // Continue anyway to avoid blocking legitimate assignments
           }
           
           qualifyingCustomers.push({ id: customerId, data: customerData });
@@ -1129,7 +1139,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
           
           if (!hasMatchingOutlet) {
             console.log(`   ⏭️ SKIPPING customer ${customerId} - outlet doesn't match`);
-            return; // Skip this customer
+            continue; // Skip this customer
           }
         }
         
