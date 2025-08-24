@@ -2055,7 +2055,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '2rem',
+          justifyContent: 'space-between',
           maxWidth: '1400px',
           margin: '0 auto'
         }}>
@@ -2088,7 +2088,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             ← Back to Dashboard
           </button>
           
-          <div>
+          <div style={{ textAlign: 'right' }}>
             <h1 style={{ 
               margin: 0, 
               fontSize: '2rem', 
