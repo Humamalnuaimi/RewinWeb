@@ -1527,6 +1527,11 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       const campaignId = campaignToDelete.id;
       const campaignName = campaignToDelete?.name || '';
       
+      console.log('🔍 DEBUGGING CAMPAIGN DELETION:');
+      console.log(`   📋 Campaign ID: "${campaignId}"`);
+      console.log(`   📋 Campaign Name: "${campaignName}"`);
+      console.log(`   📋 Campaign Object:`, campaignToDelete);
+      
       await CampaignService.deleteCampaign(campaignId);
       
       console.log(`✅ Campaign "${campaignName}" deleted successfully using secure deletion method`);

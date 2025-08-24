@@ -123,6 +123,9 @@ export class CampaignService {
       const customerPromotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions');
       const customersSnapshot = await getDocs(customerPromotionsRef);
       
+      console.log(`🔍 DEBUGGING: Found ${customersSnapshot.size} customers to check for promotions`);
+      console.log(`🔍 Looking for promotions with campaignId: "${campaignId}"`);
+      
       let deletedAssignments = 0;
       
       for (const customerDoc of customersSnapshot.docs) {
@@ -132,6 +135,8 @@ export class CampaignService {
         // Find promotions that belong to this campaign
         const promotionsQuery = query(customerPromotionsCollectionRef, where('campaignId', '==', campaignId));
         const promotionsSnapshot = await getDocs(promotionsQuery);
+        
+        console.log(`🔍 Customer ${customerId}: Found ${promotionsSnapshot.size} promotions with matching campaignId`);
         
         // Also check by campaign name as fallback
         const promotionsByNameQuery = query(customerPromotionsCollectionRef, where('campaignName', '==', campaignName));
