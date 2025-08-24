@@ -6829,14 +6829,11 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             fontSize: '2.5rem', 
             fontWeight: '700',
             color: 'white',
-            margin: '0 0 0.5rem 0',
+            margin: 0,
             textShadow: '2px 2px 4px rgba(0,0,0,0.3)'
           }}>
             Dashboard Overview
           </h2>
-          <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: '1.1rem', margin: 0 }}>
-            Real-time insights from your loyalty program
-          </p>
           {selectedOutlet !== 'all' && (
             <div style={{
               marginTop: '1rem',
