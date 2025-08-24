@@ -730,11 +730,12 @@ ${expirationText}
             : `promo_inactive_${customerId}_${campaign.id!}_${Date.now()}`;
           
           try {
-            // Check for ANY existing unredeemed promotions from this campaign
-            const customerPromotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions');
+            // Check for ANY existing unredeemed promotions from this campaign for this customer
+            const customerPromotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions');
             const existingPromosQuery = query(
               customerPromotionsRef,
               where('campaignId', '==', campaign.id),
+              where('customerId', '==', customerId),
               where('isUsed', '==', false),
               where('isActive', '==', true)
             );
@@ -760,6 +761,7 @@ ${expirationText}
             minimumPurchase: campaign.minimumPurchase,
             source: `campaign_${campaign.triggerType}`,
             campaignId: campaign.id,
+            customerId: customerId, // NEW: Add customerId as a field
             isUsed: false,
             isActive: true,
             assignedAt: Timestamp.now(),
@@ -769,9 +771,9 @@ ${expirationText}
             targetOutlets: campaign.outletIds || ['ALL']
           };
 
-          // Save to customer's promotions (using consistent duplicate-prevention ID)
+          // SIMPLIFIED: Save to flat customerPromotions collection (no subcollections!)
           const customerPromotionRef = doc(
-            firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions', duplicateCheckId
+            firestore, 'users', user.uid, 'customerPromotions', duplicateCheckId
           );
           batch.set(customerPromotionRef, campaignPromotion);
           
@@ -1544,68 +1546,41 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       let totalDeletedPromotions = 0;
       
       try {
-        // EXACT FIREBASE PATH: users → [userId] → customerPromotions → [customerId] → promotions
-        console.log(`🔍 STEP 1: Accessing users/${user.uid}/customerPromotions`);
-        const customerPromotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions');
-        const customerPromotionsSnapshot = await getDocs(customerPromotionsRef);
-        console.log(`🔍 STEP 2: Found ${customerPromotionsSnapshot.size} customer documents in customerPromotions`);
+        // SUPER SIMPLE & EFFICIENT: Query the flat customerPromotions collection
+        console.log(`🚀 SIMPLIFIED APPROACH: Querying flat customerPromotions collection for campaignId "${campaignId}"`);
         
-        for (const customerDoc of customerPromotionsSnapshot.docs) {
-          const customerId = customerDoc.id;
-          console.log(`\n🔍 === STEP 3: CHECKING CUSTOMER ${customerId} ===`);
-          console.log(`🔍 Path: users/${user.uid}/customerPromotions/${customerId}/promotions`);
-          
-          try {
-            // STEP 4: Access the promotions subcollection for this customer
-            const promotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions');
-            const promotionsSnapshot = await getDocs(promotionsRef);
-            console.log(`   📋 STEP 4: Customer ${customerId} has ${promotionsSnapshot.size} promotions`);
+        const customerPromotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions');
+        const matchingPromotionsQuery = query(
+          customerPromotionsRef,
+          where('campaignId', '==', campaignId)
+        );
+        
+        console.log(`🔍 Searching customerPromotions collection for campaignId: "${campaignId}"`);
+        const matchingPromotions = await getDocs(matchingPromotionsQuery);
+        console.log(`🎯 Found ${matchingPromotions.size} promotions with matching campaignId`);
+        
+        if (matchingPromotions.size > 0) {
+          for (const promotionDoc of matchingPromotions.docs) {
+            const promotionData = promotionDoc.data();
             
-            if (promotionsSnapshot.size > 0) {
-              console.log(`   🎯 STEP 5: Found ${promotionsSnapshot.size} promotions for customer ${customerId}`);
-              
-              // STEP 5: Check each promotion's campaignId
-              for (const promotionDoc of promotionsSnapshot.docs) {
-                const promotionData = promotionDoc.data();
-                const promotionId = promotionDoc.id;
-                
-                console.log(`\n   📄 === ANALYZING PROMOTION ${promotionId} ===`);
-                console.log(`       📋 Full promotion data:`, promotionData);
-                console.log(`       🆔 Promotion campaignId: "${promotionData.campaignId}" (type: ${typeof promotionData.campaignId})`);
-                console.log(`       🎯 Target campaignId: "${campaignId}" (type: ${typeof campaignId})`);
-                console.log(`       📊 Source: "${promotionData.source}"`);
-                console.log(`       📝 Title: "${promotionData.title}"`);
-                console.log(`       ✅ IsActive: ${promotionData.isActive}`);
-                console.log(`       📅 CreatedAt: ${promotionData.createdAt}`);
-                
-                // STEP 6: Check if campaignId matches (EXACT comparison)
-                const campaignIdMatch = promotionData.campaignId === campaignId;
-                const campaignIdStringMatch = String(promotionData.campaignId) === String(campaignId);
-                console.log(`       🔍 CampaignId EXACT match: ${campaignIdMatch}`);
-                console.log(`       🔍 CampaignId STRING match: ${campaignIdStringMatch}`);
-                
-                if (campaignIdMatch || campaignIdStringMatch) {
-                  console.log(`   🗑️ STEP 6: DELETING promotion ${promotionId} - campaignId matches!`);
-                  console.log(`       🔥 Deleting path: users/${user.uid}/customerPromotions/${customerId}/promotions/${promotionId}`);
-                  
-                  try {
-                    await deleteDoc(promotionDoc.ref);
-                    totalDeletedPromotions++;
-                    console.log(`   ✅ SUCCESS: Deleted promotion ${promotionId}`);
-                  } catch (deleteError) {
-                    console.error(`   ❌ FAILED to delete promotion ${promotionId}:`, deleteError);
-                  }
-                } else {
-                  console.log(`   ⏭️ KEEPING promotion ${promotionId} - different campaignId`);
-                  console.log(`       💡 "${promotionData.campaignId}" !== "${campaignId}"`);
-                }
-              }
-            } else {
-              console.log(`   ✅ Customer ${customerId}: No promotions found in subcollection`);
+            console.log(`\n📄 === DELETING PROMOTION ===`);
+            console.log(`   🆔 Promotion ID: ${promotionDoc.id}`);
+            console.log(`   👤 Customer ID: ${promotionData.customerId}`);
+            console.log(`   🎯 CampaignId: "${promotionData.campaignId}"`);
+            console.log(`   📝 Title: "${promotionData.title}"`);
+            console.log(`   📊 Source: "${promotionData.source}"`);
+            console.log(`   📍 Path: users/${user.uid}/customerPromotions/${promotionDoc.id}`);
+            
+            try {
+              await deleteDoc(promotionDoc.ref);
+              totalDeletedPromotions++;
+              console.log(`   ✅ SUCCESS: Deleted promotion ${promotionDoc.id}`);
+            } catch (deleteError) {
+              console.error(`   ❌ FAILED to delete promotion ${promotionDoc.id}:`, deleteError);
             }
-          } catch (customerError) {
-            console.error(`   ❌ Error accessing promotions for customer ${customerId}:`, customerError);
           }
+        } else {
+          console.log(`   ❌ No promotions found with campaignId "${campaignId}"`);
         }
         
         console.log(`🚀 EFFICIENT cleanup complete: ${totalDeletedPromotions} promotions deleted with targeted queries!`);
