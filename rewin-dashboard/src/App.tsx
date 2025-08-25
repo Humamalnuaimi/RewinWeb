@@ -4175,13 +4175,21 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     };
 
     useEffect(() => {
+      if (!user?.uid) return;
+
+      console.log('🚨 CHECK-INS USEEFFECT TRIGGERED');
+      console.log('🔍 Fetching check-ins data for time period:', timePeriod);
+      console.log('📅 Selected date:', selectedDate.toLocaleDateString());
+      console.log('📅 Selected date full:', selectedDate.toString());
+      const { startDate, endDate } = getCurrentDateRange();
+      console.log('📅 Date range:', startDate.toLocaleDateString(), 'to', endDate.toLocaleDateString());
+      console.log('📅 Start date full:', startDate.toString());
+      console.log('📅 End date full:', endDate.toString());
+      
+      setCheckinsData(prev => ({ ...prev, loading: true }));
+
       // Fetch check-ins data for selected date range
       const fetchCheckinsData = () => {
-        const { startDate, endDate } = getCurrentDateRange();
-
-        console.log('🔍 Fetching check-ins data for time period:', timePeriod);
-        console.log('📅 Date range:', startDate.toISOString(), 'to', endDate.toISOString());
-        console.log('📅 Current time:', new Date().toISOString());
         
         const visitsQuery = query(collection(firestore, `users/${user.uid}/web_visits`));
         const outletsQuery = query(collection(firestore, `users/${user.uid}/outlets`));
