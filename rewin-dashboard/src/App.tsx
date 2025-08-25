@@ -2654,6 +2654,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     const [outletName, setOutletName] = useState<string>('');
     const [searchTerm, setSearchTerm] = useState('');
     const [filteredTransactions, setFilteredTransactions] = useState<any[]>([]);
+    const [isSearchVisible, setIsSearchVisible] = useState(false);
 
     const formatDate = (date: Date) => {
       return date.toLocaleDateString('en-US', { 
@@ -2911,61 +2912,177 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             maxWidth: '1400px',
             margin: '0 auto'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <button
-                onClick={() => setCurrentPage('dashboard')}
-                style={{
-                  padding: '0.5rem 1rem',
-                  backgroundColor: 'rgba(255,255,255,0.2)',
-                  color: 'white',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}
-              >
-                ← Back to Dashboard
-              </button>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                background: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)',
-                borderRadius: '10px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(255, 107, 107, 0.3)'
-              }}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                </svg>
-              </div>
-                             <div>
-                 <h1 style={{ margin: 0, fontSize: '1.8rem', fontWeight: '700' }}>Points History</h1>
-                 <p style={{ margin: 0, opacity: 0.9, fontSize: '0.9rem' }}>
-                   {selectedOutlet === 'all' ? 'All outlets' : `Outlet: ${outlets.find(outlet => outlet.id === selectedOutlet)?.name || outlets.find(outlet => outlet.id === selectedOutlet)?.outletName || selectedOutlet}`}
-                 </p>
-               </div>
-            </div>
             <button
-              onClick={onLogout}
+              onClick={() => setCurrentPage('dashboard')}
               style={{
-                padding: '0.75rem 1.5rem',
-                backgroundColor: 'rgba(255,255,255,0.2)',
+                padding: '0.75rem 1.25rem',
+                backgroundColor: 'rgba(255,255,255,0.1)',
                 color: 'white',
-                border: '1px solid rgba(255,255,255,0.3)',
+                border: '1px solid rgba(255,255,255,0.2)',
                 borderRadius: '12px',
                 cursor: 'pointer',
+                fontSize: '0.9rem',
                 fontWeight: '500',
-                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                transition: 'all 0.2s ease',
                 backdropFilter: 'blur(10px)'
               }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
             >
-              Sign Out
+              ← Back to Dashboard
             </button>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{ textAlign: 'right' }}>
+                <h1 style={{ 
+                  margin: 0, 
+                  fontSize: '2rem', 
+                  fontWeight: '800',
+                  background: 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text'
+                }}>
+                  Points History
+                </h1>
+                <p style={{ 
+                  margin: '0.25rem 0 0 0', 
+                  opacity: 0.8, 
+                  fontSize: '1rem',
+                  fontWeight: '400'
+                }}>
+                  {selectedOutlet === 'all' ? 'All outlets' : `Outlet: ${outlets.find(outlet => outlet.id === selectedOutlet)?.name || outlets.find(outlet => outlet.id === selectedOutlet)?.outletName || selectedOutlet}`}
+                </p>
+              </div>
+              
+              {/* Search Icon/Bar */}
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                {!isSearchVisible ? (
+                  <button
+                    onClick={() => setIsSearchVisible(true)}
+                    style={{
+                      padding: '0.75rem',
+                      backgroundColor: 'rgba(255,255,255,0.1)',
+                      color: 'white',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '12px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s ease',
+                      backdropFilter: 'blur(10px)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <path d="m21 21-4.35-4.35"></path>
+                    </svg>
+                  </button>
+                ) : (
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      placeholder="Search transactions..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      autoFocus
+                      style={{
+                        width: '300px',
+                        padding: '0.75rem 2.5rem 0.75rem 1rem',
+                        background: 'rgba(255,255,255,0.1)',
+                        color: 'white',
+                        border: '1px solid rgba(255,255,255,0.3)',
+                        borderRadius: '12px',
+                        fontSize: '0.9rem',
+                        outline: 'none',
+                        backdropFilter: 'blur(10px)',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                      }}
+                      onFocus={(e) => {
+                        (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.5)';
+                        (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.15)';
+                      }}
+                      onBlur={(e) => {
+                        (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.3)';
+                        (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.1)';
+                        if (!searchTerm) {
+                          setIsSearchVisible(false);
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        setIsSearchVisible(false);
+                        setSearchTerm('');
+                      }}
+                      style={{
+                        position: 'absolute',
+                        right: '0.5rem',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: 'rgba(255,255,255,0.7)',
+                        cursor: 'pointer',
+                        padding: '0.25rem',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              <button
+                onClick={onLogout}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: 'rgba(255,255,255,0.1)',
+                  color: 'white',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                  backdropFilter: 'blur(10px)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                Sign Out
+              </button>
+            </div>
           </div>
         </header>
 
@@ -4079,59 +4196,177 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             maxWidth: '1400px',
             margin: '0 auto'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <button
-                onClick={() => setCurrentPage('dashboard')}
-                style={{
-                  padding: '0.5rem 1rem',
-                  backgroundColor: 'rgba(255,255,255,0.2)',
-                  color: 'white',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}
-              >
-                ← Back to Dashboard
-              </button>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
-                borderRadius: '10px',
+            <button
+              onClick={() => setCurrentPage('dashboard')}
+              style={{
+                padding: '0.75rem 1.25rem',
+                backgroundColor: 'rgba(255,255,255,0.1)',
+                color: 'white',
+                border: '1px solid rgba(255,255,255,0.2)',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: '500',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)'
-              }}>
-                <AnalyticsIcon />
-              </div>
-              <div>
-                <h1 style={{ margin: 0, fontSize: '1.8rem', fontWeight: '700' }}>Check-ins Today</h1>
-                <p style={{ margin: 0, opacity: 0.9, fontSize: '0.9rem' }}>
+                gap: '0.5rem',
+                transition: 'all 0.2s ease',
+                backdropFilter: 'blur(10px)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              ← Back to Dashboard
+            </button>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{ textAlign: 'right' }}>
+                <h1 style={{ 
+                  margin: 0, 
+                  fontSize: '2rem', 
+                  fontWeight: '800',
+                  background: 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text'
+                }}>
+                  Check-ins Today
+                </h1>
+                <p style={{ 
+                  margin: '0.25rem 0 0 0', 
+                  opacity: 0.8, 
+                  fontSize: '1rem',
+                  fontWeight: '400'
+                }}>
                   {selectedOutlet === 'all' ? 'All outlets' : `Outlet: ${outlets.find(outlet => outlet.id === selectedOutlet)?.name || outlets.find(outlet => outlet.id === selectedOutlet)?.outletName || selectedOutlet}`}
                 </p>
               </div>
+              
+              {/* Search Icon/Bar */}
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                {!isSearchVisible ? (
+                  <button
+                    onClick={() => setIsSearchVisible(true)}
+                    style={{
+                      padding: '0.75rem',
+                      backgroundColor: 'rgba(255,255,255,0.1)',
+                      color: 'white',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '12px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s ease',
+                      backdropFilter: 'blur(10px)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <path d="m21 21-4.35-4.35"></path>
+                    </svg>
+                  </button>
+                ) : (
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      placeholder="Search check-ins..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      autoFocus
+                      style={{
+                        width: '300px',
+                        padding: '0.75rem 2.5rem 0.75rem 1rem',
+                        background: 'rgba(255,255,255,0.1)',
+                        color: 'white',
+                        border: '1px solid rgba(255,255,255,0.3)',
+                        borderRadius: '12px',
+                        fontSize: '0.9rem',
+                        outline: 'none',
+                        backdropFilter: 'blur(10px)',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                      }}
+                      onFocus={(e) => {
+                        (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.5)';
+                        (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.15)';
+                      }}
+                      onBlur={(e) => {
+                        (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.3)';
+                        (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.1)';
+                        if (!searchTerm) {
+                          setIsSearchVisible(false);
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        setIsSearchVisible(false);
+                        setSearchTerm('');
+                      }}
+                      style={{
+                        position: 'absolute',
+                        right: '0.5rem',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: 'rgba(255,255,255,0.7)',
+                        cursor: 'pointer',
+                        padding: '0.25rem',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              <button
+                onClick={onLogout}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: 'rgba(255,255,255,0.1)',
+                  color: 'white',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                  backdropFilter: 'blur(10px)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                Sign Out
+              </button>
             </div>
-            <button
-              onClick={onLogout}
-              style={{
-                padding: '0.75rem 1.5rem',
-                backgroundColor: 'rgba(255,255,255,0.2)',
-                color: 'white',
-                border: '1px solid rgba(255,255,255,0.3)',
-                borderRadius: '12px',
-                cursor: 'pointer',
-                fontWeight: '500',
-                transition: 'all 0.2s',
-                backdropFilter: 'blur(10px)'
-              }}
-            >
-              Sign Out
-            </button>
           </div>
         </header>
 
@@ -5079,6 +5314,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     const [totalPoints, setTotalPoints] = useState(0);
     const [averagePoints, setAveragePoints] = useState(0);
     const [searchTerm, setSearchTerm] = useState('');
+    const [isSearchVisible, setIsSearchVisible] = useState(false);
     const [dateFilter, setDateFilter] = useState('all');
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
