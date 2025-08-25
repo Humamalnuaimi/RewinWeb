@@ -2883,6 +2883,21 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       return () => unsubscribeOutlets();
     }, [selectedOutlet, user.uid]);
 
+    // Filter transactions based on search term
+    useEffect(() => {
+      if (!searchTerm.trim()) {
+        setFilteredTransactions(pointsData.transactions);
+      } else {
+        const filtered = pointsData.transactions.filter(transaction =>
+          transaction.customerDisplay?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          transaction.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          transaction.transactionType?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          transaction.customerId?.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        setFilteredTransactions(filtered);
+      }
+    }, [searchTerm, pointsData.transactions]);
+
     return (
       <div style={{
         minHeight: '100vh',
@@ -3326,15 +3341,15 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 }} />
                 <p style={{ color: 'rgba(255,255,255,0.8)', margin: 0 }}>Loading transactions...</p>
               </div>
-            ) : pointsData.transactions.length === 0 ? (
+            ) : filteredTransactions.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '2rem' }}>
                 <p style={{ color: 'rgba(255,255,255,0.8)', margin: 0, fontSize: '1.1rem' }}>
-                  No transactions found for {formatDate(selectedDate)}
+                  {searchTerm.trim() ? `No transactions found matching "${searchTerm}"` : `No transactions found for ${formatDate(selectedDate)}`}
                 </p>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {pointsData.transactions.map((transaction, index) => (
+                {filteredTransactions.map((transaction, index) => (
                   <div 
                     key={transaction.id} 
                     onClick={() => {
@@ -4038,6 +4053,10 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       loading: true
     });
 
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filteredCustomers, setFilteredCustomers] = useState<any[]>([]);
+    const [isSearchVisible, setIsSearchVisible] = useState(false);
+
     const formatDate = (date: Date) => {
       return date.toLocaleDateString('en-US', { 
         weekday: 'long', 
@@ -4166,6 +4185,20 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       const unsubscribe = fetchCheckinsData();
       return unsubscribe;
     }, [selectedDate, selectedOutlet, user.uid]);
+
+    // Filter customers based on search term
+    useEffect(() => {
+      if (!searchTerm.trim()) {
+        setFilteredCustomers(checkinsData.customers);
+      } else {
+        const filtered = checkinsData.customers.filter(customer =>
+          customer.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          customer.outletDisplayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          customer.customerId?.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        setFilteredCustomers(filtered);
+      }
+    }, [searchTerm, checkinsData.customers]);
 
     return (
       <div style={{
@@ -4553,17 +4586,17 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 }}>
                   Loading check-ins...
                 </div>
-              ) : checkinsData.customers.length === 0 ? (
+              ) : filteredCustomers.length === 0 ? (
                 <div style={{ 
                   padding: '3rem', 
                   textAlign: 'center', 
                   color: 'rgba(255,255,255,0.7)' 
                 }}>
-                  No check-ins found for {formatDate(selectedDate)}
+                  {searchTerm.trim() ? `No check-ins found matching "${searchTerm}"` : `No check-ins found for ${formatDate(selectedDate)}`}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '2rem' }}>
-                  {checkinsData.customers.map((customer, index) => (
+                  {filteredCustomers.map((customer, index) => (
                     <div
                       key={customer.id}
                       style={{
