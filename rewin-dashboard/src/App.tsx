@@ -2068,15 +2068,97 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       return date > today;
     };
 
-    useEffect(() => {
-      // Fetch signups data for selected date
-      const fetchSignupsData = () => {
-        const selectedStart = new Date(selectedDate);
-        selectedStart.setHours(0, 0, 0, 0);
-        const selectedEnd = new Date(selectedDate);
-        selectedEnd.setHours(23, 59, 59, 999);
+    // Get date range for current time period
+    const getCurrentDateRange = () => {
+      const now = new Date();
+      let startDate = new Date();
+      let endDate = new Date();
 
-        console.log('🔍 Fetching signups data for:', formatDate(selectedDate));
+      switch (timePeriod) {
+        case 'today':
+          // Use selectedDate for 'today' mode (can be any specific date)
+          startDate = new Date(selectedDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(selectedDate);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'yesterday':
+          const yesterday = new Date(now);
+          yesterday.setDate(now.getDate() - 1);
+          startDate = new Date(yesterday);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(yesterday);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'this_week':
+          const thisWeekStart = new Date(now);
+          thisWeekStart.setDate(now.getDate() - now.getDay());
+          startDate = new Date(thisWeekStart);
+          startDate.setHours(0, 0, 0, 0);
+          const thisWeekEnd = new Date(thisWeekStart);
+          thisWeekEnd.setDate(thisWeekStart.getDate() + 6);
+          endDate = new Date(thisWeekEnd);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'last_week':
+          const lastWeekStart = new Date(now);
+          lastWeekStart.setDate(now.getDate() - now.getDay() - 7);
+          const lastWeekEnd = new Date(lastWeekStart);
+          lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
+          startDate = new Date(lastWeekStart);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(lastWeekEnd);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'this_month':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'last_month':
+          startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth(), 0);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'custom_range': {
+          const start = customRangeStart ?? selectedDate;
+          const end = customRangeEnd ?? customRangeStart ?? selectedDate;
+          const minDate = start <= end ? start : end;
+          const maxDate = start <= end ? end : start;
+          startDate = new Date(minDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(maxDate);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        }
+        default:
+          startDate = new Date(selectedDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(selectedDate);
+          endDate.setHours(23, 59, 59, 999);
+      }
+      
+      return { startDate, endDate };
+    };
+
+    useEffect(() => {
+      if (!user?.uid) return;
+
+      console.log('🚨 NEW SIGNUPS USEEFFECT TRIGGERED');
+      console.log('🔍 Fetching signups data for time period:', timePeriod);
+      console.log('📅 Selected date:', selectedDate.toLocaleDateString());
+      console.log('📅 Selected date full:', selectedDate.toString());
+      const { startDate, endDate } = getCurrentDateRange();
+      console.log('📅 Date range:', startDate.toLocaleDateString(), 'to', endDate.toLocaleDateString());
+      console.log('📅 Start date full:', startDate.toString());
+      console.log('📅 End date full:', endDate.toString());
+      
+      setSignupsData(prev => ({ ...prev, loading: true }));
+
+      // Fetch signups data for selected date range
+      const fetchSignupsData = () => {
         
                  const customersQuery = query(collection(firestore, `users/${user.uid}/web_customers`));
          const outletsQuery = query(collection(firestore, `users/${user.uid}/outlets`));
@@ -2104,7 +2186,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
              const customer = doc.data();
              const joinDate = customer.dateJoined?.toDate() || customer.createdAt?.toDate();
              
-             if (joinDate && joinDate >= selectedStart && joinDate <= selectedEnd) {
+             if (joinDate && joinDate >= startDate && joinDate <= endDate) {
                // Filter by outlet
                const matchesOutlet = selectedOutlet === 'all' || 
                                   customer.registrationOutletId === selectedOutlet ||
@@ -2156,7 +2238,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
       const unsubscribe = fetchSignupsData();
       return unsubscribe;
-    }, [selectedDate, selectedOutlet, user.uid]);
+    }, [timePeriod, selectedDate, selectedOutlet, user.uid, customRangeStart, customRangeEnd]);
 
     // Filter customers based on search term
     useEffect(() => {
@@ -2641,6 +2723,258 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             )}
           </div>
         </main>
+
+        {/* Date Picker Modal */}
+        {timeDropdownOpen && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            backdropFilter: 'blur(5px)'
+          }} onClick={() => setTimeDropdownOpen(false)}>
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(51, 65, 85, 0.95) 100%)',
+              borderRadius: '20px',
+              padding: '2rem',
+              maxWidth: '500px',
+              width: '90%',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+              backdropFilter: 'blur(20px)'
+            }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: 'flex', gap: '2rem' }}>
+                {/* Time Period Options */}
+                <div style={{ flex: 1 }}>
+                  <h3 style={{ color: 'white', margin: '0 0 1rem 0', fontSize: '1.2rem', fontWeight: '600' }}>
+                    Time Periods
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {[
+                      { value: 'today', label: 'Today' },
+                      { value: 'yesterday', label: 'Yesterday' },
+                      { value: 'this_week', label: 'This Week' },
+                      { value: 'last_week', label: 'Last Week' },
+                      { value: 'this_month', label: 'This Month' },
+                      { value: 'last_month', label: 'Last Month' },
+                      { value: 'custom_range', label: 'Custom Range' }
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log('🎯 TIME PERIOD SELECTED:', option.value);
+                          if (option.value === 'custom_range') {
+                            // Start custom range flow: keep modal open and wait for two clicks
+                            setCustomRangeStart(null);
+                            setCustomRangeEnd(null);
+                            setTimePeriod('custom_range');
+                            console.log('🗓️ Custom Range mode: select start and end dates');
+                            return;
+                          }
+
+                          console.log('🔄 Changing timePeriod from:', timePeriod, 'to:', option.value);
+                          setTimePeriod(option.value);
+                          setTimeDropdownOpen(false);
+                          console.log('✅ Time period updated and modal closed');
+                        }}
+                        style={{
+                          background: timePeriod === option.value 
+                            ? 'rgba(255, 255, 255, 0.3)' 
+                            : 'transparent',
+                          border: 'none',
+                          borderRadius: '12px',
+                          padding: '1rem 1.5rem',
+                          color: 'white',
+                          cursor: 'pointer',
+                          fontSize: '1rem',
+                          fontWeight: timePeriod === option.value ? '600' : '400',
+                          transition: 'all 0.2s ease',
+                          textAlign: 'left',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between'
+                        }}
+                        onMouseEnter={(e) => {
+                          if (timePeriod !== option.value) {
+                            (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.1)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (timePeriod !== option.value) {
+                            (e.target as HTMLElement).style.background = 'transparent';
+                          }
+                        }}
+                      >
+                        <span>{option.label}</span>
+                        {timePeriod === option.value && (
+                          <span style={{ color: '#60a5fa' }}>✓</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Calendar */}
+                <div style={{ flex: 1 }}>
+                  <h3 style={{ color: 'white', margin: '0 0 1rem 0', fontSize: '1.2rem', fontWeight: '600' }}>
+                    {timePeriod === 'custom_range' ? 'Select Date Range' : 'Calendar'}
+                  </h3>
+                  
+                  {/* Calendar Header */}
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    marginBottom: '1rem'
+                  }}>
+                    <button
+                      onClick={() => {
+                        const newDate = new Date(selectedDate);
+                        newDate.setMonth(selectedDate.getMonth() - 1);
+                        setSelectedDate(newDate);
+                      }}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        border: 'none',
+                        borderRadius: '8px',
+                        color: 'white',
+                        padding: '0.5rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      ←
+                    </button>
+                    <h4 style={{ color: 'white', margin: 0, fontSize: '1rem' }}>
+                      {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    </h4>
+                    <button
+                      onClick={() => {
+                        const newDate = new Date(selectedDate);
+                        newDate.setMonth(selectedDate.getMonth() + 1);
+                        setSelectedDate(newDate);
+                      }}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        border: 'none',
+                        borderRadius: '8px',
+                        color: 'white',
+                        padding: '0.5rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      →
+                    </button>
+                  </div>
+
+                  {/* Calendar Grid */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(7, 1fr)',
+                    gap: '0.25rem',
+                    fontSize: '0.8rem'
+                  }}>
+                    {/* Day headers */}
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                      <div key={day} style={{
+                        color: 'rgba(255, 255, 255, 0.6)',
+                        textAlign: 'center',
+                        padding: '0.5rem',
+                        fontWeight: '600'
+                      }}>
+                        {day}
+                      </div>
+                    ))}
+                    
+                    {/* Calendar days */}
+                    {(() => {
+                      const year = selectedDate.getFullYear();
+                      const month = selectedDate.getMonth();
+                      const firstDay = new Date(year, month, 1);
+                      const lastDay = new Date(year, month + 1, 0);
+                      const startDate = new Date(firstDay);
+                      startDate.setDate(startDate.getDate() - firstDay.getDay());
+                      
+                      const days = [];
+                      for (let i = 0; i < 42; i++) {
+                        const currentDate = new Date(startDate);
+                        currentDate.setDate(startDate.getDate() + i);
+                        
+                        const isCurrentMonth = currentDate.getMonth() === month;
+                        const isToday = currentDate.toDateString() === new Date().toDateString();
+                        const isSelected = currentDate.toDateString() === selectedDate.toDateString();
+                        
+                        days.push(
+                          <button
+                            key={i}
+                            onClick={() => {
+                              if (timePeriod === 'custom_range') {
+                                if (!customRangeStart) {
+                                  setCustomRangeStart(currentDate);
+                                } else if (!customRangeEnd) {
+                                  setCustomRangeEnd(currentDate);
+                                  setTimeDropdownOpen(false);
+                                } else {
+                                  setCustomRangeStart(currentDate);
+                                  setCustomRangeEnd(null);
+                                }
+                              } else {
+                                setSelectedDate(currentDate);
+                                setTimePeriod('today');
+                                setTimeDropdownOpen(false);
+                              }
+                            }}
+                            style={{
+                              background: isSelected ? 'rgba(96, 165, 250, 0.8)' : 
+                                         isToday ? 'rgba(96, 165, 250, 0.3)' : 
+                                         'transparent',
+                              border: 'none',
+                              borderRadius: '6px',
+                              color: isCurrentMonth ? 'white' : 'rgba(255, 255, 255, 0.4)',
+                              padding: '0.5rem',
+                              cursor: 'pointer',
+                              fontSize: '0.8rem',
+                              fontWeight: isSelected || isToday ? '600' : '400',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isSelected) {
+                                (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.1)';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isSelected) {
+                                (e.target as HTMLElement).style.background = isToday ? 'rgba(96, 165, 250, 0.3)' : 'transparent';
+                              }
+                            }}
+                          >
+                            {currentDate.getDate()}
+                          </button>
+                        );
+                      }
+                      return days;
+                    })()}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
