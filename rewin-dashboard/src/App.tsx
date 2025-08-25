@@ -3722,11 +3722,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         console.log('🔄 Changing timePeriod from:', timePeriod, 'to:', option.value);
                         setTimePeriod(option.value);
                         
-                        // Reset selected date to today when switching to non-specific date periods
-                        if (option.value !== 'today') {
-                          setSelectedDate(new Date());
-                          console.log('📅 Reset selectedDate to today for period:', option.value);
-                        }
+
                         
                         setTimeDropdownOpen(false);
                         console.log('✅ Time period updated and modal closed');
@@ -4987,11 +4983,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         console.log('🔄 Changing timePeriod from:', timePeriod, 'to:', option.value);
                         setTimePeriod(option.value);
                         
-                        // Reset selected date to today when switching to non-specific date periods
-                        if (option.value !== 'today') {
-                          setSelectedDate(new Date());
-                          console.log('📅 Reset selectedDate to today for period:', option.value);
-                        }
+
                         
                         setTimeDropdownOpen(false);
                         console.log('✅ Time period updated and modal closed');
