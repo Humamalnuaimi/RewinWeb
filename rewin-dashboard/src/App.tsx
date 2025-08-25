@@ -2032,6 +2032,12 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     const [searchTerm, setSearchTerm] = useState('');
     const [filteredCustomers, setFilteredCustomers] = useState<any[]>([]);
     const [isSearchVisible, setIsSearchVisible] = useState(false);
+    
+    // Date picker states
+    const [timePeriod, setTimePeriod] = useState('today');
+    const [timeDropdownOpen, setTimeDropdownOpen] = useState(false);
+    const [customRangeStart, setCustomRangeStart] = useState<Date | null>(null);
+    const [customRangeEnd, setCustomRangeEnd] = useState<Date | null>(null);
 
     const formatDate = (date: Date) => {
       return date.toLocaleDateString('en-US', { 
@@ -4056,6 +4062,12 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     const [searchTerm, setSearchTerm] = useState('');
     const [filteredCustomers, setFilteredCustomers] = useState<any[]>([]);
     const [isSearchVisible, setIsSearchVisible] = useState(false);
+    
+    // Date picker states
+    const [timePeriod, setTimePeriod] = useState('today');
+    const [timeDropdownOpen, setTimeDropdownOpen] = useState(false);
+    const [customRangeStart, setCustomRangeStart] = useState<Date | null>(null);
+    const [customRangeEnd, setCustomRangeEnd] = useState<Date | null>(null);
 
     const formatDate = (date: Date) => {
       return date.toLocaleDateString('en-US', { 
@@ -4086,17 +4098,89 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       return date > today;
     };
 
-    useEffect(() => {
-      // Fetch check-ins data for selected date
-      const fetchCheckinsData = () => {
-        const selectedStart = new Date(selectedDate);
-        selectedStart.setHours(0, 0, 0, 0);
-        const selectedEnd = new Date(selectedDate);
-        selectedEnd.setHours(23, 59, 59, 999);
+    // Get date range for current time period
+    const getCurrentDateRange = () => {
+      const now = new Date();
+      let startDate = new Date();
+      let endDate = new Date();
 
-        console.log('🔍 Fetching check-ins data for:', formatDate(selectedDate));
-        console.log('📅 Selected date:', selectedDate.toDateString());
-        console.log('📅 Date range:', selectedStart.toISOString(), 'to', selectedEnd.toISOString());
+      switch (timePeriod) {
+        case 'today':
+          // Use selectedDate for 'today' mode (can be any specific date)
+          startDate = new Date(selectedDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(selectedDate);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'yesterday':
+          const yesterday = new Date(now);
+          yesterday.setDate(now.getDate() - 1);
+          startDate = new Date(yesterday);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(yesterday);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'this_week':
+          const thisWeekStart = new Date(now);
+          thisWeekStart.setDate(now.getDate() - now.getDay());
+          startDate = new Date(thisWeekStart);
+          startDate.setHours(0, 0, 0, 0);
+          const thisWeekEnd = new Date(thisWeekStart);
+          thisWeekEnd.setDate(thisWeekStart.getDate() + 6);
+          endDate = new Date(thisWeekEnd);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'last_week':
+          const lastWeekStart = new Date(now);
+          lastWeekStart.setDate(now.getDate() - now.getDay() - 7);
+          const lastWeekEnd = new Date(lastWeekStart);
+          lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
+          startDate = new Date(lastWeekStart);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(lastWeekEnd);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'this_month':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'last_month':
+          startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth(), 0);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'custom_range': {
+          const start = customRangeStart ?? selectedDate;
+          const end = customRangeEnd ?? customRangeStart ?? selectedDate;
+          const minDate = start <= end ? start : end;
+          const maxDate = start <= end ? end : start;
+          startDate = new Date(minDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(maxDate);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        }
+        default:
+          // Default to today
+          startDate = new Date(selectedDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(selectedDate);
+          endDate.setHours(23, 59, 59, 999);
+      }
+
+      return { startDate, endDate };
+    };
+
+    useEffect(() => {
+      // Fetch check-ins data for selected date range
+      const fetchCheckinsData = () => {
+        const { startDate, endDate } = getCurrentDateRange();
+
+        console.log('🔍 Fetching check-ins data for time period:', timePeriod);
+        console.log('📅 Date range:', startDate.toISOString(), 'to', endDate.toISOString());
         console.log('📅 Current time:', new Date().toISOString());
         
         const visitsQuery = query(collection(firestore, `users/${user.uid}/web_visits`));
@@ -4141,7 +4225,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             const visit = doc.data();
             const visitDate = visit.timestamp?.toDate() || visit.createdAt?.toDate();
             
-            if (visitDate && visitDate >= selectedStart && visitDate <= selectedEnd) {
+            if (visitDate && visitDate >= startDate && visitDate <= endDate) {
               // Filter by outlet
               const matchesOutlet = selectedOutlet === 'all' || visit.outletId === selectedOutlet;
               
@@ -4184,7 +4268,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
       const unsubscribe = fetchCheckinsData();
       return unsubscribe;
-    }, [selectedDate, selectedOutlet, user.uid]);
+    }, [timePeriod, selectedDate, selectedOutlet, user.uid, customRangeStart, customRangeEnd]);
 
     // Filter customers based on search term
     useEffect(() => {
@@ -4446,14 +4530,65 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 ← Previous Day
               </button>
               
-              <div style={{ textAlign: 'center' }}>
+              <button
+                onClick={() => setTimeDropdownOpen(true)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'white',
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                  padding: '0.5rem',
+                  borderRadius: '8px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.target as HTMLElement).style.background = 'transparent';
+                }}
+              >
                 <h2 style={{ color: 'white', margin: 0, fontSize: '1.5rem' }}>
-                  {formatDate(selectedDate)}
+                  {(() => {
+                    const { startDate, endDate } = getCurrentDateRange();
+                    if (timePeriod === 'this_week' || timePeriod === 'last_week') {
+                      const shortOpts = { weekday: 'short', month: 'short', day: 'numeric' } as const;
+                      const startStr = startDate.toLocaleDateString('en-US', shortOpts);
+                      const endStr = endDate.toLocaleDateString('en-US', shortOpts);
+                      const sameYear = startDate.getFullYear() === endDate.getFullYear();
+                      const yearSuffix = sameYear ? `, ${endDate.getFullYear()}` : `, ${startDate.getFullYear()} to ${endDate.getFullYear()}`;
+                      return `${startStr} to ${endStr}${yearSuffix}`;
+                    }
+                    if (timePeriod === 'custom_range') {
+                      const start = customRangeStart ?? startDate;
+                      const end = customRangeEnd ?? endDate;
+                      const s = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                      const e = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                      return `${s} to ${e}`;
+                    }
+                    if (timePeriod === 'this_month') {
+                      return selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                    }
+                    if (timePeriod === 'last_month') {
+                      const lastMonth = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);
+                      return lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                    }
+                    return formatDate(selectedDate);
+                  })()}
                 </h2>
                 <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
-                  {isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`}
+                  {timePeriod === 'today' ? (
+                    isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`
+                  ) : 
+                   timePeriod === 'yesterday' ? 'Yesterday' :
+                   timePeriod === 'this_week' ? 'This Week' :
+                   timePeriod === 'last_week' ? 'Last Week' :
+                   timePeriod === 'this_month' ? 'This Month' :
+                   timePeriod === 'last_month' ? 'Last Month' :
+                   isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`}
                 </p>
-              </div>
+              </button>
               
               <div style={{ display: 'flex', gap: '1rem' }}>
                 {!isToday(selectedDate) && (
@@ -4703,6 +4838,413 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             </div>
           </div>
         </main>
+
+        {/* Time Period Modal - Two Panel Design */}
+        {timeDropdownOpen && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              backdropFilter: 'blur(10px)',
+              zIndex: 999999999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              animation: 'fadeIn 0.3s ease-out',
+              padding: '2rem'
+            }}
+            onClick={(e) => {
+              // Only close if clicking directly on the backdrop, not on child elements
+              if (e.target === e.currentTarget) {
+                console.log('🔒 Modal backdrop clicked - closing time period selector');
+                setTimeDropdownOpen(false);
+              }
+            }}
+          >
+            {/* Modal Content */}
+            <div
+              data-time-dropdown="true"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'rgba(20,24,45,0.6)',
+                borderRadius: '24px',
+                padding: '0',
+                width: '800px',
+                maxWidth: '90vw',
+                height: '500px',
+                maxHeight: '80vh',
+                boxShadow: '0 25px 50px rgba(0, 0, 0, 0.5)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                position: 'relative',
+                animation: 'slideIn 0.3s ease-out',
+                display: 'flex',
+                overflow: 'hidden'
+              }}
+            >
+              {/* Close Button */}
+              <button
+                onClick={() => setTimeDropdownOpen(false)}
+                style={{
+                  position: 'absolute',
+                  top: '1rem',
+                  right: '1rem',
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '36px',
+                  height: '36px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '1.2rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                  zIndex: 10
+                }}
+                onMouseEnter={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+                }}
+              >
+                ×
+              </button>
+
+              {/* Left Panel - Time Period Options */}
+              <div
+                style={{
+                  flex: '0 0 300px',
+                  padding: '2rem',
+                  borderRight: '1px solid rgba(255, 255, 255, 0.2)',
+                  background: 'rgba(255, 255, 255, 0.05)'
+                }}
+              >
+                <h3
+                  style={{
+                    color: 'white',
+                    fontSize: '1.2rem',
+                    fontWeight: '600',
+                    marginBottom: '1.5rem',
+                    textAlign: 'left'
+                  }}
+                >
+                  Time Periods
+                </h3>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {[
+                    { value: 'today', label: 'Today' },
+                    { value: 'yesterday', label: 'Yesterday' },
+                    { value: 'this_week', label: 'This Week' },
+                    { value: 'last_week', label: 'Last Week' },
+                    { value: 'this_month', label: 'This Month' },
+                    { value: 'last_month', label: 'Last Month' },
+                    { value: 'custom_range', label: 'Custom Range' }
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('🎯 TIME PERIOD SELECTED:', option.value);
+                        if (option.value === 'custom_range') {
+                          // Start custom range flow: keep modal open and wait for two clicks
+                          setCustomRangeStart(null);
+                          setCustomRangeEnd(null);
+                          setTimePeriod('custom_range');
+                          console.log('🗓️ Custom Range mode: select start and end dates');
+                          return;
+                        }
+
+                        console.log('🔄 Changing timePeriod from:', timePeriod, 'to:', option.value);
+                        setTimePeriod(option.value);
+                        
+                        // Reset selected date to today when switching to non-specific date periods
+                        if (option.value !== 'today') {
+                          setSelectedDate(new Date());
+                          console.log('📅 Reset selectedDate to today for period:', option.value);
+                        }
+                        
+                        setTimeDropdownOpen(false);
+                        console.log('✅ Time period updated and modal closed');
+                      }}
+                      style={{
+                        background: timePeriod === option.value 
+                          ? 'rgba(255, 255, 255, 0.3)' 
+                          : 'transparent',
+                        border: 'none',
+                        borderRadius: '12px',
+                        padding: '1rem 1.5rem',
+                        color: 'white',
+                        cursor: 'pointer',
+                        fontSize: '1rem',
+                        fontWeight: timePeriod === option.value ? '600' : '400',
+                        transition: 'all 0.2s ease',
+                        textAlign: 'left',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (timePeriod !== option.value) {
+                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.1)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (timePeriod !== option.value) {
+                          (e.target as HTMLElement).style.background = 'transparent';
+                        }
+                      }}
+                    >
+                      <span>{option.label}</span>
+                      {timePeriod === option.value && (
+                        <span style={{ fontSize: '1rem', color: 'rgba(255, 255, 255, 0.9)' }}>✓</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Right Panel - Calendar */}
+              <div
+                style={{
+                  flex: 1,
+                  padding: '2rem',
+                  background: 'rgba(255, 255, 255, 0.95)',
+                  color: '#333'
+                }}
+              >
+                <h3
+                  style={{
+                    color: '#333',
+                    fontSize: '1.2rem',
+                    fontWeight: '600',
+                    marginBottom: '1.5rem',
+                    textAlign: 'center'
+                  }}
+                >
+                  {(() => {
+                    const now = new Date();
+                    switch (timePeriod) {
+                      case 'today':
+                        return `${isToday(selectedDate) ? 'Today' : 'Selected Date'} - ${selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+                      case 'yesterday':
+                        const yesterday = new Date(now);
+                        yesterday.setDate(now.getDate() - 1);
+                        return `Yesterday - ${yesterday.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+                      case 'this_week':
+                        const weekStart = new Date(now);
+                        weekStart.setDate(now.getDate() - now.getDay());
+                        const weekEnd = new Date(weekStart);
+                        weekEnd.setDate(weekStart.getDate() + 6);
+                        return `This Week - ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                      case 'last_week':
+                        const lastWeekStart = new Date(now);
+                        lastWeekStart.setDate(now.getDate() - now.getDay() - 7);
+                        const lastWeekEnd = new Date(lastWeekStart);
+                        lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
+                        return `Last Week - ${lastWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${lastWeekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                      case 'this_month':
+                        return `This Month - ${now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+                      case 'last_month':
+                        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                        return `Last Month - ${lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+                      case 'custom_range': {
+                        const start = customRangeStart;
+                        const end = customRangeEnd;
+                        const hasStart = !!start;
+                        const hasEnd = !!end;
+                        const rangeLabel = hasStart && hasEnd
+                          ? `${start!.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${end!.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                          : hasStart
+                            ? `Start: ${start!.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                            : 'Select start date';
+                        return `Custom Range - ${rangeLabel}`;
+                      }
+                      default:
+                        return 'Selected Period';
+                    }
+                  })()}
+                </h3>
+
+                {/* Calendar Preview */}
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '1rem'
+                  }}
+                >
+                  {/* Month/Year Navigation */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      width: '100%',
+                      marginBottom: '1rem'
+                    }}
+                  >
+                    <button
+                      onClick={() => {
+                        const newDate = new Date(selectedDate);
+                        newDate.setMonth(selectedDate.getMonth() - 1);
+                        setSelectedDate(newDate);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: '1px solid #ddd',
+                        borderRadius: '8px',
+                        padding: '0.5rem 1rem',
+                        cursor: 'pointer',
+                        color: '#666'
+                      }}
+                    >
+                      ← Previous
+                    </button>
+                    <h4 style={{ margin: 0, color: '#333', fontSize: '1.1rem' }}>
+                      {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    </h4>
+                    <button
+                      onClick={() => {
+                        const newDate = new Date(selectedDate);
+                        newDate.setMonth(selectedDate.getMonth() + 1);
+                        setSelectedDate(newDate);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: '1px solid #ddd',
+                        borderRadius: '8px',
+                        padding: '0.5rem 1rem',
+                        cursor: 'pointer',
+                        color: '#666'
+                      }}
+                    >
+                      Next →
+                    </button>
+                  </div>
+
+                  {/* Calendar Grid */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(7, 1fr)',
+                      gap: '0.25rem',
+                      width: '100%',
+                      maxWidth: '350px'
+                    }}
+                  >
+                    {/* Day Headers */}
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                      <div key={day} style={{
+                        padding: '0.5rem',
+                        textAlign: 'center',
+                        fontWeight: '600',
+                        fontSize: '0.8rem',
+                        color: '#666'
+                      }}>
+                        {day}
+                      </div>
+                    ))}
+                    
+                    {/* Calendar Days */}
+                    {(() => {
+                      const year = selectedDate.getFullYear();
+                      const month = selectedDate.getMonth();
+                      const firstDay = new Date(year, month, 1);
+                      const lastDay = new Date(year, month + 1, 0);
+                      const startDate = new Date(firstDay);
+                      startDate.setDate(startDate.getDate() - firstDay.getDay());
+                      
+                      const days = [];
+                      for (let i = 0; i < 42; i++) {
+                        const currentDate = new Date(startDate);
+                        currentDate.setDate(startDate.getDate() + i);
+                        const isCurrentMonth = currentDate.getMonth() === month;
+                        const isSelected = currentDate.toDateString() === selectedDate.toDateString();
+                        const isToday = currentDate.toDateString() === new Date().toDateString();
+                        
+                        days.push(
+                          <button
+                            key={i}
+                            onClick={() => {
+                              if (timePeriod === 'custom_range') {
+                                if (!customRangeStart) {
+                                  setCustomRangeStart(currentDate);
+                                  console.log('📅 Custom range start set:', currentDate);
+                                } else if (!customRangeEnd) {
+                                  const start = customRangeStart;
+                                  const end = currentDate;
+                                  if (end >= start) {
+                                    setCustomRangeEnd(end);
+                                    console.log('📅 Custom range end set:', end);
+                                    setTimeDropdownOpen(false);
+                                  } else {
+                                    // If end is before start, swap them
+                                    setCustomRangeStart(end);
+                                    setCustomRangeEnd(start);
+                                    console.log('📅 Custom range swapped - start:', end, 'end:', start);
+                                    setTimeDropdownOpen(false);
+                                  }
+                                } else {
+                                  // Reset and start over
+                                  setCustomRangeStart(currentDate);
+                                  setCustomRangeEnd(null);
+                                  console.log('📅 Custom range reset - new start:', currentDate);
+                                }
+                              } else {
+                                setSelectedDate(currentDate);
+                                if (timePeriod === 'today') {
+                                  setTimeDropdownOpen(false);
+                                }
+                              }
+                            }}
+                            style={{
+                              padding: '0.5rem',
+                              border: 'none',
+                              borderRadius: '8px',
+                              background: isSelected ? '#667eea' : 
+                                         isToday ? '#f0f0f0' : 
+                                         'transparent',
+                              color: isSelected ? 'white' : 
+                                     isToday ? '#333' : 
+                                     isCurrentMonth ? '#333' : '#ccc',
+                              cursor: 'pointer',
+                              fontSize: '0.9rem',
+                              fontWeight: isSelected || isToday ? '600' : '400',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isSelected) {
+                                (e.target as HTMLElement).style.background = '#f5f5f5';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isSelected) {
+                                (e.target as HTMLElement).style.background = isToday ? '#f0f0f0' : 'transparent';
+                              }
+                            }}
+                          >
+                            {currentDate.getDate()}
+                          </button>
+                        );
+                      }
+                      
+                      return days;
+                    })()}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
