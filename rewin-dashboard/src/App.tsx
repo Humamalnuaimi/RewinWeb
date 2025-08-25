@@ -7,6 +7,26 @@ import './App.css';
 import CampaignManager from './components/CampaignManager';
 import CampaignDetailsPageSimple from './pages/CampaignDetailsPageSimple';
 import SMSCampaignManager from './components/SMSCampaignManager';
+
+// Add CSS animation
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .calendar-transition {
+    transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+  }
+`;
+document.head.appendChild(style);
 import CampaignDetailsPage from './pages/CampaignDetailsPage';
 
 import AdminDashboard from './components/AdminDashboard';
@@ -3029,7 +3049,9 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     const navigateCalendar = (direction: 'prev' | 'next') => {
       const newDate = new Date(selectedDate);
       newDate.setMonth(selectedDate.getMonth() + (direction === 'next' ? 1 : -1));
-      setSelectedDate(newDate);
+      requestAnimationFrame(() => {
+        setSelectedDate(newDate);
+      });
     };
 
     // Get date range for current time period
@@ -3947,8 +3969,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              animation: 'fadeIn 0.3s ease-out',
-              padding: '2rem'
+              padding: '2rem',
+              willChange: 'auto'
             }}
             onClick={(e) => {
               // Only close if clicking directly on the backdrop, not on child elements
@@ -3960,22 +3982,26 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
           >
             {/* Modal Content */}
             <div
+              key="modal-content"
               data-time-dropdown="true"
               onClick={(e) => e.stopPropagation()}
               style={{
-                background: 'rgba(20,24,45,0.6)',
+                background: 'linear-gradient(145deg, rgba(17, 24, 39, 0.95) 0%, rgba(31, 41, 55, 0.95) 50%, rgba(55, 65, 81, 0.95) 100%)',
                 borderRadius: '24px',
                 padding: '0',
                 width: '800px',
                 maxWidth: '90vw',
-                height: '500px',
-                maxHeight: '80vh',
-                boxShadow: '0 25px 50px rgba(0, 0, 0, 0.5)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
+                height: '550px',
+                maxHeight: '85vh',
+                boxShadow: '0 30px 60px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
                 position: 'relative',
-                animation: 'slideIn 0.3s ease-out',
                 display: 'flex',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                willChange: 'auto',
+                transform: 'translateZ(0)'
               }}
             >
               {/* Close Button */}
@@ -4011,11 +4037,13 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
               {/* Left Panel - Time Period Options */}
               <div
+                key="left-panel"
                 style={{
                   flex: '0 0 300px',
                   padding: '2rem',
-                  borderRight: '1px solid rgba(255, 255, 255, 0.2)',
-                  background: 'rgba(255, 255, 255, 0.05)'
+                  borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+                  background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(147, 51, 234, 0.08) 100%)',
+                  willChange: 'auto'
                 }}
               >
                 <h3
@@ -4065,12 +4093,12 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       }}
                       style={{
                         background: timePeriod === option.value 
-                          ? 'rgba(255, 255, 255, 0.3)' 
-                          : 'transparent',
-                        border: 'none',
+                          ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(147, 51, 234, 0.2) 100%)' 
+                          : 'rgba(255, 255, 255, 0.03)',
+                        border: timePeriod === option.value ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid transparent',
                         borderRadius: '12px',
                         padding: '1rem 1.5rem',
-                        color: 'white',
+                        color: timePeriod === option.value ? '#fff' : 'rgba(255, 255, 255, 0.8)',
                         cursor: 'pointer',
                         fontSize: '1rem',
                         fontWeight: timePeriod === option.value ? '600' : '400',
@@ -4078,16 +4106,19 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         textAlign: 'left',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between'
+                        justifyContent: 'space-between',
+                        boxShadow: timePeriod === option.value ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none'
                       }}
                       onMouseEnter={(e) => {
                         if (timePeriod !== option.value) {
-                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.1)';
+                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.08)';
+                          (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
                         }
                       }}
                       onMouseLeave={(e) => {
                         if (timePeriod !== option.value) {
-                          (e.target as HTMLElement).style.background = 'transparent';
+                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.03)';
+                          (e.target as HTMLElement).style.borderColor = 'transparent';
                         }
                       }}
                     >
@@ -4102,16 +4133,18 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
               {/* Right Panel - Calendar */}
               <div
+                key="right-panel"
                 style={{
                   flex: 1,
                   padding: '2rem',
-                  background: 'rgba(255, 255, 255, 0.95)',
-                  color: '#333'
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  color: '#fff',
+                  willChange: 'auto'
                 }}
               >
                   <h3
                   style={{
-                    color: '#333',
+                    color: '#fff',
                     fontSize: '1.2rem',
                     fontWeight: '600',
                     marginBottom: '1.5rem',
@@ -4170,7 +4203,9 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                      display: 'flex',
                      flexDirection: 'column',
                      alignItems: 'center',
-                     gap: '1rem'
+                     gap: '1rem',
+                     transition: 'opacity 0.2s ease-in-out',
+                     opacity: 1
                    }}
                  >
                                      {/* Month/Year Navigation */}
@@ -4182,50 +4217,50 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                        marginBottom: '1rem'
                      }}
                    >
-                     <button
-                       onClick={() => navigateCalendar('prev')}
-                       style={{
-                         background: 'none',
-                         border: '1px solid #ccc',
-                         borderRadius: '6px',
-                         padding: '0.5rem',
-                         cursor: 'pointer',
-                         color: '#666',
-                         transition: 'all 0.2s ease'
-                       }}
-                       onMouseEnter={(e) => {
-                         (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
-                         (e.target as HTMLElement).style.borderColor = '#999';
-                       }}
-                       onMouseLeave={(e) => {
-                         (e.target as HTMLElement).style.backgroundColor = 'transparent';
-                         (e.target as HTMLElement).style.borderColor = '#ccc';
-                       }}
+                                         <button
+                      onClick={() => navigateCalendar('prev')}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '8px',
+                        padding: '0.5rem',
+                        cursor: 'pointer',
+                        color: 'rgba(255, 255, 255, 0.8)',
+                        transition: 'all 0.2s ease'
+                      }}
+                                             onMouseEnter={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                      }}
                      >
                        ←
                      </button>
-                     <span style={{ fontSize: '1.1rem', fontWeight: '600', minWidth: '150px', textAlign: 'center' }}>
-                       {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                     </span>
-                     <button
-                       onClick={() => navigateCalendar('next')}
-                       style={{
-                         background: 'none',
-                         border: '1px solid #ccc',
-                         borderRadius: '6px',
-                         padding: '0.5rem',
-                         cursor: 'pointer',
-                         color: '#666',
-                         transition: 'all 0.2s ease'
-                       }}
-                       onMouseEnter={(e) => {
-                         (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
-                         (e.target as HTMLElement).style.borderColor = '#999';
-                       }}
-                       onMouseLeave={(e) => {
-                         (e.target as HTMLElement).style.backgroundColor = 'transparent';
-                         (e.target as HTMLElement).style.borderColor = '#ccc';
-                       }}
+                                         <span style={{ fontSize: '1.1rem', fontWeight: '600', minWidth: '150px', textAlign: 'center', color: '#fff' }}>
+                      {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    </span>
+                                         <button
+                      onClick={() => navigateCalendar('next')}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '8px',
+                        padding: '0.5rem',
+                        cursor: 'pointer',
+                        color: 'rgba(255, 255, 255, 0.8)',
+                        transition: 'all 0.2s ease'
+                      }}
+                                             onMouseEnter={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                      }}
                      >
                        →
                      </button>
@@ -4233,12 +4268,16 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
                   {/* Calendar Grid */}
                   <div
+                    key={`${selectedDate.getMonth()}-${selectedDate.getFullYear()}`}
                     style={{
                       display: 'grid',
                       gridTemplateColumns: 'repeat(7, 1fr)',
                       gap: '0.5rem',
                       width: '100%',
-                      maxWidth: '350px'
+                      maxWidth: '350px',
+                      minHeight: '300px',
+                      opacity: 1,
+                      animation: 'fadeIn 0.15s ease-out'
                     }}
                   >
                     {/* Day Headers */}
@@ -4250,7 +4289,9 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                           textAlign: 'center',
                           fontSize: '0.8rem',
                           fontWeight: '600',
-                          color: '#666'
+                          color: 'rgba(255, 255, 255, 0.5)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
                         }}
                       >
                         {day}
@@ -4328,37 +4369,40 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                              style={{
                                padding: '0.75rem',
                                textAlign: 'center',
-                               borderRadius: '6px',
+                               borderRadius: '8px',
                                cursor: isFutureDate ? 'not-allowed' : 'pointer',
-                               border: 'none',
+                               border: isInSelectedRange 
+                                 ? '1px solid rgba(59, 130, 246, 0.5)' 
+                                 : '1px solid transparent',
                                background: isInSelectedRange 
-                                 ? '#667eea' 
+                                 ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.3) 0%, rgba(147, 51, 234, 0.3) 100%)' 
                                  : isToday 
-                                   ? '#e0e7ff' 
+                                   ? 'rgba(59, 130, 246, 0.15)' 
                                    : isFutureDate 
-                                     ? '#f5f5f5' 
-                                     : 'transparent',
+                                     ? 'rgba(255, 255, 255, 0.02)' 
+                                     : 'rgba(255, 255, 255, 0.03)',
                                color: isInSelectedRange 
-                                 ? 'white' 
+                                 ? '#fff' 
                                  : isToday 
-                                   ? '#667eea' 
+                                   ? 'rgba(59, 130, 246, 1)' 
                                    : isFutureDate 
-                                     ? '#ccc' 
-                                     : '#333',
+                                     ? 'rgba(255, 255, 255, 0.3)' 
+                                     : 'rgba(255, 255, 255, 0.8)',
                                fontWeight: isToday ? '600' : isInSelectedRange ? '500' : '400',
                                transition: 'all 0.2s ease',
-                               opacity: isFutureDate ? 0.5 : 1
+                               opacity: isFutureDate ? 0.5 : 1,
+                               boxShadow: isInSelectedRange ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none'
                              }}
                              onMouseEnter={(e) => {
                                if (!isFutureDate && !isInSelectedRange) {
-                                 (e.target as HTMLElement).style.backgroundColor = '#f0f4ff';
-                                 (e.target as HTMLElement).style.color = '#667eea';
+                                 (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+                                 (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
                                }
                              }}
                              onMouseLeave={(e) => {
                                if (!isFutureDate && !isInSelectedRange) {
-                                 (e.target as HTMLElement).style.backgroundColor = isToday ? '#e0e7ff' : isFutureDate ? '#f5f5f5' : 'transparent';
-                                 (e.target as HTMLElement).style.color = isToday ? '#667eea' : isFutureDate ? '#ccc' : '#333';
+                                 (e.target as HTMLElement).style.backgroundColor = isToday ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.03)';
+                                 (e.target as HTMLElement).style.borderColor = 'transparent';
                                }
                              }}
                            >
@@ -5208,8 +5252,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              animation: 'fadeIn 0.3s ease-out',
-              padding: '2rem'
+              padding: '2rem',
+              willChange: 'auto'
             }}
             onClick={(e) => {
               // Only close if clicking directly on the backdrop, not on child elements
@@ -5221,22 +5265,26 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
           >
             {/* Modal Content */}
             <div
+              key="modal-content"
               data-time-dropdown="true"
               onClick={(e) => e.stopPropagation()}
               style={{
-                background: 'rgba(20,24,45,0.6)',
+                background: 'linear-gradient(145deg, rgba(17, 24, 39, 0.95) 0%, rgba(31, 41, 55, 0.95) 50%, rgba(55, 65, 81, 0.95) 100%)',
                 borderRadius: '24px',
                 padding: '0',
                 width: '800px',
                 maxWidth: '90vw',
-                height: '500px',
-                maxHeight: '80vh',
-                boxShadow: '0 25px 50px rgba(0, 0, 0, 0.5)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
+                height: '550px',
+                maxHeight: '85vh',
+                boxShadow: '0 30px 60px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
                 position: 'relative',
-                animation: 'slideIn 0.3s ease-out',
                 display: 'flex',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                willChange: 'auto',
+                transform: 'translateZ(0)'
               }}
             >
               {/* Close Button */}
@@ -5272,11 +5320,13 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
               {/* Left Panel - Time Period Options */}
               <div
+                key="left-panel"
                 style={{
                   flex: '0 0 300px',
                   padding: '2rem',
-                  borderRight: '1px solid rgba(255, 255, 255, 0.2)',
-                  background: 'rgba(255, 255, 255, 0.05)'
+                  borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+                  background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(147, 51, 234, 0.08) 100%)',
+                  willChange: 'auto'
                 }}
               >
                 <h3
@@ -5326,12 +5376,12 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       }}
                       style={{
                         background: timePeriod === option.value 
-                          ? 'rgba(255, 255, 255, 0.3)' 
-                          : 'transparent',
-                        border: 'none',
+                          ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(147, 51, 234, 0.2) 100%)' 
+                          : 'rgba(255, 255, 255, 0.03)',
+                        border: timePeriod === option.value ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid transparent',
                         borderRadius: '12px',
                         padding: '1rem 1.5rem',
-                        color: 'white',
+                        color: timePeriod === option.value ? '#fff' : 'rgba(255, 255, 255, 0.8)',
                         cursor: 'pointer',
                         fontSize: '1rem',
                         fontWeight: timePeriod === option.value ? '600' : '400',
@@ -5339,16 +5389,19 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         textAlign: 'left',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between'
+                        justifyContent: 'space-between',
+                        boxShadow: timePeriod === option.value ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none'
                       }}
                       onMouseEnter={(e) => {
                         if (timePeriod !== option.value) {
-                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.1)';
+                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.08)';
+                          (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
                         }
                       }}
                       onMouseLeave={(e) => {
                         if (timePeriod !== option.value) {
-                          (e.target as HTMLElement).style.background = 'transparent';
+                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.03)';
+                          (e.target as HTMLElement).style.borderColor = 'transparent';
                         }
                       }}
                     >
@@ -5363,16 +5416,18 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
               {/* Right Panel - Calendar */}
               <div
+                key="right-panel"
                 style={{
                   flex: 1,
                   padding: '2rem',
-                  background: 'rgba(255, 255, 255, 0.95)',
-                  color: '#333'
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  color: '#fff',
+                  willChange: 'auto'
                 }}
               >
                 <h3
                   style={{
-                    color: '#333',
+                    color: '#fff',
                     fontSize: '1.2rem',
                     fontWeight: '600',
                     marginBottom: '1.5rem',
@@ -5483,12 +5538,16 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
                   {/* Calendar Grid */}
                   <div
+                    key={`${selectedDate.getMonth()}-${selectedDate.getFullYear()}`}
                     style={{
                       display: 'grid',
                       gridTemplateColumns: 'repeat(7, 1fr)',
                       gap: '0.25rem',
                       width: '100%',
-                      maxWidth: '350px'
+                      maxWidth: '350px',
+                      minHeight: '300px',
+                      opacity: 1,
+                      animation: 'fadeIn 0.15s ease-out'
                     }}
                   >
                     {/* Day Headers */}
