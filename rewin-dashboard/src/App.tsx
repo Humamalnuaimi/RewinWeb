@@ -3178,30 +3178,32 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                   <h2 style={{ color: 'white', margin: 0, fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
                     {(() => {
                       const { startDate, endDate } = getCurrentDateRange();
-                      if (timePeriod === 'this_week' || timePeriod === 'last_week') {
-                        const shortOpts = { weekday: 'short', month: 'short', day: 'numeric' } as const;
-                        const startStr = startDate.toLocaleDateString('en-US', shortOpts);
-                        const endStr = endDate.toLocaleDateString('en-US', shortOpts);
-                        const sameYear = startDate.getFullYear() === endDate.getFullYear();
-                        const yearSuffix = sameYear ? `, ${endDate.getFullYear()}` : `, ${startDate.getFullYear()} to ${endDate.getFullYear()}`;
-                        return `${startStr} to ${endStr}${yearSuffix}`;
+                      switch (timePeriod) {
+                        case 'today':
+                          return formatDate(selectedDate);
+                        case 'yesterday':
+                          return formatDate(startDate);
+                        case 'this_week':
+                        case 'last_week':
+                          const shortOpts = { weekday: 'short', month: 'short', day: 'numeric' } as const;
+                          const startStr = startDate.toLocaleDateString('en-US', shortOpts);
+                          const endStr = endDate.toLocaleDateString('en-US', shortOpts);
+                          const sameYear = startDate.getFullYear() === endDate.getFullYear();
+                          const yearSuffix = sameYear ? `, ${endDate.getFullYear()}` : `, ${startDate.getFullYear()} to ${endDate.getFullYear()}`;
+                          return `${startStr} to ${endStr}${yearSuffix}`;
+                        case 'this_month':
+                          return startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                        case 'last_month':
+                          return startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                        case 'custom_range':
+                          const start = customRangeStart ?? startDate;
+                          const end = customRangeEnd ?? endDate;
+                          const s = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                          const e = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                          return `${s} to ${e}`;
+                        default:
+                          return formatDate(selectedDate);
                       }
-                      if (timePeriod === 'custom_range') {
-                        const start = customRangeStart ?? startDate;
-                        const end = customRangeEnd ?? endDate;
-                        const s = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                        const e = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                        return `${s} to ${e}`;
-                      }
-                      if (timePeriod === 'this_month') {
-                        return selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                      }
-                      if (timePeriod === 'last_month') {
-                        const lastMonth = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);
-                        return lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                      }
-                      // today / yesterday / default single day
-                      return formatDate(selectedDate);
                     })()}
                     <svg 
                       width="16" 
