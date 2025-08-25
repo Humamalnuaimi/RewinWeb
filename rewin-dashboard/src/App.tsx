@@ -4552,41 +4552,55 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 <h2 style={{ color: 'white', margin: 0, fontSize: '1.5rem' }}>
                   {(() => {
                     const { startDate, endDate } = getCurrentDateRange();
-                    if (timePeriod === 'this_week' || timePeriod === 'last_week') {
-                      const shortOpts = { weekday: 'short', month: 'short', day: 'numeric' } as const;
-                      const startStr = startDate.toLocaleDateString('en-US', shortOpts);
-                      const endStr = endDate.toLocaleDateString('en-US', shortOpts);
-                      const sameYear = startDate.getFullYear() === endDate.getFullYear();
-                      const yearSuffix = sameYear ? `, ${endDate.getFullYear()}` : `, ${startDate.getFullYear()} to ${endDate.getFullYear()}`;
-                      return `${startStr} to ${endStr}${yearSuffix}`;
+                    switch (timePeriod) {
+                      case 'today':
+                        return formatDate(selectedDate);
+                      case 'yesterday':
+                        return formatDate(startDate);
+                      case 'this_week':
+                      case 'last_week':
+                        const shortOpts = { weekday: 'short', month: 'short', day: 'numeric' } as const;
+                        const startStr = startDate.toLocaleDateString('en-US', shortOpts);
+                        const endStr = endDate.toLocaleDateString('en-US', shortOpts);
+                        const sameYear = startDate.getFullYear() === endDate.getFullYear();
+                        const yearSuffix = sameYear ? `, ${endDate.getFullYear()}` : `, ${startDate.getFullYear()} to ${endDate.getFullYear()}`;
+                        return `${startStr} to ${endStr}${yearSuffix}`;
+                      case 'this_month':
+                        return startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                      case 'last_month':
+                        return startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                      case 'custom_range':
+                        const start = customRangeStart ?? startDate;
+                        const end = customRangeEnd ?? endDate;
+                        const s = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                        const e = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                        return `${s} to ${e}`;
+                      default:
+                        return formatDate(selectedDate);
                     }
-                    if (timePeriod === 'custom_range') {
-                      const start = customRangeStart ?? startDate;
-                      const end = customRangeEnd ?? endDate;
-                      const s = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                      const e = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                      return `${s} to ${e}`;
-                    }
-                    if (timePeriod === 'this_month') {
-                      return selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                    }
-                    if (timePeriod === 'last_month') {
-                      const lastMonth = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);
-                      return lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                    }
-                    return formatDate(selectedDate);
                   })()}
                 </h2>
                 <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
-                  {timePeriod === 'today' ? (
-                    isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`
-                  ) : 
-                   timePeriod === 'yesterday' ? 'Yesterday' :
-                   timePeriod === 'this_week' ? 'This Week' :
-                   timePeriod === 'last_week' ? 'Last Week' :
-                   timePeriod === 'this_month' ? 'This Month' :
-                   timePeriod === 'last_month' ? 'Last Month' :
-                   isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`}
+                  {(() => {
+                    switch (timePeriod) {
+                      case 'today':
+                        return isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`;
+                      case 'yesterday':
+                        return 'Yesterday';
+                      case 'this_week':
+                        return 'This Week';
+                      case 'last_week':
+                        return 'Last Week';
+                      case 'this_month':
+                        return 'This Month';
+                      case 'last_month':
+                        return 'Last Month';
+                      case 'custom_range':
+                        return 'Custom Range';
+                      default:
+                        return isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`;
+                    }
+                  })()}
                 </p>
               </button>
               
