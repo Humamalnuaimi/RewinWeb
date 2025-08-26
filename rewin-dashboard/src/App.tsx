@@ -2610,7 +2610,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               </div>
               
               <div style={{ display: 'flex', gap: '1rem' }}>
-                {!isToday(selectedDate) && (
+                {(!isToday(selectedDate) || timePeriod !== 'today') && (
                   <button
                     onClick={goToToday}
                     style={{
@@ -3229,10 +3229,24 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                                   setCustomRangeStart(currentDate);
                                   setCustomRangeEnd(null);
                                 }
-                              } else {
-                                setSelectedDate(currentDate);
-                                setTimePeriod('today');
-                                setTimeDropdownOpen(false);
+                                                            } else {
+                                console.log('🔥 CALENDAR DATE CLICKED:', currentDate.toDateString());
+                                console.log('🔥 IS TODAY?', currentDate.toDateString() === new Date().toDateString());
+                                
+                                // Use flushSync to ensure state updates are synchronous
+                                flushSync(() => {
+                                  setSelectedDate(currentDate);
+                                  // Only set timePeriod to 'today' if the selected date is actually today
+                                  if (currentDate.toDateString() === new Date().toDateString()) {
+                                    console.log('🔥 SETTING TIMEPERIOD TO TODAY');
+                                    setTimePeriod('today');
+                                  } else {
+                                    console.log('🔥 NOT TODAY - KEEPING CURRENT TIMEPERIOD:', timePeriod);
+                                  }
+                                  setTimeDropdownOpen(false);
+                                });
+                                
+                                console.log('🔥 AFTER FLUSHSYNC - selectedDate should be:', currentDate.toDateString());
                                 }
                               }
                             }}
@@ -3888,7 +3902,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               </div>
               
               <div style={{ display: 'flex', gap: '1rem' }}>
-                {!isToday(selectedDate) && (
+                {(!isToday(selectedDate) || timePeriod !== 'today') && (
                   <button
                     onClick={goToToday}
                     style={{
@@ -4651,9 +4665,17 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                                   }
 
                                   // Single day selection flow
+                                  console.log('🔥 POINTS HISTORY CALENDAR DATE CLICKED:', clicked.toDateString());
+                                  console.log('🔥 IS TODAY?', clicked.toDateString() === new Date().toDateString());
                                   flushSync(() => {
-                                    setTimePeriod('today');
                                     setSelectedDate(clicked);
+                                    // Only set timePeriod to 'today' if the selected date is actually today
+                                    if (clicked.toDateString() === new Date().toDateString()) {
+                                      console.log('🔥 POINTS HISTORY SETTING TIMEPERIOD TO TODAY');
+                                      setTimePeriod('today');
+                                    } else {
+                                      console.log('🔥 POINTS HISTORY NOT TODAY - KEEPING CURRENT TIMEPERIOD');
+                                    }
                                     setTimeDropdownOpen(false);
                                   });
                                   console.log('✅ Single day selected:', clicked.toLocaleDateString());
@@ -5304,7 +5326,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               </button>
               
               <div style={{ display: 'flex', gap: '1rem' }}>
-                {!isToday(selectedDate) && (
+                {(!isToday(selectedDate) || timePeriod !== 'today') && (
                   <button
                     onClick={goToToday}
                     style={{
@@ -5881,9 +5903,9 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       <div
                         key={day}
                         style={{
-                          padding: '0.5rem',
-                          textAlign: 'center',
-                          fontSize: '0.8rem',
+                        padding: '0.5rem',
+                        textAlign: 'center',
+                        fontSize: '0.8rem',
                           fontWeight: '600',
                           color: 'rgba(255, 255, 255, 0.5)',
                           textTransform: 'uppercase',
@@ -5934,9 +5956,9 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                                  const clicked = new Date(selectedDay);
                                  console.log('📅 Date selected from calendar:', clicked.toLocaleDateString());
 
-                                 if (timePeriod === 'custom_range') {
+                              if (timePeriod === 'custom_range') {
                                    // First click sets start, second sets end then close
-                                   if (!customRangeStart) {
+                                if (!customRangeStart) {
                                      setCustomRangeStart(clicked);
                                      console.log('🔹 Set customRangeStart:', clicked.toDateString());
                                      return;
@@ -5945,21 +5967,29 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                                      setCustomRangeEnd(clicked);
                                      console.log('🔸 Set customRangeEnd:', clicked.toDateString());
                                      // Close after selecting end
-                                     setTimeDropdownOpen(false);
+                                    setTimeDropdownOpen(false);
                                      return;
                                    }
                                  }
 
-                                 // Single day selection flow
+                                                                  // Single day selection flow
+                                 console.log('🔥 CHECK-INS CALENDAR DATE CLICKED:', clicked.toDateString());
+                                 console.log('🔥 IS TODAY?', clicked.toDateString() === new Date().toDateString());
                                  flushSync(() => {
-                                   setTimePeriod('today');
                                    setSelectedDate(clicked);
+                                   // Only set timePeriod to 'today' if the selected date is actually today
+                                   if (clicked.toDateString() === new Date().toDateString()) {
+                                     console.log('🔥 CHECK-INS SETTING TIMEPERIOD TO TODAY');
+                                     setTimePeriod('today');
+                                   } else {
+                                     console.log('🔥 CHECK-INS NOT TODAY - KEEPING CURRENT TIMEPERIOD');
+                                   }
                                    setTimeDropdownOpen(false);
                                  });
                                  console.log('✅ Single day selected:', clicked.toLocaleDateString());
                                } else {
                                console.log('❌ Future date clicked, ignoring');
-                             }
+                                }
                             })(currentDate)}
                             disabled={isFutureDate}
                             style={{
@@ -6309,7 +6339,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               </div>
               
               <div style={{ display: 'flex', gap: '1rem' }}>
-                {!isToday(selectedDate) && (
+                {(!isToday(selectedDate) || timePeriod !== 'today') && (
                   <button
                     onClick={goToToday}
                     style={{
