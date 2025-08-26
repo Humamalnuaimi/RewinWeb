@@ -4848,6 +4848,23 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       return { startDate, endDate };
     };
 
+    // Check if a date is in the selected range
+    const isDateInSelectedRange = (date: Date) => {
+      const { startDate, endDate } = getCurrentDateRange();
+      const checkDate = new Date(date);
+      checkDate.setHours(12, 0, 0, 0); // Set to noon to avoid timezone issues
+      return checkDate >= startDate && checkDate <= endDate;
+    };
+
+    // Calendar navigation function
+    const navigateCalendar = (direction: 'prev' | 'next') => {
+      const newDate = new Date(selectedDate);
+      newDate.setMonth(selectedDate.getMonth() + (direction === 'next' ? 1 : -1));
+      requestAnimationFrame(() => {
+        setSelectedDate(newDate);
+      });
+    };
+
     useEffect(() => {
       if (!user?.uid) return;
 
@@ -5782,7 +5799,9 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
-                    gap: '1rem'
+                    gap: '1rem',
+                    transition: 'opacity 0.2s ease-in-out',
+                    opacity: 1
                   }}
                 >
                   {/* Month/Year Navigation */}
@@ -5790,47 +5809,56 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'space-between',
-                      width: '100%',
+                      gap: '1rem',
                       marginBottom: '1rem'
                     }}
                   >
                     <button
-                      onClick={() => {
-                        const newDate = new Date(selectedDate);
-                        newDate.setMonth(selectedDate.getMonth() - 1);
-                        setSelectedDate(newDate);
-                      }}
+                      onClick={() => navigateCalendar('prev')}
                       style={{
-                        background: 'none',
-                        border: '1px solid #ddd',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
                         borderRadius: '8px',
-                        padding: '0.5rem 1rem',
+                        padding: '0.5rem',
                         cursor: 'pointer',
-                        color: '#666'
+                        color: 'rgba(255, 255, 255, 0.8)',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
                       }}
                     >
-                      ← Previous
+                      ←
                     </button>
-                    <h4 style={{ margin: 0, color: '#333', fontSize: '1.1rem' }}>
+                    <span style={{ fontSize: '1.1rem', fontWeight: '600', minWidth: '150px', textAlign: 'center', color: '#fff' }}>
                       {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                    </h4>
+                    </span>
                     <button
-                      onClick={() => {
-                        const newDate = new Date(selectedDate);
-                        newDate.setMonth(selectedDate.getMonth() + 1);
-                        setSelectedDate(newDate);
-                      }}
+                      onClick={() => navigateCalendar('next')}
                       style={{
-                        background: 'none',
-                        border: '1px solid #ddd',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
                         borderRadius: '8px',
-                        padding: '0.5rem 1rem',
+                        padding: '0.5rem',
                         cursor: 'pointer',
-                        color: '#666'
+                        color: 'rgba(255, 255, 255, 0.8)',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
                       }}
                     >
-                      Next →
+                      →
                     </button>
                   </div>
 
@@ -5840,7 +5868,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                     style={{
                       display: 'grid',
                       gridTemplateColumns: 'repeat(7, 1fr)',
-                      gap: '0.25rem',
+                      gap: '0.5rem',
                       width: '100%',
                       maxWidth: '350px',
                       minHeight: '300px',
@@ -5850,13 +5878,18 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                   >
                     {/* Day Headers */}
                     {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                      <div key={day} style={{
-                        padding: '0.5rem',
-                        textAlign: 'center',
-                        fontWeight: '600',
-                        fontSize: '0.8rem',
-                        color: '#666'
-                      }}>
+                      <div
+                        key={day}
+                        style={{
+                          padding: '0.5rem',
+                          textAlign: 'center',
+                          fontSize: '0.8rem',
+                          fontWeight: '600',
+                          color: 'rgba(255, 255, 255, 0.5)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
+                        }}
+                      >
                         {day}
                       </div>
                     ))}
@@ -5867,79 +5900,109 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       const month = selectedDate.getMonth();
                       const firstDay = new Date(year, month, 1);
                       const lastDay = new Date(year, month + 1, 0);
-                      const startDate = new Date(firstDay);
-                      startDate.setDate(startDate.getDate() - firstDay.getDay());
+                      const startingDayOfWeek = firstDay.getDay();
+                      const daysInMonth = lastDay.getDate();
+                      const today = new Date();
+                      
+                      console.log('🗓️ Rendering calendar for:', year, month + 1, 'with', daysInMonth, 'days');
                       
                       const days = [];
-                      for (let i = 0; i < 42; i++) {
-                        const currentDate = new Date(startDate);
-                        currentDate.setDate(startDate.getDate() + i);
-                        const isCurrentMonth = currentDate.getMonth() === month;
-                        const isSelected = currentDate.toDateString() === selectedDate.toDateString();
-                        const isToday = currentDate.toDateString() === new Date().toDateString();
+                      
+                      // Empty cells for days before the first day of the month
+                      for (let i = 0; i < startingDayOfWeek; i++) {
+                        days.push(
+                          <div key={`empty-${i}`} style={{ padding: '0.75rem' }}></div>
+                        );
+                      }
+                      
+                      // Days of the month
+                      for (let day = 1; day <= daysInMonth; day++) {
+                        const currentDate = new Date(year, month, day);
+                        const isToday = currentDate.toDateString() === today.toDateString();
+                        const isInSelectedRange = isDateInSelectedRange(currentDate);
+                        const isFutureDate = currentDate > today;
                         
                         days.push(
                           <button
-                            key={i}
-                            onClick={() => {
-                              if (timePeriod === 'custom_range') {
-                                if (!customRangeStart) {
-                                  setCustomRangeStart(currentDate);
-                                  console.log('📅 Custom range start set:', currentDate);
-                                } else if (!customRangeEnd) {
-                                  const start = customRangeStart;
-                                  const end = currentDate;
-                                  if (end >= start) {
-                                    setCustomRangeEnd(end);
-                                    console.log('📅 Custom range end set:', end);
-                                    setTimeDropdownOpen(false);
-                                  } else {
-                                    // If end is before start, swap them
-                                    setCustomRangeStart(end);
-                                    setCustomRangeEnd(start);
-                                    console.log('📅 Custom range swapped - start:', end, 'end:', start);
-                                    setTimeDropdownOpen(false);
-                                  }
-                                } else {
-                                  // Reset and start over
-                                  setCustomRangeStart(currentDate);
-                                  setCustomRangeEnd(null);
-                                  console.log('📅 Custom range reset - new start:', currentDate);
-                                }
-                              } else {
-                                setSelectedDate(currentDate);
-                                if (timePeriod === 'today') {
-                                  setTimeDropdownOpen(false);
-                                }
-                              }
-                            }}
+                             key={day}
+                             onClick={((selectedDay) => (e) => {
+                              console.log('🔥 CALENDAR BUTTON CLICKED!', selectedDay.getDate(), 'isFutureDate:', selectedDay > today);
+                              e.preventDefault();
+                              e.stopPropagation();
+                              e.nativeEvent.stopImmediatePropagation();
+                               if (selectedDay <= today) {
+                                 const clicked = new Date(selectedDay);
+                                 console.log('📅 Date selected from calendar:', clicked.toLocaleDateString());
+
+                                 if (timePeriod === 'custom_range') {
+                                   // First click sets start, second sets end then close
+                                   if (!customRangeStart) {
+                                     setCustomRangeStart(clicked);
+                                     console.log('🔹 Set customRangeStart:', clicked.toDateString());
+                                     return;
+                                   }
+                                   if (!customRangeEnd) {
+                                     setCustomRangeEnd(clicked);
+                                     console.log('🔸 Set customRangeEnd:', clicked.toDateString());
+                                     // Close after selecting end
+                                     setTimeDropdownOpen(false);
+                                     return;
+                                   }
+                                 }
+
+                                 // Single day selection flow
+                                 flushSync(() => {
+                                   setTimePeriod('today');
+                                   setSelectedDate(clicked);
+                                   setTimeDropdownOpen(false);
+                                 });
+                                 console.log('✅ Single day selected:', clicked.toLocaleDateString());
+                               } else {
+                               console.log('❌ Future date clicked, ignoring');
+                             }
+                            })(currentDate)}
+                            disabled={isFutureDate}
                             style={{
-                              padding: '0.5rem',
-                              border: 'none',
+                              padding: '0.75rem',
+                              textAlign: 'center',
                               borderRadius: '8px',
-                              background: isSelected ? '#667eea' : 
-                                         isToday ? '#f0f0f0' : 
-                                         'transparent',
-                              color: isSelected ? 'white' : 
-                                     isToday ? '#333' : 
-                                     isCurrentMonth ? '#333' : '#ccc',
-                              cursor: 'pointer',
-                              fontSize: '0.9rem',
-                              fontWeight: isSelected || isToday ? '600' : '400',
-                              transition: 'all 0.2s ease'
+                              cursor: isFutureDate ? 'not-allowed' : 'pointer',
+                              border: isInSelectedRange 
+                                ? '1px solid rgba(59, 130, 246, 0.5)' 
+                                : '1px solid transparent',
+                              background: isInSelectedRange 
+                                ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.3) 0%, rgba(147, 51, 234, 0.3) 100%)' 
+                                : isToday 
+                                  ? 'rgba(59, 130, 246, 0.15)' 
+                                  : isFutureDate 
+                                    ? 'rgba(255, 255, 255, 0.02)' 
+                                    : 'rgba(255, 255, 255, 0.03)',
+                              color: isInSelectedRange 
+                                ? '#fff' 
+                                : isToday 
+                                  ? 'rgba(59, 130, 246, 1)' 
+                                  : isFutureDate 
+                                    ? 'rgba(255, 255, 255, 0.3)' 
+                                    : 'rgba(255, 255, 255, 0.8)',
+                              fontWeight: isToday ? '600' : isInSelectedRange ? '500' : '400',
+                              transition: 'all 0.2s ease',
+                              opacity: isFutureDate ? 0.5 : 1,
+                              boxShadow: isInSelectedRange ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none'
                             }}
                             onMouseEnter={(e) => {
-                              if (!isSelected) {
-                                (e.target as HTMLElement).style.background = '#f5f5f5';
+                              if (!isFutureDate && !isInSelectedRange) {
+                                (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+                                (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
                               }
                             }}
                             onMouseLeave={(e) => {
-                              if (!isSelected) {
-                                (e.target as HTMLElement).style.background = isToday ? '#f0f0f0' : 'transparent';
+                              if (!isFutureDate && !isInSelectedRange) {
+                                (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
+                                (e.target as HTMLElement).style.borderColor = 'transparent';
                               }
                             }}
                           >
-                            {currentDate.getDate()}
+                            {day}
                           </button>
                         );
                       }
