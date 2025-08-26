@@ -435,14 +435,115 @@ const OutletAnalyticsPage = ({ onBack }: { onBack: () => void }) => {
   const [outletsData, setOutletsData] = useState<any[]>([]);
   const [analyticsData, setAnalyticsData] = useState<any>({});
   const [loading, setLoading] = useState(true);
-  const [selectedTimeframe, setSelectedTimeframe] = useState('30days');
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [datePickerMode, setDatePickerMode] = useState('preset'); // 'preset' or 'custom'
-
+  const [timePeriod, setTimePeriod] = useState<'today' | 'yesterday' | 'this-week' | 'last-week' | 'this-month' | 'last-month' | 'custom'>('today');
+  const [timeDropdownOpen, setTimeDropdownOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
   const user = useContext(AuthContext)?.user;
+
+  // Date helper functions
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+  };
+
+  const navigateDate = (direction: 'prev' | 'next') => {
+    const newDate = new Date(selectedDate);
+    newDate.setDate(selectedDate.getDate() + (direction === 'next' ? 1 : -1));
+    setSelectedDate(newDate);
+    setTimePeriod('today'); // Reset to 'today' when navigating dates
+  };
+
+  const goToToday = () => {
+    setSelectedDate(new Date());
+    setTimePeriod('today');
+  };
+
+  const isToday = (date: Date) => {
+    const today = new Date();
+    return date.toDateString() === today.toDateString();
+  };
+
+  const getCurrentDateRange = () => {
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay());
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    
+    const lastWeekStart = new Date(startOfWeek);
+    lastWeekStart.setDate(startOfWeek.getDate() - 7);
+    const lastWeekEnd = new Date(endOfWeek);
+    lastWeekEnd.setDate(endOfWeek.getDate() - 7);
+    
+    const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+    
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+
+    switch (timePeriod) {
+      case 'today':
+        return { startDate: selectedDate, endDate: selectedDate };
+      case 'yesterday':
+        return { startDate: yesterday, endDate: yesterday };
+      case 'this-week':
+        return { startDate: startOfWeek, endDate: endOfWeek };
+      case 'last-week':
+        return { startDate: lastWeekStart, endDate: lastWeekEnd };
+      case 'this-month':
+        return { startDate: startOfMonth, endDate: endOfMonth };
+      case 'last-month':
+        return { startDate: lastMonthStart, endDate: lastMonthEnd };
+      default:
+        return { startDate: selectedDate, endDate: selectedDate };
+    }
+  };
+
+  const getDisplayDate = () => {
+    const { startDate, endDate } = getCurrentDateRange();
+    
+    if (timePeriod === 'today') {
+      return formatDate(selectedDate);
+    } else if (timePeriod === 'yesterday') {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      return formatDate(yesterday);
+    } else if (timePeriod === 'this-week' || timePeriod === 'last-week') {
+      const startStr = startDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      const endStr = endDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+      return `${startStr} to ${endStr}`;
+    } else if (timePeriod === 'this-month' || timePeriod === 'last-month') {
+      return startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    }
+    return formatDate(selectedDate);
+  };
+
+  const getSubtitle = () => {
+    switch (timePeriod) {
+      case 'today':
+        return isToday(selectedDate) ? 'Today\'s analytics' : 'Selected day analytics';
+      case 'yesterday':
+        return 'Yesterday\'s analytics';
+      case 'this-week':
+        return 'This week\'s analytics';
+      case 'last-week':
+        return 'Last week\'s analytics';
+      case 'this-month':
+        return 'This month\'s analytics';
+      case 'last-month':
+        return 'Last month\'s analytics';
+      default:
+        return 'Analytics overview';
+    }
+  };
 
   // Real-time data fetching with onSnapshot listeners
   useEffect(() => {
@@ -655,49 +756,106 @@ const OutletAnalyticsPage = ({ onBack }: { onBack: () => void }) => {
     <div style={{
       minHeight: '100vh',
       background: 'transparent',
-      padding: '2rem'
+      padding: '2rem',
+      position: 'relative'
     }}>
-      {/* Header - Admin Panel Style */}
-      <div style={{
-        background: 'rgba(255, 255, 255, 0.1)',
-        padding: '2rem',
-        borderRadius: '20px',
-        border: '1px solid rgba(255, 255, 255, 0.2)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)',
-        marginBottom: '2rem',
-        position: 'relative'
-      }}>
+            {/* Header - Rewards System Style */}
         <div style={{
+          position: 'absolute',
+          top: '1.5rem',
+          left: '1.5rem',
+          right: '1.5rem',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: '1rem'
+          zIndex: 10
         }}>
-          <div>
+        <button
+          onClick={onBack}
+          style={{
+            padding: '0.375rem 0.75rem',
+            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+            color: 'white',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '0.8rem',
+            fontWeight: '500',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.375rem',
+            backdropFilter: 'blur(10px)',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
+          }}
+          onMouseLeave={(e) => {
+            (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+          }}
+        >
+          ← Back to Dashboard
+        </button>
+        
+        <div style={{ textAlign: 'right' }}>
             <h1 style={{ 
               color: 'white', 
-              margin: '0 0 0.5rem 0', 
-              fontSize: '2.5rem', 
-              fontWeight: '700' 
+            margin: '0 0 0.125rem 0', 
+            fontSize: '1.75rem', 
+            fontWeight: '600',
+            letterSpacing: '-0.025em',
+            lineHeight: '1.2'
             }}>
               Outlet Management & Analytics
             </h1>
             <p style={{ 
-              color: 'rgba(255,255,255,0.8)', 
+            color: 'rgba(255,255,255,0.6)', 
               margin: 0, 
-              fontSize: '1.1rem' 
+            fontSize: '0.875rem',
+            fontWeight: '300',
+            letterSpacing: '0.005em',
+            lineHeight: '1.4'
             }}>
               Comprehensive insights across all your business locations
             </p>
+        </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            {/* Date Picker Button */}
+      {/* Content with top margin to account for header */}
+      <div style={{ marginTop: '5rem' }}>
+        {/* Date Navigation Section */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {/* Previous Day Button */}
+            <button
+              onClick={() => navigateDate('prev')}
+              style={{
+                padding: '0.5rem',
+                borderRadius: '8px',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                background: 'rgba(255, 255, 255, 0.1)',
+                color: 'white',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '1.2rem',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.1)';
+              }}
+            >
+              ←
+            </button>
+
+            {/* Date Display with Dropdown */}
             <div style={{ position: 'relative' }}>
               <button
-                onClick={() => setShowDatePicker(!showDatePicker)}
+                onClick={() => setTimeDropdownOpen(!timeDropdownOpen)}
                 style={{
                   padding: '0.75rem 1.5rem',
                   borderRadius: '12px',
@@ -711,56 +869,77 @@ const OutletAnalyticsPage = ({ onBack }: { onBack: () => void }) => {
                   fontWeight: '500',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.5rem'
+                  gap: '0.5rem',
+                  minWidth: '200px'
                 }}
                 onMouseEnter={(e) => {
                   (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.2)';
-                  (e.target as HTMLElement).style.transform = 'translateY(-1px)';
                 }}
                 onMouseLeave={(e) => {
                   (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.1)';
-                  (e.target as HTMLElement).style.transform = 'translateY(0)';
                 }}
               >
-                📅 {selectedTimeframe === '7days' ? 'Last 7 Days' : selectedTimeframe === '30days' ? 'Last 30 Days' : selectedTimeframe === '90days' ? 'Last 90 Days' : 'Custom Range'}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left' }}>
+                  <div style={{ fontSize: '1rem', fontWeight: '600' }}>{getDisplayDate()}</div>
+                  <div style={{ fontSize: '0.75rem', opacity: 0.8, fontWeight: '400' }}>{getSubtitle()}</div>
+                </div>
+                <span style={{ marginLeft: 'auto', fontSize: '0.8rem' }}>▼</span>
               </button>
-
-
             </div>
 
+            {/* Next Day Button */}
             <button
-              onClick={onBack}
+              onClick={() => navigateDate('next')}
               style={{
-                padding: '0.75rem 1.5rem',
-                borderRadius: '12px',
+                padding: '0.5rem',
+                borderRadius: '8px',
                 border: '1px solid rgba(255, 255, 255, 0.2)',
                 background: 'rgba(255, 255, 255, 0.1)',
-                backdropFilter: 'blur(10px)',
                 color: 'white',
-                fontSize: '1rem',
                 cursor: 'pointer',
-                transition: 'all 0.2s',
-                fontWeight: '500'
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '1.2rem',
+                transition: 'all 0.2s ease'
               }}
               onMouseEnter={(e) => {
                 (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.2)';
-                (e.target as HTMLElement).style.transform = 'translateY(-1px)';
               }}
               onMouseLeave={(e) => {
                 (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.1)';
-                (e.target as HTMLElement).style.transform = 'translateY(0)';
               }}
             >
-              ← Back to Dashboard
+              →
             </button>
-          </div>
         </div>
 
+          {/* Today Button - Only show if not today */}
+          {(!isToday(selectedDate) || timePeriod !== 'today') && (
+            <button
+              onClick={goToToday}
+              style={{
+                padding: '0.5rem 1rem',
+                borderRadius: '8px',
+                border: '1px solid rgba(59, 130, 246, 0.5)',
+                background: 'rgba(59, 130, 246, 0.2)',
+                color: '#60a5fa',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: '500',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                (e.target as HTMLElement).style.background = 'rgba(59, 130, 246, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                (e.target as HTMLElement).style.background = 'rgba(59, 130, 246, 0.2)';
+              }}
+            >
+              Today
+            </button>
+          )}
       </div>
-
-
-
-
 
       {/* Analytics Grid */}
       <div style={{
@@ -1333,6 +1512,137 @@ const OutletAnalyticsPage = ({ onBack }: { onBack: () => void }) => {
           into your outlet performance and customer behavior patterns.
         </p>
       </div>
+
+      {/* Time Period Dropdown Modal */}
+      {timeDropdownOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            backdropFilter: 'blur(4px)'
+          }}
+          onClick={() => setTimeDropdownOpen(false)}
+        >
+          <div
+            style={{
+              background: 'linear-gradient(135deg, rgba(17, 24, 39, 0.95) 0%, rgba(31, 41, 55, 0.95) 100%)',
+              borderRadius: '20px',
+              border: '1px solid rgba(75, 85, 99, 0.3)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05)',
+              width: '600px',
+              height: '400px',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              display: 'flex',
+              overflow: 'hidden'
+            }}
+            onClick={(e) => e.stopPropagation()}
+            data-time-dropdown="true"
+          >
+            {/* Left Panel - Time Period Options */}
+            <div
+              style={{
+                width: '50%',
+                padding: '2rem',
+                background: 'linear-gradient(135deg, rgba(17, 24, 39, 0.8) 0%, rgba(31, 41, 55, 0.8) 100%)',
+                borderRight: '1px solid rgba(75, 85, 99, 0.3)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.75rem'
+              }}
+              data-time-dropdown="true"
+            >
+              <h3 style={{ color: 'white', margin: '0 0 1rem 0', fontSize: '1.1rem', fontWeight: '600' }}>Select Time Period</h3>
+              
+              {[
+                { value: 'today', label: 'Today' },
+                { value: 'yesterday', label: 'Yesterday' },
+                { value: 'this-week', label: 'This Week' },
+                { value: 'last-week', label: 'Last Week' },
+                { value: 'this-month', label: 'This Month' },
+                { value: 'last-month', label: 'Last Month' }
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => {
+                    setTimePeriod(option.value as any);
+                    setTimeDropdownOpen(false);
+                  }}
+                  style={{
+                    padding: '0.75rem 1rem',
+                    borderRadius: '8px',
+                    border: timePeriod === option.value ? '1px solid rgba(59, 130, 246, 0.5)' : '1px solid rgba(75, 85, 99, 0.3)',
+                    background: timePeriod === option.value 
+                      ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(37, 99, 235, 0.2) 100%)'
+                      : 'rgba(31, 41, 55, 0.5)',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: '500',
+                    textAlign: 'left',
+                    transition: 'all 0.2s ease',
+                    boxShadow: timePeriod === option.value ? '0 0 0 1px rgba(59, 130, 246, 0.2)' : 'none'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (timePeriod !== option.value) {
+                      (e.target as HTMLElement).style.backgroundColor = 'rgba(75, 85, 99, 0.4)';
+                      (e.target as HTMLElement).style.borderColor = 'rgba(75, 85, 99, 0.5)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (timePeriod !== option.value) {
+                      (e.target as HTMLElement).style.backgroundColor = 'rgba(31, 41, 55, 0.5)';
+                      (e.target as HTMLElement).style.borderColor = 'rgba(75, 85, 99, 0.3)';
+                    }
+                  }}
+                  data-time-dropdown="true"
+                >
+                  {timePeriod === option.value && <span style={{ marginRight: '0.5rem' }}>✓</span>}
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Right Panel - Calendar Preview */}
+            <div
+              style={{
+                width: '50%',
+                padding: '2rem',
+                background: 'rgba(17, 24, 39, 0.8)',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
+                color: 'white'
+              }}
+              data-time-dropdown="true"
+            >
+              <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', fontWeight: '600' }}>Calendar Preview</h3>
+              <div style={{ 
+                fontSize: '0.9rem', 
+                opacity: 0.8,
+                lineHeight: '1.5'
+              }}>
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <strong>Selected:</strong> {timePeriod.charAt(0).toUpperCase() + timePeriod.slice(1).replace('-', ' ')}
+                </div>
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <strong>Date Range:</strong> {getDisplayDate()}
+                </div>
+                <div>
+                  <strong>Description:</strong> {getSubtitle()}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -8600,6 +8910,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               </div>
               
               <div 
+                onClick={() => handleCardClick('revenue')}
                 style={{
                   background: 'rgba(255, 255, 255, 0.1)',
                   color: 'white',
@@ -8611,7 +8922,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                   backdropFilter: 'blur(20px)',
                   border: '1px solid rgba(255, 255, 255, 0.2)',
                   borderTop: '4px solid #10b981',
-                  cursor: 'default',
+                  cursor: 'pointer',
                   transition: 'all 0.3s ease',
                   transform: 'translateY(0)'
                 }}
@@ -8640,7 +8951,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 </h3>
                 <p style={{ fontSize: '3.5rem', fontWeight: '900', margin: 0 }}>${data.revenue.toLocaleString()}</p>
                 <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>
-                  {selectedOutlet === 'all' ? 'All outlets' : 'This outlet'}
+                  {selectedOutlet === 'all' ? 'All outlets' : 'This outlet'} • Click to view details →
                 </div>
               </div>
               

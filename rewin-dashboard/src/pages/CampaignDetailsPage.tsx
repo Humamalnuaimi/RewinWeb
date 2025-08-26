@@ -422,12 +422,21 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
         marginBottom: '3rem',
         display: 'flex',
         alignItems: 'center',
-        gap: '1.5rem',
-        flexWrap: 'wrap'
+        justifyContent: 'center',
+        position: 'relative',
+        background: 'rgba(255, 255, 255, 0.1)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        border: '1px solid rgba(255, 255, 255, 0.2)',
+        borderRadius: '20px',
+        padding: '1.5rem 2rem',
+        boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)'
       }}>
         <button
           onClick={onBack}
           style={{
+            position: 'absolute',
+            left: '2rem',
             padding: '0.75rem 1.5rem',
             background: 'rgba(255, 255, 255, 0.1)',
             color: 'white',
@@ -450,42 +459,32 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
         >
           ← Back to Campaigns
         </button>
-        <h1 style={{
-          fontSize: '2.5rem',
-          fontWeight: '700',
-          color: 'white',
-          margin: 0,
-          flex: 1,
-          textShadow: '2px 2px 4px rgba(0,0,0,0.3)'
-        }}>
-          {String(campaign.name || 'Campaign Details')}
-        </h1>
-        <button
-          onClick={() => getAssignmentStats(campaignId!)}
-          style={{
-            padding: '0.75rem 1.5rem',
-            background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+        
+        <div style={{ textAlign: 'center' }}>
+          <h1 style={{
+            fontSize: '2.5rem',
+            fontWeight: '700',
             color: 'white',
-            border: 'none',
-            borderRadius: '12px',
-            cursor: 'pointer',
-            fontSize: '1rem',
-            fontWeight: '600',
-            boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)',
-            transition: 'all 0.2s ease'
-          }}
-          onMouseEnter={(e) => {
-            (e.target as HTMLButtonElement).style.transform = 'translateY(-2px)';
-            (e.target as HTMLButtonElement).style.boxShadow = '0 6px 16px rgba(59, 130, 246, 0.6)';
-          }}
-          onMouseLeave={(e) => {
-            (e.target as HTMLButtonElement).style.transform = 'translateY(0)';
-            (e.target as HTMLButtonElement).style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.4)';
-          }}
-        >
-          🔄 Refresh Stats
-        </button>
+            margin: '0 0 0.5rem 0',
+            textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+            letterSpacing: '1px'
+          }}>
+            Campaign & Promotion Management
+          </h1>
+          <p style={{
+            color: 'rgba(255,255,255,0.9)',
+            fontSize: '1.2rem',
+            fontWeight: '500',
+            margin: 0,
+            letterSpacing: '0.5px'
+          }}>
+            {String(campaign.name || 'Campaign Details')}
+          </p>
+        </div>
+        
         <span style={{
+          position: 'absolute',
+          right: '2rem',
           padding: '0.5rem 1rem',
           background: campaign.isActive ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
           color: 'white',
@@ -503,8 +502,8 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
       <div style={{
         background: 'rgba(255, 255, 255, 0.1)',
         borderRadius: '20px',
-        padding: '2.5rem',
-        marginBottom: '2rem',
+        padding: '2rem',
+        marginBottom: '1.5rem',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
         border: '1px solid rgba(255, 255, 255, 0.2)',
@@ -523,7 +522,7 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
         card.style.transform = 'translateY(0)';
         card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', textAlign: 'center' }}>
           <div style={{
             width: '48px',
             height: '48px',
@@ -531,11 +530,14 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
             borderRadius: '12px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            color: 'white'
           }}>
-            <span style={{ fontSize: '1.5rem' }}>⚙️</span>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
           </div>
-          <h2 style={{ color: 'white', margin: 0, fontSize: '1.5rem', fontWeight: '600' }}>Campaign Configuration</h2>
+          <h2 style={{ color: 'white', margin: 0, fontSize: '1.3rem', fontWeight: '600' }}>Campaign Configuration</h2>
         </div>
         
         <div style={{
@@ -547,7 +549,8 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
             background: 'rgba(255, 255, 255, 0.05)',
             padding: '1.5rem',
             borderRadius: '16px',
-            border: '1px solid rgba(255, 255, 255, 0.1)'
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            textAlign: 'center'
           }}>
             <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem', margin: '0 0 0.5rem 0', fontWeight: '500' }}>Trigger Type</p>
             <p style={{ color: 'white', fontSize: '1.3rem', margin: 0, fontWeight: '600' }}>
@@ -559,7 +562,8 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
             background: 'rgba(255, 255, 255, 0.05)',
             padding: '1.5rem',
             borderRadius: '16px',
-            border: '1px solid rgba(255, 255, 255, 0.1)'
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            textAlign: 'center'
           }}>
             <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem', margin: '0 0 0.5rem 0', fontWeight: '500' }}>Discount</p>
             <p style={{ color: '#10b981', fontSize: '1.8rem', margin: 0, fontWeight: '700' }}>
@@ -571,7 +575,8 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
             background: 'rgba(255, 255, 255, 0.05)',
             padding: '1.5rem',
             borderRadius: '16px',
-            border: '1px solid rgba(255, 255, 255, 0.1)'
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            textAlign: 'center'
           }}>
             <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem', margin: '0 0 0.5rem 0', fontWeight: '500' }}>Minimum Purchase</p>
             <p style={{ color: 'white', fontSize: '1.3rem', margin: 0, fontWeight: '600' }}>
@@ -599,8 +604,8 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
       <div style={{
         background: 'rgba(255, 255, 255, 0.1)',
         borderRadius: '20px',
-        padding: '2.5rem',
-        marginBottom: '2rem',
+        padding: '2rem',
+        marginBottom: '1.5rem',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
         border: '1px solid rgba(255, 255, 255, 0.2)',
@@ -619,7 +624,7 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
         card.style.transform = 'translateY(0)';
         card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', textAlign: 'center' }}>
           <div style={{
             width: '48px',
             height: '48px',
@@ -627,11 +632,14 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
             borderRadius: '12px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            color: 'white'
           }}>
-            <span style={{ fontSize: '1.5rem' }}>☁️</span>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+            </svg>
           </div>
-          <h2 style={{ color: 'white', margin: 0, fontSize: '1.5rem', fontWeight: '600' }}>
+          <h2 style={{ color: 'white', margin: 0, fontSize: '1.3rem', fontWeight: '600' }}>
             Cloud Function Automation
           </h2>
         </div>
@@ -649,14 +657,26 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
             border: '1px solid rgba(255, 255, 255, 0.1)'
           }}>
             <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem', margin: '0 0 0.5rem 0', fontWeight: '500' }}>Automation Status</p>
-            <p style={{ 
+            <div style={{ 
               color: campaign.autoProcessing?.enabled ? '#10b981' : '#ef4444', 
               fontSize: '1.3rem', 
               margin: '0.5rem 0',
-              fontWeight: '700'
+              fontWeight: '700',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
             }}>
-              {campaign.autoProcessing?.enabled ? '✅ ENABLED' : '❌ DISABLED'}
-            </p>
+              {campaign.autoProcessing?.enabled ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                </svg>
+              )}
+              {campaign.autoProcessing?.enabled ? 'ENABLED' : 'DISABLED'}
+            </div>
             {campaign.autoProcessing?.enabled && (
               <p style={{ color: '#10b981', fontSize: '0.9rem', marginTop: '0.5rem', fontWeight: '500' }}>
                 Runs every {String(campaign.autoProcessing.intervalHours || 24)} hour(s)
@@ -675,15 +695,38 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
               {formatDate(campaign.lastProcessed)}
             </p>
             {campaign.lastProcessedBy && (
-              <p style={{ 
+              <div style={{ 
                 color: String(campaign.lastProcessedBy).includes('cloud_function') ? '#10b981' : '#3b82f6',
                 fontSize: '0.9rem',
                 marginTop: '0.5rem',
-                fontWeight: '500'
+                fontWeight: '500',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
               }}>
-                {String(campaign.lastProcessedBy).includes('auto') ? '🤖 Automated' : 
-                 String(campaign.lastProcessedBy).includes('cloud_function') ? '☁️ Cloud Function' : '👤 Manual'}
-              </p>
+                {String(campaign.lastProcessedBy).includes('auto') ? (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                    </svg>
+                    Automated
+                  </>
+                ) : String(campaign.lastProcessedBy).includes('cloud_function') ? (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+                    </svg>
+                    Cloud Function
+                  </>
+                ) : (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 7.5V9M15 11.5V9.5L21 9V11L15 11.5ZM11 14V12C11 11.45 11.45 11 12 11S13 11.45 13 12V14C13 14.55 12.55 15 12 15S11 14.55 11 14ZM7.5 14H9.5C9.78 14 10 14.22 10 14.5S9.78 15 9.5 15H7.5C7.22 15 7 14.78 7 14.5S7.22 14 7.5 14ZM14.5 14H16.5C16.78 14 17 14.22 17 14.5S16.78 15 16.5 15H14.5C14.22 15 14 14.78 14 14.5S14.22 14 14.5 14ZM12 18C13.1 18 14 18.9 14 20C14 21.1 13.1 22 12 22C10.9 22 10 21.1 10 20C10 18.9 10.9 18 12 18Z"/>
+                    </svg>
+                    Manual
+                  </>
+                )}
+              </div>
             )}
           </div>
           
@@ -712,27 +755,15 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
           </div>
         </div>
         
-        <div style={{
-          padding: '1.5rem',
-          background: campaign.autoProcessing?.enabled ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-          borderRadius: '16px',
-          border: `1px solid ${campaign.autoProcessing?.enabled ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
-          borderLeft: `4px solid ${campaign.autoProcessing?.enabled ? '#10b981' : '#ef4444'}`
-        }}>
-          <p style={{ color: 'white', margin: 0, fontSize: '1rem', lineHeight: '1.6' }}>
-            {campaign.autoProcessing?.enabled ? 
-              '✅ This campaign runs automatically 24/7 via Cloud Functions. The system checks every hour and processes campaigns based on their individual intervals.' :
-              '⚠️ Automation is disabled. This campaign only runs when manually triggered from the dashboard.'}
-          </p>
-        </div>
+
       </div>
 
       {/* Assignment Statistics */}
       <div style={{
         background: 'rgba(255, 255, 255, 0.1)',
         borderRadius: '20px',
-        padding: '2.5rem',
-        marginBottom: '2rem',
+        padding: '2rem',
+        marginBottom: '1.5rem',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
         border: '1px solid rgba(255, 255, 255, 0.2)',
@@ -751,7 +782,7 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
         card.style.transform = 'translateY(0)';
         card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', textAlign: 'center' }}>
           <div style={{
             width: '48px',
             height: '48px',
@@ -759,11 +790,14 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
             borderRadius: '12px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            color: 'white'
           }}>
-            <span style={{ fontSize: '1.5rem' }}>📊</span>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 3v18h18v-2H5V3H3zm16 4V5l-4 2-4-2-4 2v12l4-2 4 2 4-2z"/>
+            </svg>
           </div>
-          <h2 style={{ color: 'white', margin: 0, fontSize: '1.5rem', fontWeight: '600' }}>
+          <h2 style={{ color: 'white', margin: 0, fontSize: '1.3rem', fontWeight: '600' }}>
             Assignment Statistics
           </h2>
         </div>
