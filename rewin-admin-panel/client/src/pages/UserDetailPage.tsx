@@ -105,6 +105,7 @@ const UserDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteUserLoading, setDeleteUserLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'customers' | 'businesses' | 'analytics'>('overview');
   const [timePeriod, setTimePeriod] = useState<TimePeriod>('today');
@@ -206,13 +207,36 @@ const UserDetailPage: React.FC = () => {
   };
 
   const handleDelete = async () => {
+    if (!user) return;
+    
     try {
-      await usersAPI.delete(userId!);
-              setToast({ message: 'User deleted successfully', type: 'success' });
-      navigate('/users');
+      setDeleteUserLoading(true);
+      
+      console.log('🗑️ Deleting user:', user.uid, user.email);
+      
+      const response = await usersAPI.delete(user.uid);
+      
+      console.log('🗑️ Delete response:', response);
+      
+      if (response.success) {
+        setToast({ 
+          message: `User ${user.email} deleted successfully from Firebase Auth and Firestore`, 
+          type: 'success' 
+        });
+        setShowDeleteModal(false);
+        
+        // Navigate back to users list after successful deletion
+        setTimeout(() => {
+          navigate('/users');
+        }, 2000);
+      } else {
+        setToast({ message: response.error || 'Failed to delete user', type: 'error' });
+      }
     } catch (error) {
-      console.error('Error deleting user:', error);
+      console.error('❌ Delete user error:', error);
       setToast({ message: 'Failed to delete user', type: 'error' });
+    } finally {
+      setDeleteUserLoading(false);
     }
   };
 
@@ -2378,96 +2402,105 @@ const UserDetailPage: React.FC = () => {
         <Modal 
           isOpen={showDeleteModal} 
           onClose={() => setShowDeleteModal(false)} 
-          title="Confirm Delete"
-          actions={[
-            <button key="cancel" style={{
-              padding: '0.75rem 1.5rem',
-              background: 'rgba(255, 255, 255, 0.1)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              borderRadius: '12px',
-              color: 'rgba(255, 255, 255, 0.9)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              transition: 'all 0.3s ease',
-              fontSize: '0.875rem',
-              fontWeight: '500',
-              backdropFilter: 'blur(10px)'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-              e.currentTarget.style.transform = 'translateY(0)';
-            }}>
-              Cancel
-            </button>,
-            <button key="delete" style={{
-              padding: '0.75rem 1.5rem',
-              background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-              border: 'none',
-              borderRadius: '12px',
-              color: 'white',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              transition: 'all 0.3s ease',
-              fontSize: '0.875rem',
-              fontWeight: '600',
-              boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3)'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 20px rgba(239, 68, 68, 0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 4px 15px rgba(239, 68, 68, 0.3)';
-            }}>
-              Delete User
-            </button>
-          ]}
+          variant="danger"
+          title="🔥 CONFIRM DELETE 🔥"
+          actions={
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                disabled={deleteUserLoading}
+                style={{
+                  padding: '12px 24px',
+                  borderRadius: '12px',
+                  border: '2px solid rgba(102, 126, 234, 0.2)',
+                  background: 'white',
+                  color: '#667eea',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: deleteUserLoading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  opacity: deleteUserLoading ? 0.5 : 1
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleteUserLoading}
+                style={{
+                  padding: '12px 24px',
+                  borderRadius: '12px',
+                  border: '2px solid #ef4444',
+                  background: '#ef4444',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: deleteUserLoading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  opacity: deleteUserLoading ? 0.7 : 1
+                }}
+              >
+                {deleteUserLoading ? 'Deleting...' : 'Delete User'}
+              </button>
+            </div>
+          }
         >
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '1rem'
+          <div style={{ 
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: '12px',
+            padding: '16px',
+            marginBottom: '20px'
           }}>
             <p style={{
-              color: 'rgba(255, 255, 255, 0.8)',
-              fontSize: '0.95rem',
-              margin: 0
+              fontSize: '13px',
+              color: '#ef4444',
+              margin: 0,
+              fontWeight: '600',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
             }}>
+              🚨 DANGER: This action cannot be undone. The user and all associated data will be permanently removed.
+            </p>
+          </div>
+          
+          <div style={{ color: '#1f2937' }}>
+            <p style={{ fontSize: '16px', fontWeight: '500', marginBottom: '8px' }}>
               Are you sure you want to delete this user?
             </p>
-            <div style={{
-              background: 'rgba(239, 68, 68, 0.2)',
-              border: '1px solid rgba(239, 68, 68, 0.3)',
-              borderRadius: '15px',
-              padding: '1rem',
-              color: '#fca5a5',
-              fontSize: '0.875rem',
-              fontWeight: '600'
+            {user && (
+              <div style={{
+                background: 'rgba(102, 126, 234, 0.1)',
+                border: '1px solid rgba(102, 126, 234, 0.2)',
+                borderRadius: '8px',
+                padding: '12px',
+                marginBottom: '16px'
+              }}>
+                <p style={{ 
+                  fontSize: '14px', 
+                  fontWeight: '600',
+                  color: '#667eea',
+                  margin: 0
+                }}>
+                  📧 {user.email}
+                </p>
+              </div>
+            )}
+            <p style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.5' }}>
+              This will permanently remove:
+            </p>
+            <ul style={{ 
+              fontSize: '13px', 
+              color: '#6b7280', 
+              marginLeft: '16px',
+              lineHeight: '1.6'
             }}>
-              <p style={{
-                color: '#fca5a5',
-                fontSize: '0.875rem',
-                margin: 0
-              }}>
-                ⚠️ Warning
-              </p>
-              <p style={{
-                color: '#fca5a5',
-                fontSize: '0.75rem',
-                marginTop: '0.25rem'
-              }}>
-                This action cannot be undone. The user and all associated data will be permanently removed.
-              </p>
-            </div>
+              <li>User from Firebase Authentication</li>
+              <li>All user data from Firestore</li>
+              <li>All associated outlets, customers, and transactions</li>
+              <li>All campaign and analytics data</li>
+            </ul>
           </div>
         </Modal>
 

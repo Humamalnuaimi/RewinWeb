@@ -10,7 +10,7 @@
 body {
   margin: 0;
   padding: 0;
-  width: 100%;
+  width: 100vw;
   min-height: 100vh;
   overflow-x: hidden;
   overflow-y: auto;
@@ -26,6 +26,8 @@ body {
   background: radial-gradient(1200px 800px at 18% 10%, rgba(120,140,255,0.45), transparent 60%),
               radial-gradient(1100px 700px at 80% 25%, rgba(150,110,220,0.40), transparent 60%),
               linear-gradient(135deg, #0c1020 0%, #161a33 100%);
+  background-attachment: fixed;
+  background-size: 100% 100%;
 }
 
 /* Allow text selection only for input fields */
@@ -77,22 +79,51 @@ div[style*="backdrop-filter: blur"], div[style*="backdrop-filter: blur"] * {
 /* Modern Admin Panel Styles */
 .admin-container {
   min-height: 100vh;
+  width: 100vw;
   background: transparent;
   display: flex;
+  overflow-x: hidden;
 }
 
 /* Auth (Login) Layout */
 .auth-layout {
   min-height: 100vh;
+  width: 100vw;
   display: grid;
-  grid-template-columns: 1.2fr 1fr;
+  grid-template-columns: 1fr 1.2fr;
   gap: 4rem;
   align-items: center;
-  padding: 6rem 5vw;
+  padding: 4rem 3rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-layout::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, 
+    rgba(30, 41, 59, 0.6) 0%, 
+    rgba(51, 65, 85, 0.5) 50%, 
+    rgba(71, 85, 105, 0.4) 100%);
+  backdrop-filter: blur(15px);
+  z-index: 1;
 }
 
 .auth-brand {
   color: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  z-index: 2;
 }
 
 .brand-hero {
@@ -144,13 +175,17 @@ div[style*="backdrop-filter: blur"], div[style*="backdrop-filter: blur"] * {
 }
 
 .auth-card {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 20px;
-  padding: 28px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 24px;
+  padding: 3rem;
   color: white;
-  backdrop-filter: blur(14px);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  max-width: 450px;
+  width: 100%;
+  position: relative;
+  z-index: 2;
 }
 
 .auth-card-header h2 {
@@ -205,6 +240,7 @@ div[style*="backdrop-filter: blur"], div[style*="backdrop-filter: blur"] * {
   font-weight: 400;
   -webkit-text-fill-color: white !important;
   -webkit-box-shadow: none !important;
+  box-shadow: none !important;
   outline: none !important;
   font-family: inherit;
 }
@@ -266,12 +302,19 @@ div[style*="backdrop-filter: blur"], div[style*="backdrop-filter: blur"] * {
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(20px);
   border-right: 1px solid rgba(255, 255, 255, 0.2);
-  padding: 2rem 0;
+  padding: 2rem 0 2rem 0;
   display: flex;
   flex-direction: column;
   position: fixed;
   height: 100vh;
   overflow-y: auto;
+  box-sizing: border-box;
+}
+
+/* Ensure the user section at bottom is visible */
+.sidebar > div:last-child {
+  padding-bottom: 2rem !important;
+  margin-bottom: 0 !important;
 }
 
 .sidebar-header {
@@ -292,6 +335,8 @@ div[style*="backdrop-filter: blur"], div[style*="backdrop-filter: blur"] * {
 .sidebar-nav {
   flex: 1;
   padding: 0 1rem;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .nav-item {
@@ -330,6 +375,10 @@ div[style*="backdrop-filter: blur"], div[style*="backdrop-filter: blur"] * {
   margin-left: 280px;
   padding: 2rem;
   min-height: 100vh;
+  width: calc(100vw - 280px);
+  max-width: calc(100vw - 280px);
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 /* Header Styles */
@@ -861,6 +910,18 @@ div[style*="backdrop-filter: blur"], div[style*="backdrop-filter: blur"] * {
   
   .tab-button {
     justify-content: flex-start;
+  }
+  
+  /* Auth Layout Mobile */
+  .auth-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    gap: 2rem;
+    padding: 2rem 1rem;
+  }
+  
+  .auth-card {
+    max-width: 100%;
   }
 }
 

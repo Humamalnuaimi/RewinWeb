@@ -22,19 +22,6 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="auth-layout">
-      <div className="auth-brand">
-        <div className="brand-hero">
-          <img src="/ic_rewin_logo_new.png" alt="Rewin logo" className="brand-hero-logo" />
-        </div>
-        <h1 className="brand-title">Rewin Admin Panel</h1>
-        <p className="brand-subtitle">Admin access</p>
-        <div className="brand-highlights">
-          <div className="highlight">Secure by design</div>
-          <div className="highlight">Real-time insights</div>
-          <div className="highlight">Team-ready</div>
-        </div>
-      </div>
-
       <div className="auth-card">
         <div className="auth-card-header">
           <h2>Sign in</h2>
@@ -87,6 +74,10 @@ const LoginPage: React.FC = () => {
           <button type="submit" disabled={isLoading} className="btn btn-primary btn-block">
             {isLoading ? 'Signing in…' : 'Sign in'}
           </button>
+          
+          <button type="button" className="btn btn-secondary btn-block" style={{ marginTop: '12px' }}>
+            Reset Password
+          </button>
         </form>
 
         <div className="demo-credentials">
@@ -98,6 +89,19 @@ const LoginPage: React.FC = () => {
         </div>
 
         <div className="auth-footer">© 2024 Rewin Admin Panel</div>
+      </div>
+
+      <div className="auth-brand">
+        <div className="brand-hero">
+          <img src="/ic_rewin_logo_new.png" alt="Rewin logo" className="brand-hero-logo" />
+        </div>
+        <h1 className="brand-title">Rewin Admin Panel</h1>
+        <p className="brand-subtitle">Admin access</p>
+        <div className="brand-highlights">
+          <div className="highlight">Secure by design</div>
+          <div className="highlight">Real-time insights</div>
+          <div className="highlight">Team-ready</div>
+        </div>
       </div>
     </div>
   );

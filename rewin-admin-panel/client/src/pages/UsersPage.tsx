@@ -42,10 +42,10 @@ const UsersPage: React.FC = () => {
   const [addUserForm, setAddUserForm] = useState({
     email: '',
     displayName: '',
-    password: '',
-    confirmPassword: ''
+    authMethod: 'email' // 'email', 'google', 'microsoft'
   });
   const [addUserLoading, setAddUserLoading] = useState(false);
+  const [deleteUserLoading, setDeleteUserLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const navigate = useNavigate();
 
@@ -93,12 +93,42 @@ const UsersPage: React.FC = () => {
     setShowDeleteModal(true);
   };
 
+  const handleConfirmDelete = async () => {
+    if (!selectedUser) return;
+    
+    try {
+      setDeleteUserLoading(true);
+      
+      console.log('🗑️ Deleting user:', selectedUser.uid, selectedUser.email);
+      
+      const response = await usersAPI.delete(selectedUser.uid);
+      
+      console.log('🗑️ Delete response:', response);
+      
+      if (response.success) {
+        setToast({ 
+          message: `User ${selectedUser.email} deleted successfully from Firebase Auth and Firestore`, 
+          type: 'success' 
+        });
+        setShowDeleteModal(false);
+        setSelectedUser(null);
+        fetchUsers(); // Refresh the users list
+      } else {
+        setToast({ message: response.error || 'Failed to delete user', type: 'error' });
+      }
+    } catch (error) {
+      console.error('❌ Delete user error:', error);
+      setToast({ message: 'Failed to delete user', type: 'error' });
+    } finally {
+      setDeleteUserLoading(false);
+    }
+  };
+
   const handleAddUser = () => {
     setAddUserForm({
       email: '',
       displayName: '',
-      password: '',
-      confirmPassword: ''
+      authMethod: 'email'
     });
     setShowAddModal(true);
   };
@@ -108,30 +138,20 @@ const UsersPage: React.FC = () => {
       setAddUserLoading(true);
       
       // Validate form
-      if (!addUserForm.email || !addUserForm.displayName || !addUserForm.password) {
+      if (!addUserForm.email || !addUserForm.displayName) {
         setToast({ message: 'Please fill in all required fields', type: 'error' });
         return;
       }
       
-      if (addUserForm.password !== addUserForm.confirmPassword) {
-        setToast({ message: 'Passwords do not match', type: 'error' });
-        return;
-      }
-      
-      if (addUserForm.password.length < 6) {
-        setToast({ message: 'Password must be at least 6 characters', type: 'error' });
-        return;
-      }
-      
-      // Create user
+      // Create user with invitation
       const response = await usersAPI.create({
         email: addUserForm.email,
         displayName: addUserForm.displayName,
-        password: addUserForm.password
+        authMethod: addUserForm.authMethod
       });
       
       if (response.success) {
-        setToast({ message: 'User created successfully', type: 'success' });
+        setToast({ message: 'Invitation sent successfully', type: 'success' });
         setShowAddModal(false);
         fetchUsers(); // Refresh the users list
       } else {
@@ -546,7 +566,7 @@ const UsersPage: React.FC = () => {
                   e.currentTarget.style.boxShadow = 'none';
                 }}
               >
-                {addUserLoading ? 'Creating...' : 'Create User'}
+{addUserLoading ? 'Sending Invitation...' : 'Send Invitation'}
               </button>
             </div>
           }
@@ -566,7 +586,7 @@ const UsersPage: React.FC = () => {
                 margin: 0,
                 fontWeight: '500'
               }}>
-                💡 Fill in the information below to create a new user account. The user will be able to access the system immediately.
+                💡 Fill in the information below to invite a new user. They will receive an email to set up their account.
               </p>
             </div>
 
@@ -646,7 +666,7 @@ const UsersPage: React.FC = () => {
               />
             </div>
 
-            {/* Password Field */}
+            {/* Authentication Method Field */}
             <div>
               <label style={{
                 display: 'block',
@@ -655,12 +675,11 @@ const UsersPage: React.FC = () => {
                 color: '#1f2937',
                 fontSize: '14px'
               }}>
-                Password *
+                Authentication Method *
               </label>
-              <input
-                type="password"
-                value={addUserForm.password}
-                onChange={(e) => setAddUserForm({ ...addUserForm, password: e.target.value })}
+              <select
+                value={addUserForm.authMethod}
+                onChange={(e) => setAddUserForm({ ...addUserForm, authMethod: e.target.value })}
                 style={{
                   width: '100%',
                   padding: '12px 16px',
@@ -672,7 +691,6 @@ const UsersPage: React.FC = () => {
                   background: 'white',
                   color: '#1f2937'
                 }}
-                placeholder="Enter password (min 6 characters)"
                 onFocus={(e) => {
                   e.target.style.borderColor = '#667eea';
                   e.target.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
@@ -681,62 +699,21 @@ const UsersPage: React.FC = () => {
                   e.target.style.borderColor = 'rgba(102, 126, 234, 0.2)';
                   e.target.style.boxShadow = 'none';
                 }}
-              />
+              >
+                <option value="email">📧 Email Invitation (Password Setup)</option>
+                <option value="google">🔍 Google OAuth (Gmail)</option>
+              </select>
               <p style={{
                 fontSize: '11px',
                 color: '#6b7280',
                 margin: '4px 0 0 0'
               }}>
-                Minimum 6 characters required
+                {addUserForm.authMethod === 'email' && 'User will receive an email to create their password'}
+                {addUserForm.authMethod === 'google' && 'User will sign in with their Google account'}
               </p>
             </div>
 
-            {/* Confirm Password Field */}
-            <div>
-              <label style={{
-                display: 'block',
-                marginBottom: '8px',
-                fontWeight: '600',
-                color: '#1f2937',
-                fontSize: '14px'
-              }}>
-                Confirm Password *
-              </label>
-              <input
-                type="password"
-                value={addUserForm.confirmPassword}
-                onChange={(e) => setAddUserForm({ ...addUserForm, confirmPassword: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '12px 16px',
-                  borderRadius: '12px',
-                  border: '2px solid rgba(102, 126, 234, 0.2)',
-                  fontSize: '14px',
-                  transition: 'all 0.2s ease',
-                  boxSizing: 'border-box' as const,
-                  background: 'white',
-                  color: '#1f2937'
-                }}
-                placeholder="Confirm password"
-                onFocus={(e) => {
-                  e.target.style.borderColor = '#667eea';
-                  e.target.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = 'rgba(102, 126, 234, 0.2)';
-                  e.target.style.boxShadow = 'none';
-                }}
-              />
-              {addUserForm.password && addUserForm.confirmPassword && addUserForm.password !== addUserForm.confirmPassword && (
-                <p style={{
-                  fontSize: '11px',
-                  color: '#ef4444',
-                  margin: '4px 0 0 0'
-                }}>
-                  Passwords do not match
-                </p>
-              )}
-            </div>
+
           </div>
         </Modal>
       )}
@@ -758,12 +735,103 @@ const UsersPage: React.FC = () => {
         <Modal
           isOpen={showDeleteModal}
           onClose={() => setShowDeleteModal(false)}
-          title="Delete User"
+          variant="danger"
+          title="🔥 CONFIRM DELETE 🔥"
+          actions={
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                disabled={deleteUserLoading}
+                style={{
+                  padding: '12px 24px',
+                  borderRadius: '12px',
+                  border: '2px solid rgba(102, 126, 234, 0.2)',
+                  background: 'white',
+                  color: '#667eea',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: deleteUserLoading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  opacity: deleteUserLoading ? 0.5 : 1
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={deleteUserLoading}
+                style={{
+                  padding: '12px 24px',
+                  borderRadius: '12px',
+                  border: '2px solid #ef4444',
+                  background: '#ef4444',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: deleteUserLoading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  opacity: deleteUserLoading ? 0.7 : 1
+                }}
+              >
+                {deleteUserLoading ? 'Deleting...' : 'Delete User'}
+              </button>
+            </div>
+          }
         >
-          <div style={{ color: 'rgba(255, 255, 255, 0.9)' }}>
-            <p>Are you sure you want to delete this user?</p>
-            <p><strong>{selectedUser.email}</strong></p>
-            <p>This action cannot be undone.</p>
+          <div style={{ 
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: '12px',
+            padding: '16px',
+            marginBottom: '20px'
+          }}>
+            <p style={{
+              fontSize: '13px',
+              color: '#ef4444',
+              margin: 0,
+              fontWeight: '600',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              🚨 DANGER: This action cannot be undone. The user and all associated data will be permanently removed.
+            </p>
+          </div>
+          
+          <div style={{ color: '#1f2937' }}>
+            <p style={{ fontSize: '16px', fontWeight: '500', marginBottom: '8px' }}>
+              Are you sure you want to delete this user?
+            </p>
+            <div style={{
+              background: 'rgba(102, 126, 234, 0.1)',
+              border: '1px solid rgba(102, 126, 234, 0.2)',
+              borderRadius: '8px',
+              padding: '12px',
+              marginBottom: '16px'
+            }}>
+              <p style={{ 
+                fontSize: '14px', 
+                fontWeight: '600',
+                color: '#667eea',
+                margin: 0
+              }}>
+                📧 {selectedUser.email}
+              </p>
+            </div>
+            <p style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.5' }}>
+              This will permanently remove:
+            </p>
+            <ul style={{ 
+              fontSize: '13px', 
+              color: '#6b7280', 
+              marginLeft: '16px',
+              lineHeight: '1.6'
+            }}>
+              <li>User from Firebase Authentication</li>
+              <li>All user data from Firestore</li>
+              <li>All associated outlets, customers, and transactions</li>
+              <li>All campaign and analytics data</li>
+            </ul>
           </div>
         </Modal>
       )}
