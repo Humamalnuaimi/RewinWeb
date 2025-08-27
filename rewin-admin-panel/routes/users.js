@@ -1,6 +1,7 @@
 const express = require('express');
 const admin = require('firebase-admin');
 const { query, validationResult, body } = require('express-validator');
+const EmailService = require('../services/EmailService');
 const router = express.Router();
 
 // Get all users with pagination and search
@@ -680,11 +681,19 @@ router.post('/', [
       
       console.log('Password reset link generated:', resetLink);
       
-      // TODO: Send email with invitation link
-      // For now, we'll log it - you can integrate with your email service
-      console.log(`📧 Send this invitation email to ${email}:`);
-      console.log(`Subject: You've been invited to Rewin Admin Panel`);
-      console.log(`Hi ${displayName},\n\nYou've been invited to join the Rewin Admin Panel.\nClick here to set your password and get started: ${resetLink}\n\nBest regards,\nRewin Team`);
+      // Send invitation email
+      console.log(`📧 Sending invitation email to ${email}...`);
+      const emailResult = await EmailService.sendInvitationEmail(email, displayName, resetLink);
+      
+      if (emailResult.success) {
+        console.log(`✅ Invitation email sent successfully to ${email}`);
+      } else {
+        console.log(`⚠️ Failed to send invitation email to ${email}:`, emailResult.error);
+        // Still continue with user creation even if email fails
+        console.log(`📧 Manual invitation email for ${email}:`);
+        console.log(`Subject: You've been invited to Rewin Admin Panel`);
+        console.log(`Hi ${displayName},\n\nYou've been invited to join the Rewin Admin Panel.\nClick here to set your password and get started: ${resetLink}\n\nBest regards,\nRewin Team`);
+      }
       
     } else if (authMethod === 'google') {
       // Create user for Google OAuth (they'll complete setup on first sign-in)
