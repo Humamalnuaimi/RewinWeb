@@ -229,14 +229,28 @@ router.get('/:userId', async (req, res) => {
   }
 });
 
-// Delete user with complete data cleanup
+// Delete user with complete data cleanup - Firestore-first approach
 router.delete('/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     
-    console.log(`Starting complete deletion for user: ${userId}`);
+    console.log(`🗑️ Starting FIRESTORE-FIRST deletion for user: ${userId}`);
     
-    // 1. Get user info before deletion for backup
+    // 1. Check if user document exists in Firestore
+    const userDocRef = admin.firestore().collection('users').doc(userId);
+    const userDocSnapshot = await userDocRef.get();
+    
+    if (!userDocSnapshot.exists) {
+      console.log(`❌ User document ${userId} does not exist in Firestore`);
+      return res.status(404).json({ 
+        success: false,
+        error: 'User document not found in Firestore' 
+      });
+    }
+    
+    console.log(`✅ Found user document in Firestore: ${userId}`);
+    
+    // 2. Get user info from Auth (if exists) for logging
     let userInfo = null;
     try {
       const userRecord = await admin.auth().getUser(userId);
@@ -247,8 +261,16 @@ router.delete('/:userId', async (req, res) => {
         disabled: userRecord.disabled,
         createdAt: userRecord.metadata.creationTime
       };
+      console.log(`✅ Found user in Firebase Auth: ${userInfo.email}`);
     } catch (error) {
-      console.log('User not found in Auth, proceeding with Firestore cleanup');
+      console.log(`⚠️ User not found in Firebase Auth (orphaned Firestore document)`);
+      userInfo = {
+        uid: userId,
+        email: 'unknown@firestore-only.com',
+        displayName: 'Firestore Only User',
+        disabled: false,
+        createdAt: new Date().toISOString()
+      };
     }
     
     // 2. Get data summary before deletion
@@ -302,28 +324,35 @@ router.delete('/:userId', async (req, res) => {
     
     console.log('Data summary before deletion:', dataSummary);
     
-    // 3. Create backup/export (optional - can be enabled later)
-    // const backupData = {
-    //   userInfo,
-    //   dataSummary,
-    //   timestamp: new Date().toISOString()
-    // };
-    // await admin.firestore().collection('deleted_users_backup').doc(userId).set(backupData);
-    
-    // 4. Delete Auth user
-    if (userInfo) {
-      await admin.auth().deleteUser(userId);
-      console.log('Auth user deleted successfully');
+    // List all user documents before deletion
+    try {
+      const allUsersSnapshot = await admin.firestore().collection('users').get();
+      console.log(`📋 Total users in Firestore before deletion: ${allUsersSnapshot.size}`);
+      console.log('📋 User IDs before deletion:', allUsersSnapshot.docs.map(doc => doc.id));
+    } catch (error) {
+      console.log('Error listing users before deletion:', error.message);
     }
     
-    // 5. Delete all subcollections with batch operations
+    console.log('📊 Data summary before deletion:', dataSummary);
+    
+    // 3. Delete ALL subcollections first (Firestore-first approach)
     const collections = [
+      // Web dashboard collections
       'web_customers', 
       'web_transactions', 
+      'web_visits',
+      // Mobile app collections
       'customers', 
       'transactions', 
       'outlets',
-      'web_visits'
+      'checkins',
+      // Shared collections
+      'campaigns',
+      'promotions',
+      'promotionUsage',
+      'customerPromotions',
+      'twilio_account',
+      'twilio_events'
     ];
     
     let totalDeleted = 0;
@@ -348,9 +377,65 @@ router.delete('/:userId', async (req, res) => {
       }
     }
     
-    // 6. Delete user document
-    await admin.firestore().collection('users').doc(userId).delete();
-    console.log('User document deleted successfully');
+    // 4. Delete main user document
+    try {
+      console.log(`🗑️ Deleting main user document: users/${userId}`);
+      console.log(`🗑️ UserDocRef path: ${userDocRef.path}`);
+      
+      // First check if it exists before deletion
+      const preDeleteCheck = await userDocRef.get();
+      console.log(`🗑️ Document exists before deletion: ${preDeleteCheck.exists}`);
+      
+      if (preDeleteCheck.exists) {
+        console.log(`🗑️ Document data before deletion:`, preDeleteCheck.data());
+        
+        // Perform the deletion
+        await userDocRef.delete();
+        console.log('✅ Main user document delete() call completed');
+        
+        // Wait a moment for the deletion to propagate
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Verify deletion
+        const deletedDocCheck = await userDocRef.get();
+        console.log(`🗑️ Document exists after deletion: ${deletedDocCheck.exists}`);
+        
+        if (deletedDocCheck.exists) {
+          console.error('❌ ERROR: User document still exists after deletion!');
+          console.error('❌ Document data after failed deletion:', deletedDocCheck.data());
+          throw new Error('User document deletion failed - document still exists');
+        } else {
+          console.log('✅ Verified: User document completely removed from Firestore');
+        }
+      } else {
+        console.log('⚠️ User document did not exist before deletion attempt');
+      }
+    } catch (error) {
+      console.error('❌ Error deleting main user document:', error);
+      console.error('❌ Error stack:', error.stack);
+      throw error; // Re-throw to stop the process
+    }
+    
+    // 5. Revoke all refresh tokens before deletion
+    try {
+      if (userInfo.email !== 'unknown@firestore-only.com') {
+        // Revoke all refresh tokens to force sign out everywhere
+        await admin.auth().revokeRefreshTokens(userId);
+        console.log('✅ Revoked all refresh tokens for user');
+        
+        // Wait a moment for revocation to propagate
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Now delete the user
+        await admin.auth().deleteUser(userId);
+        console.log('✅ User deleted from Firebase Authentication');
+      } else {
+        console.log('⚠️ Skipping Auth deletion (user was Firestore-only)');
+      }
+    } catch (error) {
+      console.log('⚠️ Could not delete from Firebase Auth (may not exist):', error.message);
+      // Don't throw error here - Firestore cleanup is more important
+    }
     
     // 7. Prepare response with deletion summary
     const deletionSummary = {
@@ -360,6 +445,15 @@ router.delete('/:userId', async (req, res) => {
       collectionsCleaned: collections.filter(col => dataSummary[col] > 0 || col === 'outlets' || col === 'web_visits'),
       timestamp: new Date().toISOString()
     };
+    
+    // List all user documents after deletion to verify
+    try {
+      const allUsersAfterSnapshot = await admin.firestore().collection('users').get();
+      console.log(`📋 Total users in Firestore after deletion: ${allUsersAfterSnapshot.size}`);
+      console.log('📋 User IDs after deletion:', allUsersAfterSnapshot.docs.map(doc => doc.id));
+    } catch (error) {
+      console.log('Error listing users after deletion:', error.message);
+    }
     
     console.log('Complete deletion successful:', deletionSummary);
     
@@ -548,11 +642,11 @@ router.post('/:userId/reset-password', async (req, res) => {
   }
 });
 
-// Create new user
+// Create new user with invitation or OAuth
 router.post('/', [
   body('email').isEmail().normalizeEmail(),
   body('displayName').isLength({ min: 1 }).trim(),
-  body('password').isLength({ min: 6 })
+  body('authMethod').isIn(['email', 'google']).optional()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -563,17 +657,46 @@ router.post('/', [
       });
     }
 
-    const { email, displayName, password } = req.body;
+    const { email, displayName, authMethod = 'email' } = req.body;
     
-    console.log('Create user request:', { email, displayName });
+    console.log('Create user request:', { email, displayName, authMethod });
     
-    // Create user in Firebase Auth
-    const userRecord = await admin.auth().createUser({
-      email,
-      displayName,
-      password,
-      emailVerified: false
-    });
+    let userRecord;
+    
+    if (authMethod === 'email') {
+      // Create user for email invitation (no password initially)
+      userRecord = await admin.auth().createUser({
+        email,
+        displayName,
+        emailVerified: false,
+        disabled: false // User can sign in once they set password
+      });
+      
+      // Generate password reset link for the new user
+      const resetLink = await admin.auth().generatePasswordResetLink(email, {
+        url: `${req.protocol}://${req.get('host')}/login`, // Redirect to login after password setup
+        handleCodeInApp: false
+      });
+      
+      console.log('Password reset link generated:', resetLink);
+      
+      // TODO: Send email with invitation link
+      // For now, we'll log it - you can integrate with your email service
+      console.log(`📧 Send this invitation email to ${email}:`);
+      console.log(`Subject: You've been invited to Rewin Admin Panel`);
+      console.log(`Hi ${displayName},\n\nYou've been invited to join the Rewin Admin Panel.\nClick here to set your password and get started: ${resetLink}\n\nBest regards,\nRewin Team`);
+      
+    } else if (authMethod === 'google') {
+      // Create user for Google OAuth (they'll complete setup on first sign-in)
+      userRecord = await admin.auth().createUser({
+        email,
+        displayName,
+        emailVerified: true, // Google emails are pre-verified
+        disabled: false
+      });
+      
+      console.log('User created for Google OAuth - they will complete setup on first sign-in');
+    }
     
     console.log('Auth user created successfully:', userRecord.uid);
     
@@ -590,6 +713,8 @@ router.post('/', [
       createdAt: userRecord.metadata.creationTime,
       lastSignIn: userRecord.metadata.lastSignInTime,
       createdFrom: 'admin_panel',
+      authMethod: authMethod,
+      invitationStatus: authMethod === 'email' ? 'pending' : 'completed',
       // Mobile app compatibility fields
       totalCustomers: 0,
       totalOutlets: 0,
@@ -635,93 +760,31 @@ router.post('/', [
     
     console.log('User document created successfully');
     
-    // Create all necessary subcollections (empty but ready for mobile app)
-    const collections = [
-      'customers',
-      'transactions', 
-      'outlets',
-      'web_customers',
-      'web_transactions',
-      'web_visits',
-      'web_outlet_stats',
-      'checkins',
-      'rewards',
-      'messages',
-      'templates'
-    ];
+    // Note: Collections will be automatically created by Firebase when first document is added
+    // No need to pre-create empty collections
+    console.log('Collections will be created automatically when data is added from the app or web.');
     
-    console.log('Creating subcollections for mobile app compatibility...');
-    
-    // Create empty subcollections with placeholder documents
-    for (const collectionName of collections) {
-      try {
-        const collectionRef = userDocRef.collection(collectionName);
-        
-        // Create a placeholder document to initialize the collection
-        await collectionRef.doc('_placeholder').set({
-          _placeholder: true,
-          createdAt: new Date().toISOString(),
-          message: 'Collection initialized by admin panel'
-        });
-        
-        console.log(`✅ Created ${collectionName} collection`);
-      } catch (error) {
-        console.log(`⚠️ Error creating ${collectionName} collection:`, error.message);
-      }
-    }
-    
-    // Create default outlet template
-    try {
-      const outletsRef = userDocRef.collection('outlets');
-      await outletsRef.doc('_default').set({
-        outletId: '_default',
-        name: 'Default Outlet',
-        description: 'Default outlet created by admin panel',
-        address: {
-          street: '',
-          city: '',
-          state: '',
-          zipCode: '',
-          country: ''
-        },
-        phone: '',
-        email: '',
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        createdFrom: 'admin_panel'
-      });
-      console.log('✅ Created default outlet');
-    } catch (error) {
-      console.log('⚠️ Error creating default outlet:', error.message);
-    }
-    
-    // Create default customer template
-    try {
-      const customersRef = userDocRef.collection('customers');
-      await customersRef.doc('_default').set({
-        customerId: '_default',
-        firstName: 'Default',
-        lastName: 'Customer',
-        email: '',
-        phone: '',
-        totalPoints: 0,
-        totalPointsEarned: 0,
-        totalPointsRedeemed: 0,
-        totalVisits: 0,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        createdFrom: 'admin_panel'
-      });
-      console.log('✅ Created default customer');
-    } catch (error) {
-      console.log('⚠️ Error creating default customer:', error.message);
-    }
+    // List of collections that will be created as needed:
+    // - campaigns
+    // - checkins  
+    // - customerPromotions
+    // - customers
+    // - outlets
+    // - promotionUsage
+    // - transactions
+    // - twilio_account
+    // - twilio_events
+    // - web_customers
+    // - web_transactions
+    // - web_visits
     
     console.log('🎉 Enhanced user creation completed successfully');
     
     res.json({
       success: true,
-      message: 'User created successfully with all necessary collections',
+      message: authMethod === 'email' 
+        ? 'Invitation sent successfully - user will receive an email to set their password'
+        : 'User created successfully - they can sign in with Google OAuth',
       user: {
         uid: userRecord.uid,
         email: userRecord.email,
@@ -730,7 +793,8 @@ router.post('/', [
         disabled: userRecord.disabled,
         createdAt: userRecord.metadata.creationTime,
         lastSignIn: userRecord.metadata.lastSignInTime,
-        collectionsCreated: collections.length,
+        authMethod: authMethod,
+        invitationStatus: authMethod === 'email' ? 'pending' : 'completed',
         mobileAppCompatible: true
       }
     });
@@ -754,6 +818,119 @@ router.post('/', [
     }
     
     res.status(500).json({ error: errorMessage });
+  }
+});
+
+// Cleanup orphaned user documents (documents without Firebase Auth records)
+router.post('/cleanup-orphaned', async (req, res) => {
+  try {
+    console.log('🧹 Starting cleanup of orphaned user documents...');
+    
+    // Get all user documents from Firestore
+    const firestoreUsersSnapshot = await admin.firestore().collection('users').get();
+    const firestoreUserIds = firestoreUsersSnapshot.docs.map(doc => doc.id);
+    
+    console.log(`📋 Found ${firestoreUserIds.length} user documents in Firestore:`, firestoreUserIds);
+    
+    // Get all users from Firebase Authentication
+    const authUsers = [];
+    let pageToken;
+    do {
+      const listUsersResult = await admin.auth().listUsers(1000, pageToken);
+      authUsers.push(...listUsersResult.users);
+      pageToken = listUsersResult.pageToken;
+    } while (pageToken);
+    
+    const authUserIds = authUsers.map(user => user.uid);
+    console.log(`🔐 Found ${authUserIds.length} users in Firebase Auth:`, authUserIds);
+    
+    // Find orphaned documents (in Firestore but not in Auth)
+    const orphanedUserIds = firestoreUserIds.filter(id => !authUserIds.includes(id));
+    
+    console.log(`🗑️ Found ${orphanedUserIds.length} orphaned user documents:`, orphanedUserIds);
+    
+    if (orphanedUserIds.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No orphaned user documents found',
+        orphanedCount: 0,
+        cleanedUp: []
+      });
+    }
+    
+    // Delete orphaned user documents and their subcollections
+    const cleanedUp = [];
+    const collections = [
+      'web_customers', 
+      'web_transactions', 
+      'customers', 
+      'transactions', 
+      'outlets',
+      'web_visits'
+    ];
+    
+    for (const userId of orphanedUserIds) {
+      console.log(`🗑️ Cleaning up orphaned user: ${userId}`);
+      
+      let totalDeleted = 0;
+      
+      // Delete all subcollections
+      for (const collectionName of collections) {
+        try {
+          const snapshot = await admin.firestore()
+            .collection('users').doc(userId)
+            .collection(collectionName).get();
+          
+          if (snapshot.size > 0) {
+            const batch = admin.firestore().batch();
+            snapshot.docs.forEach(doc => {
+              batch.delete(doc.ref);
+            });
+            await batch.commit();
+            totalDeleted += snapshot.size;
+            console.log(`  ✅ Deleted ${snapshot.size} documents from ${collectionName}`);
+          }
+        } catch (error) {
+          console.log(`  ❌ Error deleting ${collectionName}:`, error.message);
+        }
+      }
+      
+      // Delete main user document
+      try {
+        await admin.firestore().collection('users').doc(userId).delete();
+        console.log(`  ✅ Deleted main user document: ${userId}`);
+        totalDeleted += 1;
+      } catch (error) {
+        console.log(`  ❌ Error deleting main user document:`, error.message);
+      }
+      
+      cleanedUp.push({
+        userId,
+        totalDeleted
+      });
+    }
+    
+    // Verify cleanup
+    const afterCleanupSnapshot = await admin.firestore().collection('users').get();
+    const remainingUserIds = afterCleanupSnapshot.docs.map(doc => doc.id);
+    
+    console.log(`✅ Cleanup complete! Remaining user documents: ${remainingUserIds.length}`, remainingUserIds);
+    
+    res.json({
+      success: true,
+      message: `Successfully cleaned up ${orphanedUserIds.length} orphaned user documents`,
+      orphanedCount: orphanedUserIds.length,
+      cleanedUp,
+      remainingUsers: remainingUserIds.length,
+      remainingUserIds
+    });
+    
+  } catch (error) {
+    console.error('❌ Cleanup error:', error);
+    res.status(500).json({ 
+      error: 'Failed to cleanup orphaned documents',
+      details: error.message 
+    });
   }
 });
 
