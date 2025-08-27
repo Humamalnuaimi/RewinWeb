@@ -9,7 +9,9 @@ import {
   LogOut,
   User,
   Building2,
-  TrendingUp
+  TrendingUp,
+  Mail,
+  Send
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
@@ -23,6 +25,8 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     { path: '/outlets', icon: Store, label: 'Outlets' },
     { path: '/customers', icon: User, label: 'Customers' },
     { path: '/analytics', icon: TrendingUp, label: 'Analytics' },
+    { path: '/email-templates', icon: Mail, label: 'Email Templates' },
+    { path: '/email-senders', icon: Send, label: 'Email Senders' },
     { path: '/system', icon: Settings, label: 'System' },
   ];
 

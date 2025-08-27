@@ -8,6 +8,8 @@ import UsersPage from './pages/UsersPage';
 import CustomersPage from './pages/CustomersPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import SystemPage from './pages/SystemPage';
+import EmailTemplatesPage from './pages/EmailTemplatesPage';
+import EmailSendersPage from './pages/EmailSendersPage';
 import Layout from './components/Layout';
 import UserDetailPage from './pages/UserDetailPage';
 import UserAnalyticsPage from './pages/UserAnalyticsPage';
@@ -112,6 +114,28 @@ const AppContent: React.FC = () => {
               <ProtectedRoute>
                 <Layout>
                   <AnalyticsPage />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/email-templates"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <EmailTemplatesPage />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/email-senders"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <EmailSendersPage />
                 </Layout>
               </ProtectedRoute>
             }

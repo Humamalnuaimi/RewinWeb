@@ -85,6 +85,8 @@ app.use('/api/customers', require('./routes/customers'));
 app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/system', require('./routes/system'));
 app.use('/api/twilio', require('./routes/twilio'));
+app.use('/api/email-templates', require('./routes/emailTemplates'));
+app.use('/api/email-senders', require('./routes/emailSenders'));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
