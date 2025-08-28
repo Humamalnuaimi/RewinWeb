@@ -213,29 +213,29 @@ const EmailSendersPage: React.FC = () => {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
+      <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Email Senders</h1>
-          <p className="text-gray-600">Manage email sender configurations and SMTP settings</p>
+          <h1 className="text-3xl font-bold text-white mb-2">Email Senders</h1>
+          <p className="text-gray-300">Manage email sender configurations and SMTP settings</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"
+          className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-xl flex items-center gap-2 hover:from-blue-700 hover:to-purple-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
         >
-          <Plus /> New Sender
+          <Plus size={20} /> New Sender
         </button>
       </div>
 
       {/* Senders Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {senders.map((sender) => (
-          <div key={sender.id} className="bg-white rounded-lg shadow-md p-6 border">
+          <div key={sender.id} className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 hover:bg-white/15 transition-all duration-300 shadow-xl">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="font-semibold text-lg">{sender.name}</h3>
-                <p className="text-gray-600 text-sm">{sender.email}</p>
-                <p className="text-gray-500 text-sm">Display: {sender.displayName}</p>
+                <h3 className="font-semibold text-xl text-white mb-2">{sender.name}</h3>
+                <p className="text-gray-300 text-sm mb-1">{sender.email}</p>
+                <p className="text-gray-400 text-sm">Display: {sender.displayName}</p>
               </div>
               <div className="flex gap-2">
                 <button
@@ -244,54 +244,54 @@ const EmailSendersPage: React.FC = () => {
                     setTestEmail('');
                     setShowTestModal(true);
                   }}
-                  className="text-gray-600 hover:text-green-600"
+                  className="p-2 rounded-lg bg-white/10 text-gray-300 hover:text-green-400 hover:bg-green-500/20 transition-all duration-200"
                   title="Test Email"
                 >
-                  <Send />
+                  <Send size={16} />
                 </button>
                 <button
                   onClick={() => handleEdit(sender)}
-                  className="text-gray-600 hover:text-blue-600"
+                  className="p-2 rounded-lg bg-white/10 text-gray-300 hover:text-purple-400 hover:bg-purple-500/20 transition-all duration-200"
                   title="Edit"
                 >
-                  <Edit />
+                  <Edit size={16} />
                 </button>
                 <button
                   onClick={() => handleDelete(sender.id)}
-                  className="text-gray-600 hover:text-red-600"
+                  className="p-2 rounded-lg bg-white/10 text-gray-300 hover:text-red-400 hover:bg-red-500/20 transition-all duration-200"
                   title="Delete"
                 >
-                  <Trash2 />
+                  <Trash2 size={16} />
                 </button>
               </div>
             </div>
 
-            <div className="space-y-2 mb-4">
+            <div className="space-y-3 mb-4 p-3 bg-white/5 rounded-lg border border-white/10">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Configuration:</span>
-                <span className="font-medium">
+                <span className="text-gray-400">Configuration:</span>
+                <span className="font-medium text-white">
                   {sender.service ? sender.service.toUpperCase() : `${sender.host}:${sender.port}`}
                 </span>
               </div>
               
               {sender.secure && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Security:</span>
-                  <span className="text-green-600 font-medium">SSL/TLS</span>
+                  <span className="text-gray-400">Security:</span>
+                  <span className="text-green-400 font-medium">SSL/TLS</span>
                 </div>
               )}
             </div>
 
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center pt-4 border-t border-white/10">
               <div className="flex gap-2">
-                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                  sender.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                  sender.isActive ? 'bg-green-500/20 text-green-300 border border-green-500/30' : 'bg-red-500/20 text-red-300 border border-red-500/30'
                 }`}>
                   {sender.isActive ? 'Active' : 'Inactive'}
                 </span>
                 
                 {sender.isDefault && (
-                  <span className="px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30">
                     Default
                   </span>
                 )}
@@ -302,18 +302,18 @@ const EmailSendersPage: React.FC = () => {
       </div>
 
       {senders.length === 0 && !loading && (
-        <div className="text-center py-12">
-          <Mail className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No email senders</h3>
-          <p className="mt-1 text-sm text-gray-500">
-            Get started by creating your first email sender configuration.
-          </p>
-          <div className="mt-6">
+        <div className="text-center py-16">
+          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-12 border border-white/20 max-w-md mx-auto">
+            <Mail className="mx-auto h-16 w-16 text-gray-400 mb-4" />
+            <h3 className="text-xl font-medium text-white mb-2">No email senders</h3>
+            <p className="text-gray-300 mb-6">
+              Get started by creating your first email sender configuration.
+            </p>
             <button
               onClick={() => setShowModal(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 mx-auto"
+              className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-xl flex items-center gap-2 hover:from-blue-700 hover:to-purple-700 transition-all duration-300 shadow-lg mx-auto"
             >
-              <Plus /> New Sender
+              <Plus size={20} /> New Sender
             </button>
           </div>
         </div>
