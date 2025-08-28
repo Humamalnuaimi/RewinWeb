@@ -39,7 +39,7 @@ class EmailService {
       };
     }
 
-    const transporter = nodemailer.createTransporter(transporterConfig);
+    const transporter = nodemailer.createTransport(transporterConfig);
     this.transporters.set(senderId, transporter);
     return transporter;
   }
