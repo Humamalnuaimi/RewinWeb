@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useContext, createContext } from 'react';
 import { flushSync } from 'react-dom';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged, type User } from 'firebase/auth';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { type User, signOut } from 'firebase/auth';
 import { collection, onSnapshot, query, where, getDocs, orderBy, limit, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { auth, firestore } from './firebase/config';
 import './App.css';
-import CampaignManager from './components/CampaignManager';
-import CampaignDetailsPageSimple from './pages/CampaignDetailsPageSimple';
-import SMSCampaignManager from './components/SMSCampaignManager';
+import CampaignManager from './user/components/CampaignManager';
+import CampaignDetailsPageSimple from './user/pages/CampaignDetailsPageSimple';
+import SMSCampaignManager from './user/components/SMSCampaignManager';
 
 // Add CSS animation
 const style = document.createElement('style');
@@ -27,12 +28,25 @@ style.textContent = `
   }
 `;
 document.head.appendChild(style);
-import CampaignDetailsPage from './pages/CampaignDetailsPage';
+import CampaignDetailsPage from './user/pages/CampaignDetailsPage';
 
-import AdminDashboard from './components/AdminDashboard';
+import AdminDashboard from './user/components/AdminDashboard';
 
-// Auth Context
-const AuthContext = createContext<{ user: User | null }>({ user: null });
+// Import Admin Panel Components
+import { AuthProvider, useAuth } from './admin/hooks/useAuth';
+import AdminLoginPage from './admin/pages/auth/LoginPage';
+import AdminDashboardPage from './admin/pages/dashboard/DashboardPage';
+import AdminUsersPage from './admin/pages/users/UsersPage';
+import UserDashboard from './UserDashboard';
+import './admin/styles/globals.css';
+
+// Simple Auth Context for User Dashboard
+interface AuthContextType {
+  user: User | null;
+  loading: boolean;
+}
+
+const AuthContext = createContext<AuthContextType>({ user: null, loading: true });
 
 // Timezone utility functions
 const convertToLocalDate = (firebaseTimestamp: any): Date => {
@@ -9123,21 +9137,26 @@ function App() {
   }, []);
 
   useEffect(() => {
-    // Listen for authentication state changes
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    // Simple Firebase auth listener - like admin panel
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      console.log('🔥 User Dashboard - Auth state:', user ? `✅ ${user.email}` : '❌ No user');
       setUser(user);
       setLoading(false);
+      
+      // If no user, redirect to admin panel login
+      if (!user) {
+        console.log('🔄 No user found, redirecting to admin panel login...');
+        window.location.href = '/login';
+      }
     });
 
     return unsubscribe;
   }, []);
 
-  const handleLogin = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
-  };
-
   const handleLogout = async () => {
     await signOut(auth);
+    // After logout, redirect to login page
+    window.location.href = '/login';
   };
 
   if (loading) {
@@ -9182,25 +9201,114 @@ function App() {
             margin: '0 auto 2rem'
           }} />
           <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.5rem', fontWeight: '600' }}>Rewin Dashboard</h2>
-          <p style={{ margin: 0, opacity: 0.9 }}>Connecting to Firebase...</p>
+          <p style={{ margin: 0, opacity: 0.9 }}>Loading your dashboard...</p>
         </div>
       </div>
     );
   }
 
-  if (!user) {
-    return (
-      <AuthContext.Provider value={{ user }}>
-        <LoginPage onLogin={handleLogin} />
-      </AuthContext.Provider>
-    );
-  }
-
+  // If we reach here, user is authenticated - show dashboard
   return (
-    <AuthContext.Provider value={{ user }}>
+    <AuthContext.Provider value={{ user, loading }}>
       <Dashboard user={user} onLogout={handleLogout} />
     </AuthContext.Provider>
   );
 }
 
-export default App;
+// Protected Route Component for Admin
+const AdminProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, isAdmin, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="loading-spinner">
+        <div className="spinner"></div>
+      </div>
+    );
+  }
+
+  return user && isAdmin ? <>{children}</> : <Navigate to="/login" replace />;
+};
+
+// Protected Route Component for Users
+const UserProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="loading-spinner">
+        <div className="spinner"></div>
+      </div>
+    );
+  }
+
+  return user ? <>{children}</> : <Navigate to="/login" replace />;
+};
+
+// App Routes Component
+const AppRoutes: React.FC = () => {
+  const { user, isAdmin } = useAuth();
+
+  return (
+    <Routes>
+      {/* Login Route */}
+      <Route 
+        path="/login" 
+        element={<AdminLoginPage />} 
+      />
+      
+      {/* Admin Routes */}
+      <Route 
+        path="/admin/dashboard" 
+        element={
+          <AdminProtectedRoute>
+            <AdminDashboardPage />
+          </AdminProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/admin/users" 
+        element={
+          <AdminProtectedRoute>
+            <AdminUsersPage />
+          </AdminProtectedRoute>
+        } 
+      />
+      
+      {/* User Dashboard Route */}
+      <Route 
+        path="/dashboard" 
+        element={
+          <UserProtectedRoute>
+            <UserDashboard />
+          </UserProtectedRoute>
+        } 
+      />
+      
+      {/* Root Route - Redirect based on user type */}
+      <Route 
+        path="/" 
+        element={
+          user ? (
+            isAdmin ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/dashboard" replace />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        } 
+      />
+    </Routes>
+  );
+};
+
+// New Main App Component
+function MainApp() {
+  return (
+    <AuthProvider>
+      <Router>
+        <AppRoutes />
+      </Router>
+    </AuthProvider>
+  );
+}
+
+export default MainApp;

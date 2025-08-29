@@ -15,7 +15,7 @@
  */
 import React, { useState, useEffect, useRef } from 'react';
 import { type User } from 'firebase/auth';
-import { firestore, auth } from '../firebase/config';
+import { firestore, auth } from '../../firebase/config';
 import {
   collection,
   doc,
@@ -31,10 +31,10 @@ import {
   getDoc,
   serverTimestamp
 } from 'firebase/firestore';
-import { PromotionService } from '../services/PromotionService';
-import { CampaignService } from '../services/CampaignService';
-import { AutomationService } from '../services/AutomationService';
-import { CampaignAutomationService } from '../services/CampaignAutomationService';
+import { PromotionService } from '../../services/PromotionService';
+import { CampaignService } from '../../services/CampaignService';
+import { AutomationService } from '../../services/AutomationService';
+import { CampaignAutomationService } from '../../services/CampaignAutomationService';
 
 interface CampaignManagerProps {
   user: User;
@@ -416,7 +416,7 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack, current
       // Fan-out to per-customer promotions if requested
       if (promotionForm.assignNow) {
         try {
-          const { CustomerPromotionService } = await import('../services/CustomerPromotionService');
+          const { CustomerPromotionService } = await import('../../services/CustomerPromotionService');
           const expiresAtTs = promotionData.expiresAt
             ? (promotionData.expiresAt.toDate ? promotionData.expiresAt : Timestamp.fromDate(promotionData.expiresAt))
             : null;

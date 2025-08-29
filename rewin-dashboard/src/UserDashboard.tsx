@@ -1,18 +1,43 @@
 import React, { useState, useEffect, useContext, createContext } from 'react';
 import { flushSync } from 'react-dom';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged, type User } from 'firebase/auth';
+import { type User, signOut } from 'firebase/auth';
 import { collection, onSnapshot, query, where, getDocs, orderBy, limit, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { auth, firestore } from './firebase/config';
 import './App.css';
-import CampaignManager from './components/CampaignManager';
-import CampaignDetailsPageSimple from './pages/CampaignDetailsPageSimple';
-import SMSCampaignManager from './components/SMSCampaignManager';
-import CampaignDetailsPage from './pages/CampaignDetailsPage';
+import CampaignManager from './user/components/CampaignManager';
+import CampaignDetailsPageSimple from './user/pages/CampaignDetailsPageSimple';
+import SMSCampaignManager from './user/components/SMSCampaignManager';
 
-import AdminDashboard from './components/AdminDashboard';
+// Add CSS animation
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .calendar-transition {
+    transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+  }
+`;
+document.head.appendChild(style);
+import CampaignDetailsPage from './user/pages/CampaignDetailsPage';
 
-// Auth Context
-const AuthContext = createContext<{ user: User | null }>({ user: null });
+import AdminDashboard from './user/components/AdminDashboard';
+
+// Simple Auth Context for User Dashboard
+interface AuthContextType {
+  user: User | null;
+  loading: boolean;
+}
+
+const AuthContext = createContext<AuthContextType>({ user: null, loading: true });
 
 // Timezone utility functions
 const convertToLocalDate = (firebaseTimestamp: any): Date => {
@@ -2052,10 +2077,12 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       const newDate = new Date(selectedDate);
       newDate.setDate(selectedDate.getDate() + (direction === 'next' ? 1 : -1));
       setSelectedDate(newDate);
+      setTimePeriod('today'); // Reset to 'today' when navigating dates
     };
 
     const goToToday = () => {
       setSelectedDate(new Date());
+      setTimePeriod('today'); // Reset to 'today' when going to today
     };
 
     const isToday = (date: Date) => {
@@ -2066,6 +2093,14 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     const isFuture = (date: Date) => {
       const today = new Date();
       return date > today;
+    };
+    // Calendar navigation function
+    const navigateCalendar = (direction: 'prev' | 'next') => {
+      const newDate = new Date(selectedDate);
+      newDate.setMonth(selectedDate.getMonth() + (direction === 'next' ? 1 : -1));
+      requestAnimationFrame(() => {
+        setSelectedDate(newDate);
+      });
     };
 
     // Get date range for current time period
@@ -2141,6 +2176,14 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       }
       
       return { startDate, endDate };
+    };
+
+    // Check if a date is in the selected range
+    const isDateInSelectedRange = (date: Date) => {
+      const { startDate, endDate } = getCurrentDateRange();
+      const checkDate = new Date(date);
+      checkDate.setHours(12, 0, 0, 0); // Set to noon to avoid timezone issues
+      return checkDate >= startDate && checkDate <= endDate;
     };
 
     useEffect(() => {
@@ -2545,23 +2588,34 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                     >
                       <path d="M7 10l5 5 5-5z"/>
                     </svg>
-                  </h2>
-                  <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
-                    {timePeriod === 'today' ? (
-                      isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`
-                    ) : 
-                     timePeriod === 'yesterday' ? 'Yesterday' :
-                     timePeriod === 'this_week' ? 'This Week' :
-                     timePeriod === 'last_week' ? 'Last Week' :
-                     timePeriod === 'this_month' ? 'This Month' :
-                     timePeriod === 'last_month' ? 'Last Month' :
-                     isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`}
+                </h2>
+                <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
+                    {(() => {
+                      switch (timePeriod) {
+                        case 'today':
+                          return isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`;
+                        case 'yesterday':
+                          return 'Yesterday';
+                        case 'this_week':
+                          return 'This Week';
+                        case 'last_week':
+                          return 'Last Week';
+                        case 'this_month':
+                          return 'This Month';
+                        case 'last_month':
+                          return 'Last Month';
+                        case 'custom_range':
+                          return 'Custom Range';
+                        default:
+                          return '';
+                      }
+                    })()}
                   </p>
                 </button>
               </div>
               
               <div style={{ display: 'flex', gap: '1rem' }}>
-                {!isToday(selectedDate) && (
+                {(!isToday(selectedDate) || timePeriod !== 'today') && (
                   <button
                     onClick={goToToday}
                     style={{
@@ -2800,46 +2854,105 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
         {/* Date Picker Modal */}
         {timeDropdownOpen && (
-          <div style={{
+          <div
+            style={{
             position: 'fixed',
             top: 0,
             left: 0,
             right: 0,
             bottom: 0,
             backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              backdropFilter: 'blur(10px)',
+              zIndex: 999999999,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 1000,
-            backdropFilter: 'blur(5px)'
-          }} onClick={() => setTimeDropdownOpen(false)}>
-            <div style={{
-              background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 50%, rgba(51, 65, 85, 0.95) 100%)',
-              borderRadius: '24px',
-              padding: '2.5rem',
-              maxWidth: '800px',
-              width: '90%',
-              maxHeight: '85vh',
-              overflowY: 'auto',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              boxShadow: '0 32px 64px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
-              backdropFilter: 'blur(40px)',
-              WebkitBackdropFilter: 'blur(40px)',
-              position: 'relative'
-            }} onClick={(e) => e.stopPropagation()}>
-              <div style={{ display: 'flex', gap: '2.5rem' }}>
-                {/* Time Period Options */}
-                <div style={{ flex: '0 0 300px' }}>
-                  <h3 style={{ 
-                    color: 'white', 
-                    margin: '0 0 1.5rem 0', 
-                    fontSize: '1.4rem', 
-                    fontWeight: '700',
-                    background: 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text'
-                  }}>
+              padding: '2rem',
+              willChange: 'auto'
+            }}
+            onClick={(e) => {
+              // Only close if clicking directly on the backdrop, not on child elements
+              if (e.target === e.currentTarget) {
+                console.log('🔒 Modal backdrop clicked - closing time period selector');
+                setTimeDropdownOpen(false);
+              }
+            }}
+          >
+            {/* Modal Content */}
+            <div
+              key="modal-content"
+              data-time-dropdown="true"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'linear-gradient(145deg, rgba(17, 24, 39, 0.95) 0%, rgba(31, 41, 55, 0.95) 50%, rgba(55, 65, 81, 0.95) 100%)',
+                borderRadius: '24px',
+                padding: '0',
+                width: '800px',
+                maxWidth: '90vw',
+                height: '550px',
+                maxHeight: '85vh',
+                boxShadow: '0 30px 60px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                position: 'relative',
+                display: 'flex',
+                overflow: 'hidden',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                willChange: 'auto',
+                transform: 'translateZ(0)'
+              }}
+            >
+              {/* Close Button */}
+              <button
+                onClick={() => setTimeDropdownOpen(false)}
+                style={{
+                  position: 'absolute',
+                  top: '1rem',
+                  right: '1rem',
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '36px',
+                  height: '36px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '1.2rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                  zIndex: 10
+                }}
+                onMouseEnter={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+                }}
+              >
+                ×
+              </button>
+
+              {/* Left Panel - Time Period Options */}
+              <div
+                key="left-panel"
+                style={{
+                  flex: '0 0 300px',
+                  padding: '2rem',
+                  borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+                  background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(147, 51, 234, 0.08) 100%)',
+                  willChange: 'auto'
+                }}
+              >
+                <h3
+                  style={{
+                    color: 'white',
+                    fontSize: '1.2rem',
+                    fontWeight: '600',
+                    marginBottom: '1.5rem',
+                    textAlign: 'left'
+                  }}
+                >
                     Time Periods
                   </h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -2869,150 +2982,177 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
                           console.log('🔄 Changing timePeriod from:', timePeriod, 'to:', option.value);
                           setTimePeriod(option.value);
+                          
                           setTimeDropdownOpen(false);
                           console.log('✅ Time period updated and modal closed');
                         }}
                         style={{
                           background: timePeriod === option.value 
-                            ? 'linear-gradient(135deg, rgba(96, 165, 250, 0.3) 0%, rgba(167, 139, 250, 0.3) 100%)' 
-                            : 'rgba(255, 255, 255, 0.05)',
-                          border: timePeriod === option.value 
-                            ? '1px solid rgba(96, 165, 250, 0.4)' 
-                            : '1px solid rgba(255, 255, 255, 0.1)',
-                          borderRadius: '16px',
-                          padding: '1.2rem 1.8rem',
-                          color: 'white',
+                            ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(147, 51, 234, 0.2) 100%)' 
+                            : 'rgba(255, 255, 255, 0.03)',
+                          border: timePeriod === option.value ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid transparent',
+                          borderRadius: '12px',
+                          padding: '1rem 1.5rem',
+                          color: timePeriod === option.value ? '#fff' : 'rgba(255, 255, 255, 0.8)',
                           cursor: 'pointer',
                           fontSize: '1rem',
-                          fontWeight: timePeriod === option.value ? '600' : '500',
-                          transition: 'all 0.3s ease',
+                          fontWeight: timePeriod === option.value ? '600' : '400',
+                          transition: 'all 0.2s ease',
                           textAlign: 'left',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
-                          backdropFilter: 'blur(10px)',
-                          WebkitBackdropFilter: 'blur(10px)',
-                          boxShadow: timePeriod === option.value 
-                            ? '0 8px 32px rgba(96, 165, 250, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1)' 
-                            : '0 4px 12px rgba(0, 0, 0, 0.1)'
+                          boxShadow: timePeriod === option.value ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none'
                         }}
                         onMouseEnter={(e) => {
                           if (timePeriod !== option.value) {
-                            (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.12)';
-                            (e.target as HTMLElement).style.transform = 'translateY(-2px)';
-                            (e.target as HTMLElement).style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.2)';
+                            (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.08)';
+                            (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
                           }
                         }}
                         onMouseLeave={(e) => {
                           if (timePeriod !== option.value) {
-                            (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.05)';
-                            (e.target as HTMLElement).style.transform = 'translateY(0)';
-                            (e.target as HTMLElement).style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+                            (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.03)';
+                            (e.target as HTMLElement).style.borderColor = 'transparent';
                           }
                         }}
                       >
                         <span>{option.label}</span>
                         {timePeriod === option.value && (
-                          <span style={{ color: '#60a5fa' }}>✓</span>
+                          <span style={{ fontSize: '1rem', color: 'rgba(255, 255, 255, 0.9)' }}>✓</span>
                         )}
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* Calendar */}
-                <div style={{ flex: 1, minWidth: '400px' }}>
-                  <h3 style={{ 
-                    color: 'white', 
-                    margin: '0 0 1.5rem 0', 
-                    fontSize: '1.4rem', 
-                    fontWeight: '700',
-                    background: 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text'
-                  }}>
-                    {timePeriod === 'custom_range' ? 'Select Date Range' : 'Calendar'}
+              {/* Right Panel - Calendar */}
+              <div
+                key="right-panel"
+                style={{
+                  flex: 1,
+                  padding: '2rem',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  color: '#fff',
+                  willChange: 'auto'
+                }}
+              >
+                <h3
+                  style={{
+                    color: '#fff',
+                    fontSize: '1.2rem',
+                    fontWeight: '600',
+                    marginBottom: '1.5rem',
+                    textAlign: 'center'
+                  }}
+                >
+                  {(() => {
+                    const now = new Date();
+                    switch (timePeriod) {
+                      case 'today':
+                        return `Today - ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`;
+                      case 'yesterday':
+                        const yesterday = new Date(now);
+                        yesterday.setDate(yesterday.getDate() - 1);
+                        return `Yesterday - ${yesterday.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`;
+                      case 'this_week':
+                        const weekStart = new Date(now);
+                        weekStart.setDate(now.getDate() - now.getDay());
+                        const weekEnd = new Date(weekStart);
+                        weekEnd.setDate(weekStart.getDate() + 6);
+                        return `This Week - ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                      case 'last_week':
+                        const lastWeekStart = new Date(now);
+                        lastWeekStart.setDate(now.getDate() - now.getDay() - 7);
+                        const lastWeekEnd = new Date(lastWeekStart);
+                        lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
+                        return `Last Week - ${lastWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${lastWeekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                      case 'this_month':
+                        return `This Month - ${now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+                      case 'last_month':
+                        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                        return `Last Month - ${lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+                      case 'custom_range': {
+                        const start = customRangeStart;
+                        const end = customRangeEnd;
+                        const hasStart = !!start;
+                        const hasEnd = !!end;
+                        const rangeLabel = hasStart && hasEnd
+                          ? `${start!.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${end!.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                          : hasStart
+                            ? `Start: ${start!.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                            : 'Select start date';
+                        return `Custom Range - ${rangeLabel}`;
+                      }
+                      default:
+                        return 'Selected Period';
+                    }
+                  })()}
                   </h3>
                   
-                  {/* Calendar Header */}
-                  <div style={{ 
+                {/* Calendar Preview */}
+                <div
+                  style={{
                     display: 'flex', 
-                    justifyContent: 'space-between', 
+                    flexDirection: 'column',
                     alignItems: 'center',
+                    gap: '1rem',
+                    transition: 'opacity 0.2s ease-in-out',
+                    opacity: 1
+                  }}
+                >
+                  {/* Month/Year Navigation */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '1rem',
                     marginBottom: '1rem'
-                  }}>
+                    }}
+                  >
                     <button
-                      onClick={() => {
-                        const newDate = new Date(selectedDate);
-                        newDate.setMonth(selectedDate.getMonth() - 1);
-                        setSelectedDate(newDate);
-                      }}
+                      onClick={() => navigateCalendar('prev')}
                       style={{
-                        background: 'rgba(255, 255, 255, 0.08)',
-                        border: '1px solid rgba(255, 255, 255, 0.15)',
-                        borderRadius: '12px',
-                        color: 'white',
-                        padding: '0.75rem',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '8px',
+                        padding: '0.5rem',
                         cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'all 0.2s ease',
-                        backdropFilter: 'blur(10px)',
-                        WebkitBackdropFilter: 'blur(10px)',
-                        fontSize: '1.1rem',
-                        fontWeight: '600'
+                        color: 'rgba(255, 255, 255, 0.8)',
+                        transition: 'all 0.2s ease'
                       }}
                       onMouseEnter={(e) => {
-                        (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.15)';
-                        (e.target as HTMLElement).style.transform = 'translateY(-1px)';
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
                       }}
                       onMouseLeave={(e) => {
-                        (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.08)';
-                        (e.target as HTMLElement).style.transform = 'translateY(0)';
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
                       }}
                     >
                       ←
                     </button>
-                    <h4 style={{ 
-                      color: 'white', 
-                      margin: 0, 
-                      fontSize: '1.2rem',
-                      fontWeight: '600',
-                      textAlign: 'center'
-                    }}>
+                    <span style={{ fontSize: '1.1rem', fontWeight: '600', minWidth: '150px', textAlign: 'center', color: '#fff' }}>
                       {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                    </h4>
+                    </span>
                     <button
-                      onClick={() => {
-                        const newDate = new Date(selectedDate);
-                        newDate.setMonth(selectedDate.getMonth() + 1);
-                        setSelectedDate(newDate);
-                      }}
+                      onClick={() => navigateCalendar('next')}
                       style={{
-                        background: 'rgba(255, 255, 255, 0.08)',
-                        border: '1px solid rgba(255, 255, 255, 0.15)',
-                        borderRadius: '12px',
-                        color: 'white',
-                        padding: '0.75rem',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '8px',
+                        padding: '0.5rem',
                         cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'all 0.2s ease',
-                        backdropFilter: 'blur(10px)',
-                        WebkitBackdropFilter: 'blur(10px)',
-                        fontSize: '1.1rem',
-                        fontWeight: '600'
+                        color: 'rgba(255, 255, 255, 0.8)',
+                        transition: 'all 0.2s ease'
                       }}
                       onMouseEnter={(e) => {
-                        (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.15)';
-                        (e.target as HTMLElement).style.transform = 'translateY(-1px)';
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
                       }}
                       onMouseLeave={(e) => {
-                        (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.08)';
-                        (e.target as HTMLElement).style.transform = 'translateY(0)';
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
                       }}
                     >
                       →
@@ -3020,49 +3160,70 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                   </div>
 
                   {/* Calendar Grid */}
-                  <div style={{
+                  <div
+                    key={`${selectedDate.getMonth()}-${selectedDate.getFullYear()}`}
+                    style={{
                     display: 'grid',
                     gridTemplateColumns: 'repeat(7, 1fr)',
-                    gap: '0.5rem',
-                    fontSize: '0.9rem',
-                    width: '100%',
-                    minWidth: '350px'
-                  }}>
-                    {/* Day headers */}
+                      gap: '0.5rem',
+                      width: '100%',
+                      maxWidth: '350px',
+                      minHeight: '300px',
+                      opacity: 1,
+                      animation: 'fadeIn 0.15s ease-out'
+                    }}
+                  >
+                    {/* Day Headers */}
                     {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                      <div key={day} style={{
-                        color: 'rgba(255, 255, 255, 0.6)',
-                        textAlign: 'center',
-                        padding: '0.75rem',
-                        fontWeight: '600',
-                        fontSize: '0.9rem'
-                      }}>
+                      <div
+                        key={day}
+                        style={{
+                        padding: '0.5rem',
+                          textAlign: 'center',
+                          fontSize: '0.8rem',
+                          fontWeight: '600',
+                          color: 'rgba(255, 255, 255, 0.5)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
+                        }}
+                      >
                         {day}
                       </div>
                     ))}
                     
-                    {/* Calendar days */}
+                    {/* Calendar Days */}
                     {(() => {
                       const year = selectedDate.getFullYear();
                       const month = selectedDate.getMonth();
                       const firstDay = new Date(year, month, 1);
                       const lastDay = new Date(year, month + 1, 0);
-                      const startDate = new Date(firstDay);
-                      startDate.setDate(startDate.getDate() - firstDay.getDay());
+                      const startingDayOfWeek = firstDay.getDay();
+                      const daysInMonth = lastDay.getDate();
+                      const today = new Date();
+                      
+                      console.log('🗓️ Rendering calendar for:', year, month + 1, 'with', daysInMonth, 'days');
                       
                       const days = [];
-                      for (let i = 0; i < 42; i++) {
-                        const currentDate = new Date(startDate);
-                        currentDate.setDate(startDate.getDate() + i);
-                        
-                        const isCurrentMonth = currentDate.getMonth() === month;
-                        const isToday = currentDate.toDateString() === new Date().toDateString();
-                        const isSelected = currentDate.toDateString() === selectedDate.toDateString();
+                      
+                      // Empty cells for days before the first day of the month
+                      for (let i = 0; i < startingDayOfWeek; i++) {
+                        days.push(
+                          <div key={`empty-${i}`} style={{ padding: '0.75rem' }}></div>
+                        );
+                      }
+                      
+                      // Days of the month
+                      for (let day = 1; day <= daysInMonth; day++) {
+                        const currentDate = new Date(year, month, day);
+                        const isToday = currentDate.toDateString() === today.toDateString();
+                        const isInSelectedRange = isDateInSelectedRange(currentDate);
+                        const isFutureDate = currentDate > today;
                         
                         days.push(
                           <button
-                            key={i}
+                            key={day}
                             onClick={() => {
+                              if (!isFutureDate) {
                               if (timePeriod === 'custom_range') {
                                 if (!customRangeStart) {
                                   setCustomRangeStart(currentDate);
@@ -3074,36 +3235,64 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                                   setCustomRangeEnd(null);
                                 }
                               } else {
+                                console.log('🔥 CALENDAR DATE CLICKED:', currentDate.toDateString());
+                                console.log('🔥 IS TODAY?', currentDate.toDateString() === new Date().toDateString());
+                                
+                                // Use flushSync to ensure state updates are synchronous
+                                flushSync(() => {
                                 setSelectedDate(currentDate);
+                                  // Only set timePeriod to 'today' if the selected date is actually today
+                                  if (currentDate.toDateString() === new Date().toDateString()) {
+                                    console.log('🔥 SETTING TIMEPERIOD TO TODAY');
                                 setTimePeriod('today');
+                                  } else {
+                                    console.log('🔥 NOT TODAY - KEEPING CURRENT TIMEPERIOD:', timePeriod);
+                                  }
                                 setTimeDropdownOpen(false);
+                                });
+                                
+                                console.log('🔥 AFTER FLUSHSYNC - selectedDate should be:', currentDate.toDateString());
+                                }
                               }
                             }}
+                            disabled={isFutureDate}
                             style={{
-                              background: isSelected ? 'rgba(96, 165, 250, 0.8)' : 
-                                         isToday ? 'rgba(96, 165, 250, 0.3)' : 
-                                         'transparent',
-                              border: 'none',
-                              borderRadius: '8px',
-                              color: isCurrentMonth ? 'white' : 'rgba(255, 255, 255, 0.4)',
                               padding: '0.75rem',
-                              cursor: 'pointer',
-                              fontSize: '1rem',
-                              fontWeight: isSelected || isToday ? '600' : '500',
+                              textAlign: 'center',
+                              borderRadius: '8px',
+                              cursor: isFutureDate ? 'not-allowed' : 'pointer',
+                              border: isInSelectedRange 
+                                ? '1px solid rgba(59, 130, 246, 0.5)' 
+                                : '1px solid transparent',
+                              background: isInSelectedRange 
+                                ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.3) 0%, rgba(147, 51, 234, 0.3) 100%)' 
+                                : isToday 
+                                  ? 'rgba(59, 130, 246, 0.15)' 
+                                  : isFutureDate 
+                                    ? 'rgba(255, 255, 255, 0.02)' 
+                                    : 'rgba(255, 255, 255, 0.03)',
+                              color: isInSelectedRange 
+                                ? '#fff' 
+                                : isToday 
+                                  ? 'rgba(59, 130, 246, 1)' 
+                                  : isFutureDate 
+                                    ? 'rgba(255, 255, 255, 0.3)' 
+                                    : 'rgba(255, 255, 255, 0.8)',
+                              fontWeight: isToday ? '600' : isInSelectedRange ? '500' : '400',
                               transition: 'all 0.2s ease',
-                              minHeight: '40px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
+                              opacity: isFutureDate ? 0.5 : 1,
+                              boxShadow: isInSelectedRange ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none'
                             }}
                             onMouseEnter={(e) => {
-                              if (!isSelected) {
-                                (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.1)';
+                              if (!isFutureDate && !isInSelectedRange) {
+                                (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+                                (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
                               }
                             }}
                             onMouseLeave={(e) => {
-                              if (!isSelected) {
-                                (e.target as HTMLElement).style.background = isToday ? 'rgba(96, 165, 250, 0.3)' : 'transparent';
+                              if (!isFutureDate && !isInSelectedRange) {
+                                (e.target as HTMLElement).style.backgroundColor = isToday ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.03)';
+                                (e.target as HTMLElement).style.borderColor = 'transparent';
                               }
                             }}
                           >
@@ -3153,10 +3342,12 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       const newDate = new Date(selectedDate);
       newDate.setDate(selectedDate.getDate() + (direction === 'next' ? 1 : -1));
       setSelectedDate(newDate);
+      setTimePeriod('today'); // Reset to 'today' when navigating dates
     };
 
     const goToToday = () => {
       setSelectedDate(new Date());
+      setTimePeriod('today'); // Reset to 'today' when going to today
     };
 
     const isToday = (date: Date) => {
@@ -3173,7 +3364,9 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     const navigateCalendar = (direction: 'prev' | 'next') => {
       const newDate = new Date(selectedDate);
       newDate.setMonth(selectedDate.getMonth() + (direction === 'next' ? 1 : -1));
+      requestAnimationFrame(() => {
       setSelectedDate(newDate);
+      });
     };
 
     // Get date range for current time period
@@ -3714,7 +3907,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               </div>
               
               <div style={{ display: 'flex', gap: '1rem' }}>
-                {!isToday(selectedDate) && (
+                {(!isToday(selectedDate) || timePeriod !== 'today') && (
                   <button
                     onClick={goToToday}
                     style={{
@@ -4091,8 +4284,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              animation: 'fadeIn 0.3s ease-out',
-              padding: '2rem'
+              padding: '2rem',
+              willChange: 'auto'
             }}
             onClick={(e) => {
               // Only close if clicking directly on the backdrop, not on child elements
@@ -4104,22 +4297,26 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
           >
             {/* Modal Content */}
             <div
+              key="modal-content"
               data-time-dropdown="true"
               onClick={(e) => e.stopPropagation()}
               style={{
-                background: 'rgba(20,24,45,0.6)',
+                background: 'linear-gradient(145deg, rgba(17, 24, 39, 0.95) 0%, rgba(31, 41, 55, 0.95) 50%, rgba(55, 65, 81, 0.95) 100%)',
                 borderRadius: '24px',
                 padding: '0',
                 width: '800px',
                 maxWidth: '90vw',
-                height: '500px',
-                maxHeight: '80vh',
-                boxShadow: '0 25px 50px rgba(0, 0, 0, 0.5)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
+                height: '550px',
+                maxHeight: '85vh',
+                boxShadow: '0 30px 60px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
                 position: 'relative',
-                animation: 'slideIn 0.3s ease-out',
                 display: 'flex',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                willChange: 'auto',
+                transform: 'translateZ(0)'
               }}
             >
               {/* Close Button */}
@@ -4155,11 +4352,13 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
               {/* Left Panel - Time Period Options */}
               <div
+                key="left-panel"
                 style={{
                   flex: '0 0 300px',
                   padding: '2rem',
-                  borderRight: '1px solid rgba(255, 255, 255, 0.2)',
-                  background: 'rgba(255, 255, 255, 0.05)'
+                  borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+                  background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(147, 51, 234, 0.08) 100%)',
+                  willChange: 'auto'
                 }}
               >
                 <h3
@@ -4209,12 +4408,12 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       }}
                       style={{
                         background: timePeriod === option.value 
-                          ? 'rgba(255, 255, 255, 0.3)' 
-                          : 'transparent',
-                        border: 'none',
+                          ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(147, 51, 234, 0.2) 100%)' 
+                          : 'rgba(255, 255, 255, 0.03)',
+                        border: timePeriod === option.value ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid transparent',
                         borderRadius: '12px',
                         padding: '1rem 1.5rem',
-                        color: 'white',
+                        color: timePeriod === option.value ? '#fff' : 'rgba(255, 255, 255, 0.8)',
                         cursor: 'pointer',
                         fontSize: '1rem',
                         fontWeight: timePeriod === option.value ? '600' : '400',
@@ -4222,16 +4421,19 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         textAlign: 'left',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between'
+                        justifyContent: 'space-between',
+                        boxShadow: timePeriod === option.value ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none'
                       }}
                       onMouseEnter={(e) => {
                         if (timePeriod !== option.value) {
-                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.1)';
+                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.08)';
+                          (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
                         }
                       }}
                       onMouseLeave={(e) => {
                         if (timePeriod !== option.value) {
-                          (e.target as HTMLElement).style.background = 'transparent';
+                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.03)';
+                          (e.target as HTMLElement).style.borderColor = 'transparent';
                         }
                       }}
                     >
@@ -4246,16 +4448,18 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
               {/* Right Panel - Calendar */}
               <div
+                key="right-panel"
                 style={{
                   flex: 1,
                   padding: '2rem',
-                  background: 'rgba(255, 255, 255, 0.95)',
-                  color: '#333'
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  color: '#fff',
+                  willChange: 'auto'
                 }}
               >
                   <h3
                   style={{
-                    color: '#333',
+                    color: '#fff',
                     fontSize: '1.2rem',
                     fontWeight: '600',
                     marginBottom: '1.5rem',
@@ -4314,7 +4518,9 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                      display: 'flex',
                      flexDirection: 'column',
                      alignItems: 'center',
-                     gap: '1rem'
+                     gap: '1rem',
+                     transition: 'opacity 0.2s ease-in-out',
+                     opacity: 1
                    }}
                  >
                                      {/* Month/Year Navigation */}
@@ -4329,46 +4535,46 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                      <button
                        onClick={() => navigateCalendar('prev')}
                        style={{
-                         background: 'none',
-                         border: '1px solid #ccc',
-                         borderRadius: '6px',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '8px',
                          padding: '0.5rem',
                          cursor: 'pointer',
-                         color: '#666',
+                        color: 'rgba(255, 255, 255, 0.8)',
                          transition: 'all 0.2s ease'
                        }}
                        onMouseEnter={(e) => {
-                         (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
-                         (e.target as HTMLElement).style.borderColor = '#999';
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
                        }}
                        onMouseLeave={(e) => {
-                         (e.target as HTMLElement).style.backgroundColor = 'transparent';
-                         (e.target as HTMLElement).style.borderColor = '#ccc';
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
                        }}
                      >
                        ←
                      </button>
-                     <span style={{ fontSize: '1.1rem', fontWeight: '600', minWidth: '150px', textAlign: 'center' }}>
+                                         <span style={{ fontSize: '1.1rem', fontWeight: '600', minWidth: '150px', textAlign: 'center', color: '#fff' }}>
                        {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                      </span>
                      <button
                        onClick={() => navigateCalendar('next')}
                        style={{
-                         background: 'none',
-                         border: '1px solid #ccc',
-                         borderRadius: '6px',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '8px',
                          padding: '0.5rem',
                          cursor: 'pointer',
-                         color: '#666',
+                        color: 'rgba(255, 255, 255, 0.8)',
                          transition: 'all 0.2s ease'
                        }}
                        onMouseEnter={(e) => {
-                         (e.target as HTMLElement).style.backgroundColor = '#f0f0f0';
-                         (e.target as HTMLElement).style.borderColor = '#999';
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
                        }}
                        onMouseLeave={(e) => {
-                         (e.target as HTMLElement).style.backgroundColor = 'transparent';
-                         (e.target as HTMLElement).style.borderColor = '#ccc';
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
                        }}
                      >
                        →
@@ -4377,12 +4583,16 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
                   {/* Calendar Grid */}
                   <div
+                    key={`${selectedDate.getMonth()}-${selectedDate.getFullYear()}`}
                     style={{
                       display: 'grid',
                       gridTemplateColumns: 'repeat(7, 1fr)',
                       gap: '0.5rem',
                       width: '100%',
-                      maxWidth: '350px'
+                      maxWidth: '350px',
+                      minHeight: '300px',
+                      opacity: 1,
+                      animation: 'fadeIn 0.15s ease-out'
                     }}
                   >
                     {/* Day Headers */}
@@ -4394,7 +4604,9 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                           textAlign: 'center',
                           fontSize: '0.8rem',
                           fontWeight: '600',
-                          color: '#666'
+                          color: 'rgba(255, 255, 255, 0.5)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
                         }}
                       >
                         {day}
@@ -4458,9 +4670,17 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                                   }
 
                                   // Single day selection flow
+                                  console.log('🔥 POINTS HISTORY CALENDAR DATE CLICKED:', clicked.toDateString());
+                                  console.log('🔥 IS TODAY?', clicked.toDateString() === new Date().toDateString());
                                   flushSync(() => {
-                                    setTimePeriod('today');
                                     setSelectedDate(clicked);
+                                    // Only set timePeriod to 'today' if the selected date is actually today
+                                    if (clicked.toDateString() === new Date().toDateString()) {
+                                      console.log('🔥 POINTS HISTORY SETTING TIMEPERIOD TO TODAY');
+                                      setTimePeriod('today');
+                                    } else {
+                                      console.log('🔥 POINTS HISTORY NOT TODAY - KEEPING CURRENT TIMEPERIOD');
+                                    }
                                     setTimeDropdownOpen(false);
                                   });
                                   console.log('✅ Single day selected:', clicked.toLocaleDateString());
@@ -4472,37 +4692,40 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                              style={{
                                padding: '0.75rem',
                                textAlign: 'center',
-                               borderRadius: '6px',
+                               borderRadius: '8px',
                                cursor: isFutureDate ? 'not-allowed' : 'pointer',
-                               border: 'none',
+                               border: isInSelectedRange 
+                                 ? '1px solid rgba(59, 130, 246, 0.5)' 
+                                 : '1px solid transparent',
                                background: isInSelectedRange 
-                                 ? '#667eea' 
+                                 ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.3) 0%, rgba(147, 51, 234, 0.3) 100%)' 
                                  : isToday 
-                                   ? '#e0e7ff' 
+                                   ? 'rgba(59, 130, 246, 0.15)' 
                                    : isFutureDate 
-                                     ? '#f5f5f5' 
-                                     : 'transparent',
+                                     ? 'rgba(255, 255, 255, 0.02)' 
+                                     : 'rgba(255, 255, 255, 0.03)',
                                color: isInSelectedRange 
-                                 ? 'white' 
+                                 ? '#fff' 
                                  : isToday 
-                                   ? '#667eea' 
+                                   ? 'rgba(59, 130, 246, 1)' 
                                    : isFutureDate 
-                                     ? '#ccc' 
-                                     : '#333',
+                                     ? 'rgba(255, 255, 255, 0.3)' 
+                                     : 'rgba(255, 255, 255, 0.8)',
                                fontWeight: isToday ? '600' : isInSelectedRange ? '500' : '400',
                                transition: 'all 0.2s ease',
-                               opacity: isFutureDate ? 0.5 : 1
+                               opacity: isFutureDate ? 0.5 : 1,
+                               boxShadow: isInSelectedRange ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none'
                              }}
                              onMouseEnter={(e) => {
                                if (!isFutureDate && !isInSelectedRange) {
-                                 (e.target as HTMLElement).style.backgroundColor = '#f0f4ff';
-                                 (e.target as HTMLElement).style.color = '#667eea';
+                                 (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+                                 (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
                                }
                              }}
                              onMouseLeave={(e) => {
                                if (!isFutureDate && !isInSelectedRange) {
-                                 (e.target as HTMLElement).style.backgroundColor = isToday ? '#e0e7ff' : isFutureDate ? '#f5f5f5' : 'transparent';
-                                 (e.target as HTMLElement).style.color = isToday ? '#667eea' : isFutureDate ? '#ccc' : '#333';
+                                 (e.target as HTMLElement).style.backgroundColor = isToday ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.03)';
+                                 (e.target as HTMLElement).style.borderColor = 'transparent';
                                }
                              }}
                            >
@@ -4558,10 +4781,12 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       const newDate = new Date(selectedDate);
       newDate.setDate(selectedDate.getDate() + (direction === 'next' ? 1 : -1));
       setSelectedDate(newDate);
+      setTimePeriod('today'); // Reset to 'today' when navigating dates
     };
 
     const goToToday = () => {
       setSelectedDate(new Date());
+      setTimePeriod('today'); // Reset to 'today' when going to today
     };
 
     const isToday = (date: Date) => {
@@ -4648,6 +4873,23 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       }
 
       return { startDate, endDate };
+    };
+
+    // Check if a date is in the selected range
+    const isDateInSelectedRange = (date: Date) => {
+      const { startDate, endDate } = getCurrentDateRange();
+      const checkDate = new Date(date);
+      checkDate.setHours(12, 0, 0, 0); // Set to noon to avoid timezone issues
+      return checkDate >= startDate && checkDate <= endDate;
+    };
+
+    // Calendar navigation function
+    const navigateCalendar = (direction: 'prev' | 'next') => {
+      const newDate = new Date(selectedDate);
+      newDate.setMonth(selectedDate.getMonth() + (direction === 'next' ? 1 : -1));
+      requestAnimationFrame(() => {
+        setSelectedDate(newDate);
+      });
     };
 
     useEffect(() => {
@@ -5089,7 +5331,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               </button>
               
               <div style={{ display: 'flex', gap: '1rem' }}>
-                {!isToday(selectedDate) && (
+                {(!isToday(selectedDate) || timePeriod !== 'today') && (
                   <button
                     onClick={goToToday}
                     style={{
@@ -5352,8 +5594,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              animation: 'fadeIn 0.3s ease-out',
-              padding: '2rem'
+              padding: '2rem',
+              willChange: 'auto'
             }}
             onClick={(e) => {
               // Only close if clicking directly on the backdrop, not on child elements
@@ -5365,22 +5607,26 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
           >
             {/* Modal Content */}
             <div
+              key="modal-content"
               data-time-dropdown="true"
               onClick={(e) => e.stopPropagation()}
               style={{
-                background: 'rgba(20,24,45,0.6)',
+                background: 'linear-gradient(145deg, rgba(17, 24, 39, 0.95) 0%, rgba(31, 41, 55, 0.95) 50%, rgba(55, 65, 81, 0.95) 100%)',
                 borderRadius: '24px',
                 padding: '0',
                 width: '800px',
                 maxWidth: '90vw',
-                height: '500px',
-                maxHeight: '80vh',
-                boxShadow: '0 25px 50px rgba(0, 0, 0, 0.5)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
+                height: '550px',
+                maxHeight: '85vh',
+                boxShadow: '0 30px 60px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
                 position: 'relative',
-                animation: 'slideIn 0.3s ease-out',
                 display: 'flex',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                willChange: 'auto',
+                transform: 'translateZ(0)'
               }}
             >
               {/* Close Button */}
@@ -5416,11 +5662,13 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
               {/* Left Panel - Time Period Options */}
               <div
+                key="left-panel"
                 style={{
                   flex: '0 0 300px',
                   padding: '2rem',
-                  borderRight: '1px solid rgba(255, 255, 255, 0.2)',
-                  background: 'rgba(255, 255, 255, 0.05)'
+                  borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+                  background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(147, 51, 234, 0.08) 100%)',
+                  willChange: 'auto'
                 }}
               >
                 <h3
@@ -5470,12 +5718,12 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       }}
                       style={{
                         background: timePeriod === option.value 
-                          ? 'rgba(255, 255, 255, 0.3)' 
-                          : 'transparent',
-                        border: 'none',
+                          ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(147, 51, 234, 0.2) 100%)' 
+                          : 'rgba(255, 255, 255, 0.03)',
+                        border: timePeriod === option.value ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid transparent',
                         borderRadius: '12px',
                         padding: '1rem 1.5rem',
-                        color: 'white',
+                        color: timePeriod === option.value ? '#fff' : 'rgba(255, 255, 255, 0.8)',
                         cursor: 'pointer',
                         fontSize: '1rem',
                         fontWeight: timePeriod === option.value ? '600' : '400',
@@ -5483,16 +5731,19 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         textAlign: 'left',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between'
+                        justifyContent: 'space-between',
+                        boxShadow: timePeriod === option.value ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none'
                       }}
                       onMouseEnter={(e) => {
                         if (timePeriod !== option.value) {
-                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.1)';
+                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.08)';
+                          (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
                         }
                       }}
                       onMouseLeave={(e) => {
                         if (timePeriod !== option.value) {
-                          (e.target as HTMLElement).style.background = 'transparent';
+                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.03)';
+                          (e.target as HTMLElement).style.borderColor = 'transparent';
                         }
                       }}
                     >
@@ -5507,16 +5758,18 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
               {/* Right Panel - Calendar */}
               <div
+                key="right-panel"
                 style={{
                   flex: 1,
                   padding: '2rem',
-                  background: 'rgba(255, 255, 255, 0.95)',
-                  color: '#333'
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  color: '#fff',
+                  willChange: 'auto'
                 }}
               >
                 <h3
                   style={{
-                    color: '#333',
+                    color: '#fff',
                     fontSize: '1.2rem',
                     fontWeight: '600',
                     marginBottom: '1.5rem',
@@ -5573,7 +5826,9 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
-                    gap: '1rem'
+                    gap: '1rem',
+                    transition: 'opacity 0.2s ease-in-out',
+                    opacity: 1
                   }}
                 >
                   {/* Month/Year Navigation */}
@@ -5581,69 +5836,87 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'space-between',
-                      width: '100%',
+                      gap: '1rem',
                       marginBottom: '1rem'
                     }}
                   >
                     <button
-                      onClick={() => {
-                        const newDate = new Date(selectedDate);
-                        newDate.setMonth(selectedDate.getMonth() - 1);
-                        setSelectedDate(newDate);
-                      }}
+                      onClick={() => navigateCalendar('prev')}
                       style={{
-                        background: 'none',
-                        border: '1px solid #ddd',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
                         borderRadius: '8px',
-                        padding: '0.5rem 1rem',
+                        padding: '0.5rem',
                         cursor: 'pointer',
-                        color: '#666'
+                        color: 'rgba(255, 255, 255, 0.8)',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
                       }}
                     >
-                      ← Previous
+                      ←
                     </button>
-                    <h4 style={{ margin: 0, color: '#333', fontSize: '1.1rem' }}>
+                    <span style={{ fontSize: '1.1rem', fontWeight: '600', minWidth: '150px', textAlign: 'center', color: '#fff' }}>
                       {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                    </h4>
+                    </span>
                     <button
-                      onClick={() => {
-                        const newDate = new Date(selectedDate);
-                        newDate.setMonth(selectedDate.getMonth() + 1);
-                        setSelectedDate(newDate);
-                      }}
+                      onClick={() => navigateCalendar('next')}
                       style={{
-                        background: 'none',
-                        border: '1px solid #ddd',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
                         borderRadius: '8px',
-                        padding: '0.5rem 1rem',
+                        padding: '0.5rem',
                         cursor: 'pointer',
-                        color: '#666'
+                        color: 'rgba(255, 255, 255, 0.8)',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
                       }}
                     >
-                      Next →
+                      →
                     </button>
                   </div>
 
                   {/* Calendar Grid */}
                   <div
+                    key={`${selectedDate.getMonth()}-${selectedDate.getFullYear()}`}
                     style={{
                       display: 'grid',
                       gridTemplateColumns: 'repeat(7, 1fr)',
-                      gap: '0.25rem',
+                      gap: '0.5rem',
                       width: '100%',
-                      maxWidth: '350px'
+                      maxWidth: '350px',
+                      minHeight: '300px',
+                      opacity: 1,
+                      animation: 'fadeIn 0.15s ease-out'
                     }}
                   >
                     {/* Day Headers */}
                     {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                      <div key={day} style={{
+                      <div
+                        key={day}
+                        style={{
                         padding: '0.5rem',
                         textAlign: 'center',
-                        fontWeight: '600',
                         fontSize: '0.8rem',
-                        color: '#666'
-                      }}>
+                          fontWeight: '600',
+                          color: 'rgba(255, 255, 255, 0.5)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
+                        }}
+                      >
                         {day}
                       </div>
                     ))}
@@ -5654,79 +5927,117 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       const month = selectedDate.getMonth();
                       const firstDay = new Date(year, month, 1);
                       const lastDay = new Date(year, month + 1, 0);
-                      const startDate = new Date(firstDay);
-                      startDate.setDate(startDate.getDate() - firstDay.getDay());
+                      const startingDayOfWeek = firstDay.getDay();
+                      const daysInMonth = lastDay.getDate();
+                      const today = new Date();
+                      
+                      console.log('🗓️ Rendering calendar for:', year, month + 1, 'with', daysInMonth, 'days');
                       
                       const days = [];
-                      for (let i = 0; i < 42; i++) {
-                        const currentDate = new Date(startDate);
-                        currentDate.setDate(startDate.getDate() + i);
-                        const isCurrentMonth = currentDate.getMonth() === month;
-                        const isSelected = currentDate.toDateString() === selectedDate.toDateString();
-                        const isToday = currentDate.toDateString() === new Date().toDateString();
+                      
+                      // Empty cells for days before the first day of the month
+                      for (let i = 0; i < startingDayOfWeek; i++) {
+                        days.push(
+                          <div key={`empty-${i}`} style={{ padding: '0.75rem' }}></div>
+                        );
+                      }
+                      
+                      // Days of the month
+                      for (let day = 1; day <= daysInMonth; day++) {
+                        const currentDate = new Date(year, month, day);
+                        const isToday = currentDate.toDateString() === today.toDateString();
+                        const isInSelectedRange = isDateInSelectedRange(currentDate);
+                        const isFutureDate = currentDate > today;
                         
                         days.push(
                           <button
-                            key={i}
-                            onClick={() => {
+                             key={day}
+                             onClick={((selectedDay) => (e) => {
+                              console.log('🔥 CALENDAR BUTTON CLICKED!', selectedDay.getDate(), 'isFutureDate:', selectedDay > today);
+                              e.preventDefault();
+                              e.stopPropagation();
+                              e.nativeEvent.stopImmediatePropagation();
+                               if (selectedDay <= today) {
+                                 const clicked = new Date(selectedDay);
+                                 console.log('📅 Date selected from calendar:', clicked.toLocaleDateString());
+
                               if (timePeriod === 'custom_range') {
+                                   // First click sets start, second sets end then close
                                 if (!customRangeStart) {
-                                  setCustomRangeStart(currentDate);
-                                  console.log('📅 Custom range start set:', currentDate);
-                                } else if (!customRangeEnd) {
-                                  const start = customRangeStart;
-                                  const end = currentDate;
-                                  if (end >= start) {
-                                    setCustomRangeEnd(end);
-                                    console.log('📅 Custom range end set:', end);
+                                     setCustomRangeStart(clicked);
+                                     console.log('🔹 Set customRangeStart:', clicked.toDateString());
+                                     return;
+                                   }
+                                   if (!customRangeEnd) {
+                                     setCustomRangeEnd(clicked);
+                                     console.log('🔸 Set customRangeEnd:', clicked.toDateString());
+                                     // Close after selecting end
                                     setTimeDropdownOpen(false);
-                                  } else {
-                                    // If end is before start, swap them
-                                    setCustomRangeStart(end);
-                                    setCustomRangeEnd(start);
-                                    console.log('📅 Custom range swapped - start:', end, 'end:', start);
-                                    setTimeDropdownOpen(false);
-                                  }
-                                } else {
-                                  // Reset and start over
-                                  setCustomRangeStart(currentDate);
-                                  setCustomRangeEnd(null);
-                                  console.log('📅 Custom range reset - new start:', currentDate);
-                                }
+                                     return;
+                                   }
+                                 }
+
+                                                                  // Single day selection flow
+                                 console.log('🔥 CHECK-INS CALENDAR DATE CLICKED:', clicked.toDateString());
+                                 console.log('🔥 IS TODAY?', clicked.toDateString() === new Date().toDateString());
+                                 flushSync(() => {
+                                   setSelectedDate(clicked);
+                                   // Only set timePeriod to 'today' if the selected date is actually today
+                                   if (clicked.toDateString() === new Date().toDateString()) {
+                                     console.log('🔥 CHECK-INS SETTING TIMEPERIOD TO TODAY');
+                                     setTimePeriod('today');
                               } else {
-                                setSelectedDate(currentDate);
-                                if (timePeriod === 'today') {
+                                     console.log('🔥 CHECK-INS NOT TODAY - KEEPING CURRENT TIMEPERIOD');
+                                   }
                                   setTimeDropdownOpen(false);
+                                 });
+                                 console.log('✅ Single day selected:', clicked.toLocaleDateString());
+                               } else {
+                               console.log('❌ Future date clicked, ignoring');
                                 }
-                              }
-                            }}
+                            })(currentDate)}
+                            disabled={isFutureDate}
                             style={{
-                              padding: '0.5rem',
-                              border: 'none',
+                              padding: '0.75rem',
+                              textAlign: 'center',
                               borderRadius: '8px',
-                              background: isSelected ? '#667eea' : 
-                                         isToday ? '#f0f0f0' : 
-                                         'transparent',
-                              color: isSelected ? 'white' : 
-                                     isToday ? '#333' : 
-                                     isCurrentMonth ? '#333' : '#ccc',
-                              cursor: 'pointer',
-                              fontSize: '0.9rem',
-                              fontWeight: isSelected || isToday ? '600' : '400',
-                              transition: 'all 0.2s ease'
+                              cursor: isFutureDate ? 'not-allowed' : 'pointer',
+                              border: isInSelectedRange 
+                                ? '1px solid rgba(59, 130, 246, 0.5)' 
+                                : '1px solid transparent',
+                              background: isInSelectedRange 
+                                ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.3) 0%, rgba(147, 51, 234, 0.3) 100%)' 
+                                : isToday 
+                                  ? 'rgba(59, 130, 246, 0.15)' 
+                                  : isFutureDate 
+                                    ? 'rgba(255, 255, 255, 0.02)' 
+                                    : 'rgba(255, 255, 255, 0.03)',
+                              color: isInSelectedRange 
+                                ? '#fff' 
+                                : isToday 
+                                  ? 'rgba(59, 130, 246, 1)' 
+                                  : isFutureDate 
+                                    ? 'rgba(255, 255, 255, 0.3)' 
+                                    : 'rgba(255, 255, 255, 0.8)',
+                              fontWeight: isToday ? '600' : isInSelectedRange ? '500' : '400',
+                              transition: 'all 0.2s ease',
+                              opacity: isFutureDate ? 0.5 : 1,
+                              boxShadow: isInSelectedRange ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none'
                             }}
                             onMouseEnter={(e) => {
-                              if (!isSelected) {
-                                (e.target as HTMLElement).style.background = '#f5f5f5';
+                              if (!isFutureDate && !isInSelectedRange) {
+                                (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+                                (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
                               }
                             }}
                             onMouseLeave={(e) => {
-                              if (!isSelected) {
-                                (e.target as HTMLElement).style.background = isToday ? '#f0f0f0' : 'transparent';
+                              if (!isFutureDate && !isInSelectedRange) {
+                                (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
+                                (e.target as HTMLElement).style.borderColor = 'transparent';
                               }
                             }}
                           >
-                            {currentDate.getDate()}
+                            {day}
                           </button>
                         );
                       }
@@ -5772,10 +6083,12 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       const newDate = new Date(selectedDate);
       newDate.setDate(selectedDate.getDate() + (direction === 'next' ? 1 : -1));
       setSelectedDate(newDate);
+      setTimePeriod('today'); // Reset to 'today' when navigating dates
     };
 
     const goToToday = () => {
       setSelectedDate(new Date());
+      setTimePeriod('today'); // Reset to 'today' when going to today
     };
 
     const isToday = (date: Date) => {
@@ -6031,7 +6344,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               </div>
               
               <div style={{ display: 'flex', gap: '1rem' }}>
-                {!isToday(selectedDate) && (
+                {(!isToday(selectedDate) || timePeriod !== 'today') && (
                   <button
                     onClick={goToToday}
                     style={{
@@ -8292,7 +8605,6 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               </div>
               
               <div 
-                onClick={() => handleCardClick('revenue')}
                 style={{
                   background: 'rgba(255, 255, 255, 0.1)',
                   color: 'white',
@@ -8304,7 +8616,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                   backdropFilter: 'blur(20px)',
                   border: '1px solid rgba(255, 255, 255, 0.2)',
                   borderTop: '4px solid #10b981',
-                  cursor: 'pointer',
+                  cursor: 'default',
                   transition: 'all 0.3s ease',
                   transform: 'translateY(0)'
                 }}
@@ -8333,7 +8645,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 </h3>
                 <p style={{ fontSize: '3.5rem', fontWeight: '900', margin: 0 }}>${data.revenue.toLocaleString()}</p>
                 <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>
-                  {selectedOutlet === 'all' ? 'All outlets' : 'This outlet'} • Click to view details →
+                  {selectedOutlet === 'all' ? 'All outlets' : 'This outlet'}
                 </div>
               </div>
               
@@ -8816,21 +9128,26 @@ function App() {
   }, []);
 
   useEffect(() => {
-    // Listen for authentication state changes
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    // Simple Firebase auth listener - like admin panel
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      console.log('🔥 User Dashboard - Auth state:', user ? `✅ ${user.email}` : '❌ No user');
       setUser(user);
       setLoading(false);
+      
+      // If no user, redirect to admin panel login
+      if (!user) {
+        console.log('🔄 No user found, redirecting to admin panel login...');
+        window.location.href = '/login';
+      }
     });
 
     return unsubscribe;
   }, []);
 
-  const handleLogin = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
-  };
-
   const handleLogout = async () => {
     await signOut(auth);
+    // After logout, redirect to login page
+    window.location.href = '/login';
   };
 
   if (loading) {
@@ -8875,25 +9192,20 @@ function App() {
             margin: '0 auto 2rem'
           }} />
           <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.5rem', fontWeight: '600' }}>Rewin Dashboard</h2>
-          <p style={{ margin: 0, opacity: 0.9 }}>Connecting to Firebase...</p>
+          <p style={{ margin: 0, opacity: 0.9 }}>Loading your dashboard...</p>
         </div>
       </div>
     );
   }
 
-  if (!user) {
-    return (
-      <AuthContext.Provider value={{ user }}>
-        <LoginPage onLogin={handleLogin} />
-      </AuthContext.Provider>
-    );
-  }
-
+  // If we reach here, user is authenticated - show dashboard
   return (
-    <AuthContext.Provider value={{ user }}>
+    <AuthContext.Provider value={{ user, loading }}>
       <Dashboard user={user} onLogout={handleLogout} />
     </AuthContext.Provider>
   );
 }
 
-export default App;
+export default function UserDashboard() {
+  return <App />;
+}

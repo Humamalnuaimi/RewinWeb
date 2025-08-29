@@ -1,5 +1,5 @@
 import React, { useState, useEffect, memo } from 'react';
-import { firestore } from '../firebase/config';
+import { firestore } from '../../firebase/config';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { type User } from 'firebase/auth';
 
