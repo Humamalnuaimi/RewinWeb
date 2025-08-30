@@ -1249,6 +1249,64 @@ export class AuthService {
       };
     }
   }
+
+  // Bulk delete customers by IDs
+  static async bulkDeleteCustomers(userId: string, customerIds: string[]) {
+    try {
+      console.log(`🗑️ Starting bulk delete of ${customerIds.length} customers for user ${userId}`);
+      
+      const batchSize = 500; // Firebase batch limit
+      let deletedCount = 0;
+      let errorCount = 0;
+      const errorDetails: string[] = [];
+
+      // Process in batches
+      for (let i = 0; i < customerIds.length; i += batchSize) {
+        const batchIds = customerIds.slice(i, i + batchSize);
+        const batch = writeBatch(db);
+
+        // Add delete operations to batch (filter out null/undefined IDs)
+        batchIds.forEach(customerId => {
+          if (customerId && typeof customerId === 'string') {
+            const customerRef = doc(db, 'users', userId, 'customers', customerId);
+            batch.delete(customerRef);
+          } else {
+            console.warn('Skipping invalid customer ID:', customerId);
+          }
+        });
+
+        try {
+          await batch.commit();
+          deletedCount += batchIds.length;
+          console.log(`✅ Deleted batch of ${batchIds.length} customers`);
+        } catch (batchError: any) {
+          console.error(`❌ Error deleting batch:`, batchError);
+          errorCount += batchIds.length;
+          errorDetails.push(`Batch error: ${batchError.message}`);
+        }
+      }
+
+      console.log(`🎯 Bulk delete completed: ${deletedCount} deleted, ${errorCount} errors`);
+
+      return {
+        success: deletedCount > 0,
+        deleted: deletedCount,
+        errors: errorCount,
+        errorDetails,
+        message: `Deleted ${deletedCount} customers${errorCount > 0 ? ` (${errorCount} errors)` : ''}`
+      };
+
+    } catch (error: any) {
+      console.error('❌ Bulk delete error:', error);
+      return {
+        success: false,
+        deleted: 0,
+        errors: customerIds.length,
+        errorDetails: [error.message],
+        message: 'Bulk delete failed'
+      };
+    }
+  }
 }
 
 export default AuthService;

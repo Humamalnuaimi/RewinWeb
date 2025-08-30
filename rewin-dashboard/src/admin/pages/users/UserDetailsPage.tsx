@@ -35,6 +35,7 @@ import {
 import AuthService from '../../services/firebase.service';
 import Papa from 'papaparse';
 import { saveAs } from 'file-saver';
+import { Timestamp, serverTimestamp } from 'firebase/firestore';
 
 // Temporarily define interfaces locally to avoid import issues
 interface User {
@@ -94,6 +95,16 @@ const UserDetailsPage: React.FC = () => {
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [customerGrowth, setCustomerGrowth] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Bulk delete state
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+  const [bulkDeleteProgress, setBulkDeleteProgress] = useState(0);
+  
+  // Delete ALL customers state
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
+  const [deleteAllLoading, setDeleteAllLoading] = useState(false);
+  const [deleteAllProgress, setDeleteAllProgress] = useState(0);
   const [loading, setLoading] = useState(true);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [timePeriod, setTimePeriod] = useState<TimePeriod>('today');
@@ -112,6 +123,85 @@ const UserDetailsPage: React.FC = () => {
   });
   const [activeTab, setActiveTab] = useState<'overview' | 'customers' | 'outlets' | 'analytics'>('overview');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // 🚨 CRITICAL: Helper functions for EXACT mobile app format
+  const formatPhoneNumber = (phone: any): string => {
+    if (!phone) return '';
+    const digitsOnly = String(phone).replace(/[^0-9]/g, '');
+    
+    if (digitsOnly.length === 10) {
+      return `+1${digitsOnly}`;
+    } else if (digitsOnly.length === 11 && digitsOnly.startsWith('1')) {
+      return `+${digitsOnly}`;
+    } else {
+      return `+1${digitsOnly}`;
+    }
+  };
+
+  const convertToFirebaseTimestamp = (dateValue: any): any => {
+    if (!dateValue) return serverTimestamp();
+    
+    try {
+      let date: Date;
+      
+      if (dateValue instanceof Date) {
+        date = dateValue;
+      } else if (typeof dateValue === 'string') {
+        date = new Date(dateValue);
+      } else {
+        date = new Date();
+      }
+      
+      if (isNaN(date.getTime())) {
+        return serverTimestamp();
+      }
+      
+      return Timestamp.fromDate(date);
+    } catch (error) {
+      console.error('Error converting to Firebase Timestamp:', error);
+      return serverTimestamp();
+    }
+  };
+
+  const convertToBoolean = (value: any): boolean => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+      return value.toLowerCase() === 'true' || value === '1' || value.toLowerCase() === 'yes';
+    }
+    return Boolean(value);
+  };
+
+  const parseNumber = (value: any): number => {
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
+      const parsed = parseFloat(value.replace(/[^0-9.-]/g, ''));
+      return isNaN(parsed) ? 0 : parsed;
+    }
+    return 0;
+  };
+
+  const formatBirthDate = (value: any): string => {
+    if (!value) return '';
+    
+    try {
+      let date: Date;
+      if (value instanceof Date) {
+        date = value;
+      } else {
+        date = new Date(value);
+      }
+      
+      if (isNaN(date.getTime())) return '';
+      
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${month}-${day}-${year}`;
+    } catch (error) {
+      console.error('Error formatting birth date:', error);
+      return '';
+    }
+  };
 
   // CSV Import/Export State
   const [showImportModal, setShowImportModal] = useState(false);
@@ -493,23 +583,67 @@ const UserDetailsPage: React.FC = () => {
         setImportData(results.data as any[]);
         setImportPreview(results.data.slice(0, 10) as any[]); // Show first 10 rows
         
-        // Auto-detect field mappings
+        // Auto-detect field mappings - comprehensive mapping for ALL export fields
         const headers = Object.keys(results.data[0] || {});
         const autoMapping: {[key: string]: string} = {};
         
         headers.forEach(header => {
-          const lowerHeader = header.toLowerCase();
-          if (lowerHeader.includes('name')) autoMapping[header] = 'name';
-          else if (lowerHeader.includes('email')) autoMapping[header] = 'email';
-          else if (lowerHeader.includes('phone')) autoMapping[header] = 'phone';
-          else if (lowerHeader === 'points' || lowerHeader.includes('current')) autoMapping[header] = 'points';
-          else if (lowerHeader.includes('lifetime')) autoMapping[header] = 'lifetime_points';
-          else if (lowerHeader.includes('created')) autoMapping[header] = 'created_at';
-          else if (lowerHeader.includes('birthday')) autoMapping[header] = 'birthday';
-          else if (lowerHeader.includes('visit')) autoMapping[header] = 'visit_count';
-          else if (lowerHeader.includes('reachable_email')) autoMapping[header] = 'reachable_email';
-          else if (lowerHeader.includes('reachable_sms')) autoMapping[header] = 'reachable_sms';
-          else if (lowerHeader.includes('reachable_push')) autoMapping[header] = 'reachable_push';
+          const lowerHeader = header.toLowerCase().replace(/[_\s-]/g, '');
+          
+          // Basic Info
+          if (lowerHeader === 'name' || lowerHeader === 'fullname' || lowerHeader === 'displayname') autoMapping[header] = 'name';
+          else if (lowerHeader === 'firstname') autoMapping[header] = 'first_name';
+          else if (lowerHeader === 'lastname') autoMapping[header] = 'last_name';
+          else if (lowerHeader === 'email') autoMapping[header] = 'email';
+          else if (lowerHeader === 'phone' || lowerHeader === 'phonenumber') autoMapping[header] = 'phone';
+          
+          // Points & Financial
+          else if (lowerHeader === 'points' || lowerHeader === 'currentpoints' || lowerHeader === 'availablepoints') autoMapping[header] = 'points';
+          else if (lowerHeader === 'lifetimepoints' || lowerHeader === 'totalpoints' || lowerHeader === 'lifetimepointsearned') autoMapping[header] = 'lifetime_points';
+          else if (lowerHeader === 'pointsredeemed' || lowerHeader === 'redeemedpoints') autoMapping[header] = 'points_redeemed';
+          else if (lowerHeader === 'totalspent') autoMapping[header] = 'total_spent';
+          
+          // Dates
+          else if (lowerHeader === 'createdat' || lowerHeader === 'datejoined' || lowerHeader === 'datecreated') autoMapping[header] = 'created_at';
+          else if (lowerHeader === 'firstvisitedat' || lowerHeader === 'firstvisit' || lowerHeader === 'first_visited_at') autoMapping[header] = 'first_visited_at';
+          else if (lowerHeader === 'lastvisitedat' || lowerHeader === 'lastvisit' || lowerHeader === 'last_visited_at') autoMapping[header] = 'last_visited_at';
+          else if (lowerHeader === 'birthday' || lowerHeader === 'dateofbirth' || lowerHeader === 'dob' || lowerHeader === 'birthdate') autoMapping[header] = 'birthday';
+          else if (lowerHeader === 'processedtimestamp') autoMapping[header] = 'processed_timestamp';
+          
+          // Visit & Activity
+          else if (lowerHeader === 'visitcount' || lowerHeader === 'visits' || lowerHeader === 'totalvisits') autoMapping[header] = 'visit_count';
+          else if (lowerHeader === 'active') autoMapping[header] = 'active';
+          else if (lowerHeader === 'processed') autoMapping[header] = 'processed';
+          
+          // Outlet Info
+          else if (lowerHeader === 'outletname' || lowerHeader === 'homeoutletname') autoMapping[header] = 'outlet_name';
+          else if (lowerHeader === 'outletid' || lowerHeader === 'homeoutletid') autoMapping[header] = 'outlet_id';
+          else if (lowerHeader === 'checkinoutletid') autoMapping[header] = 'check_in_outlet_id';
+          else if (lowerHeader === 'checkinoutletname') autoMapping[header] = 'check_in_outlet_name';
+          
+          // Marketing Preferences
+          else if (lowerHeader === 'reachableemail' || lowerHeader === 'emailoptin') autoMapping[header] = 'reachable_email';
+          else if (lowerHeader === 'reachablesms' || lowerHeader === 'smsoptin' || lowerHeader === 'optedinforsms' || lowerHeader === 'sms_opt_in' || lowerHeader === 'smsconsentexplicit') autoMapping[header] = 'reachable_sms';
+          else if (lowerHeader === 'reachablepush' || lowerHeader === 'pushoptin') autoMapping[header] = 'reachable_push';
+          else if (lowerHeader === 'smsconsentdate' || lowerHeader === 'sms_consent_date') autoMapping[header] = 'sms_consent_date';
+          
+          // Customer Status
+          else if (lowerHeader === 'starred' || lowerHeader === 'isstarred') autoMapping[header] = 'starred';
+          else if (lowerHeader === 'wasregistered' || lowerHeader === 'isregistered' || lowerHeader === 'registered' || lowerHeader === 'webregistered' || lowerHeader === 'web_registered') autoMapping[header] = 'was_registered';
+          
+          // Additional Info
+          else if (lowerHeader === 'notes' || lowerHeader === 'comments') autoMapping[header] = 'notes';
+          else if (lowerHeader === 'customersource' || lowerHeader === 'source' || lowerHeader === 'customer_source') autoMapping[header] = 'customer_source';
+          else if (lowerHeader === 'group' || lowerHeader === 'customergroup' || lowerHeader === 'customer_group') autoMapping[header] = 'group';
+          else if (lowerHeader === 'id' || lowerHeader === 'customerid') autoMapping[header] = 'id';
+          else if (lowerHeader === 'gender') autoMapping[header] = 'gender';
+          else if (lowerHeader === 'age') autoMapping[header] = 'age';
+          else if (lowerHeader === 'city') autoMapping[header] = 'city';
+          else if (lowerHeader === 'state') autoMapping[header] = 'state';
+          else if (lowerHeader === 'zipcode' || lowerHeader === 'zip') autoMapping[header] = 'zip_code';
+          else if (lowerHeader === 'address') autoMapping[header] = 'address';
+          else if (lowerHeader === 'referralcode') autoMapping[header] = 'referral_code';
+          else if (lowerHeader === 'referredby') autoMapping[header] = 'referred_by';
         });
         
         setFieldMapping(autoMapping);
@@ -545,35 +679,101 @@ const UserDetailsPage: React.FC = () => {
       for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
         const batch = batches[batchIndex];
         
+        // Helper functions defined OUTSIDE the map function
+        const parseNumber = (value: any) => {
+          if (!value || value === '') return 0;
+          const parsed = parseInt(value.toString().replace(/[^0-9.-]/g, ''));
+          return isNaN(parsed) ? 0 : parsed;
+        };
+        
+        const parseBoolean = (value: any) => {
+          if (typeof value === 'boolean') return value;
+          if (typeof value === 'string') {
+            return value.toLowerCase() === 'true' || value === '1';
+          }
+          return false;
+        };
+        
+        const parseDate = (value: any) => {
+          if (!value || value === '') return null;
+          try {
+            const date = new Date(value);
+            return isNaN(date.getTime()) ? null : date.toISOString();
+          } catch {
+            return null;
+          }
+        };
+        
+        // Helper function to format birth date as MM-DD-YYYY (MOBILE APP FORMAT)
+        const formatBirthDate = (dateValue: any): string => {
+          if (!dateValue) return '';
+          try {
+            const date = new Date(dateValue);
+            if (isNaN(date.getTime())) return '';
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const day = date.getDate().toString().padStart(2, '0');
+            const year = date.getFullYear();
+            return `${month}-${day}-${year}`;
+          } catch {
+            return '';
+          }
+        };
+
         const customersToImport = batch.map((row: any) => {
+
+          // 🚨 MOBILE APP COMPATIBLE FORMAT - Using exact field names from mobile app specification
+          // 🚨 CRITICAL: Create customer in EXACT native mobile app format
           const customerData: any = {
-            // Map CSV fields to Firebase structure
-            name: row[fieldMapping['name']] || '',
+            // === REQUIRED BASIC INFO === (EXACT native mobile app format)
+            phoneNumber: formatPhoneNumber(row[fieldMapping['phone']] || ''),  // ✅ EXACT format: +1XXXXXXXXXX
+            firstName: row[fieldMapping['first_name']] || '',  // ✅ Empty if not provided (like native)
+            lastName: row[fieldMapping['last_name']] || '',   // ✅ Empty if not provided (like native)
+            fullName: row[fieldMapping['full_name']] || `${row[fieldMapping['first_name']] || ''} ${row[fieldMapping['last_name']] || ''}`.trim() || formatPhoneNumber(row[fieldMapping['phone']] || ''),  // ✅ REQUIRED - fallback to phone if empty
             email: row[fieldMapping['email']] || '',
-            phoneNumber: row[fieldMapping['phone']] || '',
-            totalPoints: parseInt(row[fieldMapping['points']]) || 0,
-            lifetimePointsEarned: parseInt(row[fieldMapping['lifetime_points']]) || null,
-            createdAt: row[fieldMapping['created_at']] || new Date().toISOString(),
-            birthday: row[fieldMapping['birthday']] || null,
-            visitCount: parseInt(row[fieldMapping['visit_count']]) || 0,
-            notes: row[fieldMapping['notes']] || '',
-            customerSource: row[fieldMapping['customer_source']] || 'csv_import',
             
-            // Marketing preferences
-            reachableEmail: row[fieldMapping['reachable_email']] === 'TRUE',
-            reachableSMS: row[fieldMapping['reachable_sms']] === 'TRUE',
-            reachablePush: row[fieldMapping['reachable_push']] === 'TRUE',
+            // === CRITICAL MISSING FIELDS === (EXACT native mobile app format)
+            active: convertToBoolean(row[fieldMapping['active']] || row[fieldMapping['was_registered']] || true),  // ✅ CRITICAL - "active" not "isActive"
+            visitCount: parseNumber(row[fieldMapping['visit_count']] || row[fieldMapping['visits']] || 1),  // ✅ CRITICAL - Required by mobile app
+            availablePoints: parseNumber(row[fieldMapping['available_points']] || row[fieldMapping['points']] || 0),  // ✅ REQUIRED - Available points
             
-            // Additional fields
-            starred: row[fieldMapping['starred']] === 'TRUE',
-            wasRegistered: row[fieldMapping['was_registered']] === 'TRUE',
+            // === REQUIRED POINTS & ACTIVITY === (EXACT native mobile app format)
+            totalPoints: parseNumber(row[fieldMapping['total_points']] || row[fieldMapping['points']] || 0),  // ✅ REQUIRED - Current point balance (number)
+            pointsRedeemed: parseNumber(row[fieldMapping['points_redeemed']] || 0),  // ✅ REQUIRED - Total points redeemed (number)
             
-            // Outlet assignment
-            outletId: selectedOutletForImport || null,
-            outletName: selectedOutletForImport ? outlets.find(o => o.id === selectedOutletForImport)?.name || '' : '',
+            // === REQUIRED DATES === (Firebase Timestamp Objects - NOT strings!)
+            dateJoined: convertToFirebaseTimestamp(row[fieldMapping['created_at']] || row[fieldMapping['date_joined']]),  // ✅ REQUIRED - Firebase Timestamp object
+            lastVisit: convertToFirebaseTimestamp(row[fieldMapping['last_visited_at']] || row[fieldMapping['last_visit']]),  // ✅ REQUIRED - Firebase Timestamp object
+            
+            // === REQUIRED STATUS FLAGS === (Boolean - NOT strings!)
+            optedInForSMS: convertToBoolean(row[fieldMapping['reachable_sms']] || row[fieldMapping['sms_opt_in']] || false),  // ✅ REQUIRED - Boolean SMS consent (default false like native)
+            processed: false,  // ✅ REQUIRED - Boolean processing status (always false for imports)
+            
+            // === REQUIRED OUTLET ASSIGNMENT === (EXACT mobile app format)
+            outletId: row[fieldMapping['outlet_id']] || selectedOutletForImport || '',  // ✅ REQUIRED - Home outlet ID
+            outletName: row[fieldMapping['outlet_name']] || (selectedOutletForImport ? outlets.find(o => o.id === selectedOutletForImport)?.name || '' : ''),  // ✅ REQUIRED - Home outlet name
+            checkInOutletId: row[fieldMapping['check_in_outlet_id']] || '',  // ✅ REQUIRED - Current check-in outlet
+            checkInOutletName: row[fieldMapping['check_in_outlet_name']] || '',  // ✅ REQUIRED - Current check-in outlet name
+            
+            // === OPTIONAL FIELDS === (EXACT native mobile app format)
+            notes: row[fieldMapping['notes']] || '',  // Optional - Customer notes
+            birthDate: row[fieldMapping['birthday']] ? formatBirthDate(row[fieldMapping['birthday']]) : '',  // Optional - Format: MM-DD-YYYY
+            dateOfBirth: row[fieldMapping['birthday']] ? convertToFirebaseTimestamp(row[fieldMapping['birthday']]) : null,  // Optional - Firebase Timestamp for birthday
+            totalSpent: row[fieldMapping['total_spent']] ? parseNumber(row[fieldMapping['total_spent']]) : null,  // Optional - Total amount spent (null like native)
+            
+            // === REQUIRED SMS CONSENT TRACKING === (EXACT native mobile app format)
+            smsConsentExplicit: convertToBoolean(row[fieldMapping['reachable_sms']] || row[fieldMapping['sms_opt_in']] || false),  // ✅ REQUIRED - Boolean explicit consent (default false like native)
+            smsConsentMethod: row[fieldMapping['sms_consent_method']] || '',  // ✅ REQUIRED - How they consented (empty like native)
+            smsConsentTimestamp: row[fieldMapping['sms_consent_date']] ? convertToFirebaseTimestamp(row[fieldMapping['sms_consent_date']]) : null,  // ✅ REQUIRED - When they agreed (null like native)
+            smsConsentVersion: row[fieldMapping['sms_consent_version']] || '',  // ✅ REQUIRED - Version of consent (empty like native)
+            smsOptOutMethod: '',  // ✅ REQUIRED - How they opted out (empty like native)
+            smsOptOutTimestamp: null,  // ✅ REQUIRED - When opted out (null like native)
+            
+            // === LEGACY FIELDS === (Keep for admin panel compatibility)
+            name: row[fieldMapping['full_name']] || `${row[fieldMapping['first_name']] || ''} ${row[fieldMapping['last_name']] || ''}`.trim() || formatPhoneNumber(row[fieldMapping['phone']] || ''),
+            createdAt: convertToFirebaseTimestamp(row[fieldMapping['created_at']] || row[fieldMapping['date_joined']]),
             
             // Import metadata
-            importedAt: new Date().toISOString(),
+            importedAt: serverTimestamp(),
             importSource: 'csv_bulk_import'
           };
 
@@ -625,6 +825,172 @@ const UserDetailsPage: React.FC = () => {
     setImportProgress(0);
     setSelectedOutletForImport('');
     setDuplicateHandling('skip');
+  };
+
+  // Helper function to identify ONLY problematic imported customers (SAFE DETECTION)
+  const getImportedCustomers = () => {
+    return customers.filter(customer => {
+      // ONLY delete customers with explicit import markers
+      if (customer.importSource === 'csv_bulk_import' || 
+          customer.customerSource === 'csv_import' ||
+          customer.importedAt) {
+        return true;
+      }
+      
+      // ONLY delete customers with wrong birthday format (ISO timestamp instead of MM-DD-YYYY)
+      // This is the main indicator of problematic imports
+      if (customer.birthday && 
+          customer.birthday.includes('T') && 
+          customer.birthday.includes('Z') &&
+          customer.birthday.includes('1904')) { // Very specific - the wrong year we saw
+        return true;
+      }
+      
+      return false;
+    });
+  };
+
+  // Bulk delete imported customers
+  const handleBulkDeleteImported = async () => {
+    if (!user?.uid) return;
+
+    setBulkDeleteLoading(true);
+    setBulkDeleteProgress(0);
+
+    try {
+      // Find all customers with import markers
+      const importedCustomers = getImportedCustomers();
+
+      if (importedCustomers.length === 0) {
+        setToast({ message: 'No imported customers found to delete', type: 'error' });
+        setBulkDeleteLoading(false);
+        return;
+      }
+
+      const batchSize = 500; // Firebase batch limit
+      const batches = [];
+      
+      for (let i = 0; i < importedCustomers.length; i += batchSize) {
+        batches.push(importedCustomers.slice(i, i + batchSize));
+      }
+
+      let deletedCount = 0;
+
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batch = batches[batchIndex];
+        
+        // Delete this batch using AuthService (filter out invalid IDs)
+        const validIds = batch.map(c => c.id).filter(id => id && typeof id === 'string');
+        console.log(`Batch ${batchIndex + 1}: ${batch.length} customers, ${validIds.length} valid IDs`);
+        
+        if (validIds.length === 0) {
+          console.warn('No valid customer IDs in this batch, skipping...');
+          continue;
+        }
+        
+        const response = await AuthService.bulkDeleteCustomers(user.uid, validIds);
+        
+        if (response.success) {
+          deletedCount += response.deleted || validIds.length;
+        }
+
+        // Update progress
+        const progress = ((batchIndex + 1) / batches.length) * 100;
+        setBulkDeleteProgress(progress);
+      }
+
+      // Refresh customer list
+      const customersResponse = await AuthService.getUserCustomers(user.uid);
+      if (customersResponse.success) {
+        setCustomers(customersResponse.data || []);
+      }
+
+      setToast({ 
+        message: `Successfully deleted ${deletedCount} imported customers`, 
+        type: 'success' 
+      });
+      
+      setShowBulkDeleteModal(false);
+      setBulkDeleteLoading(false);
+      setBulkDeleteProgress(0);
+
+    } catch (error) {
+      console.error('Bulk delete error:', error);
+      setToast({ message: 'Error deleting imported customers', type: 'error' });
+      setBulkDeleteLoading(false);
+      setBulkDeleteProgress(0);
+    }
+  };
+
+  // Delete ALL customers (for fresh start)
+  const handleDeleteAllCustomers = async () => {
+    if (!user?.uid) return;
+
+    setDeleteAllLoading(true);
+    setDeleteAllProgress(0);
+
+    try {
+      const allCustomers = customers;
+
+      if (allCustomers.length === 0) {
+        setToast({ message: 'No customers to delete', type: 'error' });
+        setDeleteAllLoading(false);
+        return;
+      }
+
+      const batchSize = 500; // Firebase batch limit
+      const batches = [];
+      
+      for (let i = 0; i < allCustomers.length; i += batchSize) {
+        batches.push(allCustomers.slice(i, i + batchSize));
+      }
+
+      let deletedCount = 0;
+
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batch = batches[batchIndex];
+        
+        // Delete this batch using AuthService (filter out invalid IDs)
+        const validIds = batch.map(c => c.id).filter(id => id && typeof id === 'string');
+        console.log(`Batch ${batchIndex + 1}: ${batch.length} customers, ${validIds.length} valid IDs`);
+        
+        if (validIds.length === 0) {
+          console.warn('No valid customer IDs in this batch, skipping...');
+          continue;
+        }
+        
+        const response = await AuthService.bulkDeleteCustomers(user.uid, validIds);
+        
+        if (response.success) {
+          deletedCount += response.deleted || validIds.length;
+        }
+
+        // Update progress
+        const progress = ((batchIndex + 1) / batches.length) * 100;
+        setDeleteAllProgress(progress);
+      }
+
+      // Refresh customer list
+      const customersResponse = await AuthService.getUserCustomers(user.uid);
+      if (customersResponse.success) {
+        setCustomers(customersResponse.data || []);
+      }
+
+      setToast({ 
+        message: `Successfully deleted ${deletedCount} customers - ready for fresh import!`, 
+        type: 'success' 
+      });
+      
+      setShowDeleteAllModal(false);
+      setDeleteAllLoading(false);
+      setDeleteAllProgress(0);
+
+    } catch (error) {
+      console.error('Delete all error:', error);
+      setToast({ message: 'Error deleting customers', type: 'error' });
+      setDeleteAllLoading(false);
+      setDeleteAllProgress(0);
+    }
   };
 
   // 4. RENDER HELPERS
@@ -2150,6 +2516,78 @@ const UserDetailsPage: React.FC = () => {
                       <Download size={16} />
                       Export CSV
                     </button>
+                    
+                    {/* Bulk Delete Imported Customers Button */}
+                    <button
+                      onClick={() => setShowBulkDeleteModal(true)}
+                      disabled={getImportedCustomers().length === 0}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        padding: '0.75rem 1rem',
+                        background: getImportedCustomers().length === 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.2)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        borderRadius: '8px',
+                        color: getImportedCustomers().length === 0 ? 'rgba(239, 68, 68, 0.5)' : '#ef4444',
+                        fontSize: '0.875rem',
+                        fontWeight: '500',
+                        cursor: getImportedCustomers().length === 0 ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        const hasImported = getImportedCustomers().length > 0;
+                        if (hasImported) {
+                          e.currentTarget.style.background = 'rgba(239, 68, 68, 0.3)';
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        const hasImported = getImportedCustomers().length > 0;
+                        if (hasImported) {
+                          e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                        }
+                      }}
+                    >
+                      <X size={16} />
+                      Delete Imported ({getImportedCustomers().length})
+                    </button>
+                    
+                    {/* Delete ALL Customers Button */}
+                    <button
+                      onClick={() => setShowDeleteAllModal(true)}
+                      disabled={customers.length === 0}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        padding: '0.75rem 1rem',
+                        background: customers.length === 0 ? 'rgba(220, 38, 38, 0.1)' : 'rgba(220, 38, 38, 0.2)',
+                        border: '1px solid rgba(220, 38, 38, 0.3)',
+                        borderRadius: '8px',
+                        color: customers.length === 0 ? 'rgba(220, 38, 38, 0.5)' : '#dc2626',
+                        fontSize: '0.875rem',
+                        fontWeight: '600',
+                        cursor: customers.length === 0 ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (customers.length > 0) {
+                          e.currentTarget.style.background = 'rgba(220, 38, 38, 0.3)';
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (customers.length > 0) {
+                          e.currentTarget.style.background = 'rgba(220, 38, 38, 0.2)';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                        }
+                      }}
+                    >
+                      <X size={16} />
+                      🗑️ DELETE ALL ({customers.length})
+                    </button>
                   </div>
 
                   {/* Search Bar */}
@@ -3232,18 +3670,59 @@ const UserDetailsPage: React.FC = () => {
                         }}
                       >
                         <option value="" style={{ background: '#1e293b' }}>Skip field</option>
+                        
+                        {/* Basic Info */}
                         <option value="name" style={{ background: '#1e293b' }}>Name</option>
+                        <option value="first_name" style={{ background: '#1e293b' }}>First Name</option>
+                        <option value="last_name" style={{ background: '#1e293b' }}>Last Name</option>
+                        <option value="full_name" style={{ background: '#1e293b' }}>Full Name</option>
                         <option value="email" style={{ background: '#1e293b' }}>Email</option>
                         <option value="phone" style={{ background: '#1e293b' }}>Phone</option>
+                        
+                        {/* Points & Financial */}
                         <option value="points" style={{ background: '#1e293b' }}>Current Points</option>
+                        <option value="total_points" style={{ background: '#1e293b' }}>Total Points</option>
+                        <option value="available_points" style={{ background: '#1e293b' }}>Available Points</option>
                         <option value="lifetime_points" style={{ background: '#1e293b' }}>Lifetime Points</option>
+                        <option value="points_redeemed" style={{ background: '#1e293b' }}>Points Redeemed</option>
+                        <option value="total_spent" style={{ background: '#1e293b' }}>Total Spent</option>
+                        
+                        {/* Dates */}
                         <option value="created_at" style={{ background: '#1e293b' }}>Created Date</option>
+                        <option value="first_visited_at" style={{ background: '#1e293b' }}>First Visit Date</option>
+                        <option value="last_visited_at" style={{ background: '#1e293b' }}>Last Visit Date</option>
                         <option value="birthday" style={{ background: '#1e293b' }}>Birthday</option>
+                        
+                        {/* Activity */}
                         <option value="visit_count" style={{ background: '#1e293b' }}>Visit Count</option>
-                        <option value="notes" style={{ background: '#1e293b' }}>Notes</option>
+                        <option value="visits" style={{ background: '#1e293b' }}>Visits</option>
+                        <option value="active" style={{ background: '#1e293b' }}>Active Status</option>
+                        <option value="was_registered" style={{ background: '#1e293b' }}>Was Registered</option>
+                        
+                        {/* Marketing Preferences */}
                         <option value="reachable_email" style={{ background: '#1e293b' }}>Email Opt-in</option>
                         <option value="reachable_sms" style={{ background: '#1e293b' }}>SMS Opt-in</option>
                         <option value="reachable_push" style={{ background: '#1e293b' }}>Push Opt-in</option>
+                        <option value="sms_consent_date" style={{ background: '#1e293b' }}>SMS Consent Date</option>
+                        
+                        {/* Customer Status */}
+                        <option value="starred" style={{ background: '#1e293b' }}>Starred Status</option>
+                        <option value="was_registered" style={{ background: '#1e293b' }}>Registration Status</option>
+                        
+                        {/* Additional Info */}
+                        <option value="notes" style={{ background: '#1e293b' }}>Notes</option>
+                        <option value="customer_source" style={{ background: '#1e293b' }}>Customer Source</option>
+                        <option value="group" style={{ background: '#1e293b' }}>Customer Group</option>
+                        <option value="outlet_name" style={{ background: '#1e293b' }}>Outlet Name</option>
+                        <option value="outlet_id" style={{ background: '#1e293b' }}>Outlet ID</option>
+                        
+                        {/* Extended Data */}
+                        <option value="gender" style={{ background: '#1e293b' }}>Gender</option>
+                        <option value="age" style={{ background: '#1e293b' }}>Age</option>
+                        <option value="city" style={{ background: '#1e293b' }}>City</option>
+                        <option value="state" style={{ background: '#1e293b' }}>State</option>
+                        <option value="zip_code" style={{ background: '#1e293b' }}>Zip Code</option>
+                        <option value="address" style={{ background: '#1e293b' }}>Address</option>
                       </select>
                     </div>
                   ))}
@@ -3383,6 +3862,314 @@ const UserDetailsPage: React.FC = () => {
               >
                 {importLoading && <Loader size={16} className="animate-spin" />}
                 {importLoading ? 'Importing...' : `Import ${importData.length} Customers`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showBulkDeleteModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(10px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '2rem'
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+            borderRadius: '20px',
+            padding: '2rem',
+            maxWidth: '500px',
+            width: '100%',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '1.5rem'
+            }}>
+              <h2 style={{ color: 'white', margin: 0, fontSize: '1.25rem', fontWeight: '600' }}>
+                🗑️ Delete Imported Customers
+              </h2>
+              <button
+                onClick={() => setShowBulkDeleteModal(false)}
+                disabled={bulkDeleteLoading}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'rgba(255, 255, 255, 0.6)',
+                  cursor: bulkDeleteLoading ? 'not-allowed' : 'pointer',
+                  padding: '0.5rem',
+                  borderRadius: '8px',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Warning Message */}
+            <div style={{
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              borderRadius: '12px',
+              padding: '1rem',
+              marginBottom: '1.5rem'
+            }}>
+              <p style={{ color: '#ef4444', margin: '0 0 0.5rem 0', fontWeight: '600' }}>
+                ⚠️ Warning: This action cannot be undone!
+              </p>
+              <p style={{ color: 'rgba(255, 255, 255, 0.8)', margin: 0, fontSize: '0.875rem' }}>
+                This will permanently delete all {getImportedCustomers().length} imported customers from Firebase. 
+                Only customers imported via CSV will be deleted - manually added customers will remain untouched.
+              </p>
+            </div>
+
+            {/* Progress Bar */}
+            {bulkDeleteLoading && (
+              <div style={{ marginBottom: '1.5rem' }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: '0.5rem'
+                }}>
+                  <span style={{ color: 'white', fontSize: '0.875rem' }}>
+                    Deleting customers...
+                  </span>
+                  <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                    {Math.round(bulkDeleteProgress)}%
+                  </span>
+                </div>
+                <div style={{
+                  width: '100%',
+                  height: '8px',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  borderRadius: '4px',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    width: `${bulkDeleteProgress}%`,
+                    height: '100%',
+                    background: 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)',
+                    transition: 'width 0.3s ease'
+                  }} />
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div style={{
+              display: 'flex',
+              gap: '1rem',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={() => setShowBulkDeleteModal(false)}
+                disabled={bulkDeleteLoading}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '12px',
+                  color: 'rgba(255, 255, 255, 0.8)',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  cursor: bulkDeleteLoading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  opacity: bulkDeleteLoading ? 0.6 : 1
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkDeleteImported}
+                disabled={bulkDeleteLoading}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.75rem 1.5rem',
+                  background: bulkDeleteLoading 
+                    ? 'rgba(239, 68, 68, 0.3)' 
+                    : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  color: 'white',
+                  fontSize: '0.875rem',
+                  fontWeight: '600',
+                  cursor: bulkDeleteLoading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                {bulkDeleteLoading && <Loader size={16} className="animate-spin" />}
+                {bulkDeleteLoading ? 'Deleting...' : `Delete ${getImportedCustomers().length} Customers`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete ALL Customers Confirmation Modal */}
+      {showDeleteAllModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(10px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '2rem'
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+            borderRadius: '20px',
+            padding: '2rem',
+            maxWidth: '500px',
+            width: '100%',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '1.5rem'
+            }}>
+              <h2 style={{ color: 'white', margin: 0, fontSize: '1.25rem', fontWeight: '600' }}>
+                🗑️ Delete ALL Customers
+              </h2>
+              <button
+                onClick={() => setShowDeleteAllModal(false)}
+                disabled={deleteAllLoading}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'rgba(255, 255, 255, 0.6)',
+                  cursor: deleteAllLoading ? 'not-allowed' : 'pointer',
+                  padding: '0.5rem',
+                  borderRadius: '8px',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Warning Message */}
+            <div style={{
+              background: 'rgba(220, 38, 38, 0.1)',
+              border: '1px solid rgba(220, 38, 38, 0.3)',
+              borderRadius: '12px',
+              padding: '1rem',
+              marginBottom: '1.5rem'
+            }}>
+              <p style={{ color: '#dc2626', margin: '0 0 0.5rem 0', fontWeight: '600' }}>
+                ⚠️ DANGER: This will delete EVERYTHING!
+              </p>
+              <p style={{ color: 'rgba(255, 255, 255, 0.8)', margin: 0, fontSize: '0.875rem' }}>
+                This will permanently delete ALL {customers.length} customers from Firebase. 
+                This action cannot be undone! Use this to start fresh before importing with the correct mobile app format.
+              </p>
+            </div>
+
+            {/* Progress Bar */}
+            {deleteAllLoading && (
+              <div style={{ marginBottom: '1.5rem' }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: '0.5rem'
+                }}>
+                  <span style={{ color: 'white', fontSize: '0.875rem' }}>
+                    Deleting all customers...
+                  </span>
+                  <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                    {Math.round(deleteAllProgress)}%
+                  </span>
+                </div>
+                <div style={{
+                  width: '100%',
+                  height: '8px',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  borderRadius: '4px',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    width: `${deleteAllProgress}%`,
+                    height: '100%',
+                    background: 'linear-gradient(90deg, #dc2626 0%, #b91c1c 100%)',
+                    transition: 'width 0.3s ease'
+                  }} />
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div style={{
+              display: 'flex',
+              gap: '1rem',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={() => setShowDeleteAllModal(false)}
+                disabled={deleteAllLoading}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '12px',
+                  color: 'rgba(255, 255, 255, 0.8)',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  cursor: deleteAllLoading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  opacity: deleteAllLoading ? 0.6 : 1
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAllCustomers}
+                disabled={deleteAllLoading}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.75rem 1.5rem',
+                  background: deleteAllLoading 
+                    ? 'rgba(220, 38, 38, 0.3)' 
+                    : 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  color: 'white',
+                  fontSize: '0.875rem',
+                  fontWeight: '600',
+                  cursor: deleteAllLoading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                {deleteAllLoading && <Loader size={16} className="animate-spin" />}
+                {deleteAllLoading ? 'Deleting...' : `🗑️ DELETE ALL ${customers.length} CUSTOMERS`}
               </button>
             </div>
           </div>
