@@ -37,6 +37,7 @@ import { AuthProvider, useAuth } from './admin/hooks/useAuth';
 import AdminLoginPage from './admin/pages/auth/LoginPage';
 import AdminDashboardPage from './admin/pages/dashboard/DashboardPage';
 import AdminUsersPage from './admin/pages/users/UsersPage';
+import AdminUserDetailsPage from './admin/pages/users/UserDetailsPage';
 import UserDashboard from './UserDashboard';
 import './admin/styles/globals.css';
 
@@ -9271,6 +9272,14 @@ const AppRoutes: React.FC = () => {
         element={
           <AdminProtectedRoute>
             <AdminUsersPage />
+          </AdminProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/admin/users/:userId" 
+        element={
+          <AdminProtectedRoute>
+            <AdminUserDetailsPage />
           </AdminProtectedRoute>
         } 
       />

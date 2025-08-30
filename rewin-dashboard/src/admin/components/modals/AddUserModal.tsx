@@ -417,3 +417,4 @@ const AddUserModal: React.FC<AddUserModalProps> = ({ isOpen, onClose, onAddUser 
 };
 
 export default AddUserModal;
+export type { AddUserData };
