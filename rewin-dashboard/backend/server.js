@@ -936,6 +936,103 @@ app.post('/api/auth/delete-user', async (req, res) => {
   }
 });
 
+// Analytics overview endpoint (copied from original admin panel)
+app.get('/api/analytics/overview', async (req, res) => {
+  try {
+    console.log('📊 Getting analytics overview...');
+    
+    let totalUsers = 0;
+    let totalOutlets = 0;
+    let totalCustomers = 0;
+    let totalRevenue = 0;
+
+    // Get total users from Firebase Auth (like original admin panel)
+    try {
+      const usersSnapshot = await admin.auth().listUsers();
+      totalUsers = usersSnapshot.users.length;
+      console.log(`✅ Found ${totalUsers} users in Firebase Auth`);
+    } catch (error) {
+      console.log('Could not fetch users, using default value');
+      totalUsers = 1; // Default based on what we see in Firebase console
+    }
+
+    // Get outlets, customers, and revenue from real data
+    try {
+      const usersSnapshot = await admin.auth().listUsers();
+      
+      for (const user of usersSnapshot.users) {
+        const userId = user.uid;
+        
+        // Count outlets for this user
+        try {
+          const outletsSnapshot = await admin.firestore()
+            .collection('users')
+            .doc(userId)
+            .collection('outlets')
+            .get();
+          totalOutlets += outletsSnapshot.size;
+        } catch (error) {
+          console.log(`Could not fetch outlets for user ${userId}`);
+        }
+
+        // Count customers for this user
+        try {
+          const customersSnapshot = await admin.firestore()
+            .collection('users')
+            .doc(userId)
+            .collection('customers')
+            .get();
+          totalCustomers += customersSnapshot.size;
+        } catch (error) {
+          console.log(`Could not fetch customers for user ${userId}`);
+        }
+
+        // Calculate revenue from transactions
+        try {
+          const transactionsSnapshot = await admin.firestore()
+            .collection('users')
+            .doc(userId)
+            .collection('web_transactions')
+            .get();
+          
+          transactionsSnapshot.docs.forEach(doc => {
+            const transaction = doc.data();
+            if (transaction.pointsChanged && transaction.pointsChanged > 0) {
+              totalRevenue += transaction.pointsChanged * 0.10; // $0.10 per point
+            }
+          });
+        } catch (error) {
+          console.log(`Could not fetch transactions for user ${userId}`);
+        }
+      }
+    } catch (error) {
+      console.log('Could not fetch user data for analytics');
+    }
+
+    const response = {
+      totalUsers,
+      totalOutlets,
+      totalCustomers,
+      totalRevenue: Math.round(totalRevenue * 100) / 100, // Round to 2 decimal places
+      recentActivity: [] // Can be populated later if needed
+    };
+
+    console.log('📊 Analytics overview:', response);
+    res.json(response);
+    
+  } catch (error) {
+    console.error('❌ Error getting analytics overview:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get analytics overview',
+      totalUsers: 0,
+      totalOutlets: 0,
+      totalCustomers: 0,
+      totalRevenue: 0
+    });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({

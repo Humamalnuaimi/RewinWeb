@@ -28,9 +28,13 @@ import {
   Loader,
   Plus,
   X,
-  Search
+  Search,
+  Upload,
+  Download
 } from 'lucide-react';
 import AuthService from '../../services/firebase.service';
+import Papa from 'papaparse';
+import { saveAs } from 'file-saver';
 
 // Temporarily define interfaces locally to avoid import issues
 interface User {
@@ -108,6 +112,17 @@ const UserDetailsPage: React.FC = () => {
   });
   const [activeTab, setActiveTab] = useState<'overview' | 'customers' | 'outlets' | 'analytics'>('overview');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // CSV Import/Export State
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importData, setImportData] = useState<any[]>([]);
+  const [importPreview, setImportPreview] = useState<any[]>([]);
+  const [fieldMapping, setFieldMapping] = useState<{[key: string]: string}>({});
+  const [importProgress, setImportProgress] = useState(0);
+  const [importLoading, setImportLoading] = useState(false);
+  const [selectedOutletForImport, setSelectedOutletForImport] = useState<string>('');
+  const [duplicateHandling, setDuplicateHandling] = useState<'skip' | 'update' | 'merge'>('skip');
 
   // 2. EFFECTS
   useEffect(() => {
@@ -320,6 +335,296 @@ const UserDetailsPage: React.FC = () => {
 
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat('en-US').format(num);
+  };
+
+  // CSV Import/Export Handlers
+  const handleExportCSV = () => {
+    if (customers.length === 0) {
+      setToast({ message: 'No customers to export', type: 'error' });
+      return;
+    }
+
+    const csvData = customers.map(customer => {
+      // Calculate points redeemed from stored data or transactions
+      const pointsRedeemed = customer.pointsRedeemed || customer.totalPointsRedeemed || 0;
+      
+      // Format dates properly with error handling
+      const formatDate = (dateValue: any) => {
+        if (!dateValue) return '';
+        
+        try {
+          // Handle Firebase Timestamp
+          if (dateValue.toDate && typeof dateValue.toDate === 'function') {
+            const date = dateValue.toDate();
+            return date.toISOString().split('T')[0];
+          }
+          
+          // Handle Date objects
+          if (dateValue instanceof Date) {
+            // Check if date is valid
+            if (isNaN(dateValue.getTime())) return '';
+            return dateValue.toISOString().split('T')[0];
+          }
+          
+          // Handle string dates
+          if (typeof dateValue === 'string') {
+            // Try to parse the string as a date
+            const parsedDate = new Date(dateValue);
+            if (isNaN(parsedDate.getTime())) {
+              // If it's already in YYYY-MM-DD format, return as is
+              if (/^\d{4}-\d{2}-\d{2}/.test(dateValue)) {
+                return dateValue.split('T')[0];
+              }
+              return '';
+            }
+            return parsedDate.toISOString().split('T')[0];
+          }
+          
+          // Handle numbers (timestamps)
+          if (typeof dateValue === 'number') {
+            const date = new Date(dateValue);
+            if (isNaN(date.getTime())) return '';
+            return date.toISOString().split('T')[0];
+          }
+          
+          return '';
+        } catch (error) {
+          console.warn('Error formatting date:', dateValue, error);
+          return '';
+        }
+      };
+
+      // Handle boolean fields properly - check for actual boolean values or string representations
+      const getBooleanValue = (value: any) => {
+        if (value === true || value === 'true' || value === 'TRUE') return 'TRUE';
+        if (value === false || value === 'false' || value === 'FALSE') return 'FALSE';
+        return 'FALSE'; // Default to FALSE if undefined/null
+      };
+
+      return {
+        // Basic Info
+        name: customer.name || customer.displayName || customer.fullName || `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || '',
+        first_name: customer.firstName || '',
+        last_name: customer.lastName || '',
+        full_name: customer.fullName || customer.name || customer.displayName || '',
+        email: customer.email || '',
+        phone: customer.phoneNumber || customer.phone || '',
+        
+        // Points & Transactions
+        points: customer.totalPoints || 0, // Current points balance
+        available_points: customer.availablePoints || customer.totalPoints || 0,
+        lifetime_points: customer.lifetimePointsEarned || customer.lifetimePoints || customer.totalPointsEarned || 0,
+        points_redeemed: pointsRedeemed,
+        total_spent: customer.totalSpent || 0,
+        
+        // Dates & Timestamps
+        created_at: formatDate(customer.createdAt || customer.dateCreated),
+        date_joined: formatDate(customer.dateJoined || customer.createdAt),
+        first_visited_at: formatDate(customer.firstVisitedAt || customer.firstVisit || customer.first_visit),
+        last_visited_at: formatDate(customer.lastVisitedAt || customer.lastVisit || customer.last_visit),
+        birthday: formatDate(customer.birthday || customer.dateOfBirth || customer.dob || customer.birthDate),
+        date_of_birth: formatDate(customer.dateOfBirth || customer.dob || customer.birthday),
+        processed_timestamp: formatDate(customer.processedTimestamp || customer.processed),
+        
+        // Visit & Activity Data
+        visit_count: customer.visitCount || customer.visits || customer.totalVisits || 0,
+        active: getBooleanValue(customer.active),
+        processed: getBooleanValue(customer.processed),
+        
+        // Outlet Information
+        outlet_name: customer.outletName || customer.homeOutletName || customer.outlet_name || '',
+        outlet_id: customer.outletId || customer.homeOutletId || customer.outlet_id || '',
+        check_in_outlet_id: customer.checkInOutletId || '',
+        check_in_outlet_name: customer.checkInOutletName || '',
+        
+        // Marketing Preferences (Opt-in/out)
+        reachable_email: getBooleanValue(customer.reachableEmail || customer.reachable_email || customer.emailOptIn || customer.optedInForSMS),
+        reachable_sms: getBooleanValue(customer.reachableSMS || customer.reachable_sms || customer.smsOptIn || customer.optedInForSMS),
+        reachable_push: getBooleanValue(customer.reachablePush || customer.reachable_push || customer.pushOptIn),
+        opted_in_for_sms: getBooleanValue(customer.optedInForSMS || customer.reachableSMS),
+        
+        // Customer Status & Flags
+        starred: getBooleanValue(customer.starred || customer.isStarred),
+        was_registered: getBooleanValue(customer.wasRegistered || customer.isRegistered || customer.registered),
+        
+        // Additional Info
+        notes: customer.notes || customer.comments || '',
+        customer_source: customer.customerSource || customer.source || 'admin_panel',
+        group: customer.group || customer.customerGroup || '',
+        id: customer.id || customer.customerId || '',
+        
+        // Any other fields that might exist
+        gender: customer.gender || '',
+        age: customer.age || '',
+        city: customer.city || '',
+        state: customer.state || '',
+        zip_code: customer.zipCode || customer.zip || '',
+        address: customer.address || '',
+        referral_code: customer.referralCode || '',
+        referred_by: customer.referredBy || ''
+      };
+    });
+
+    const csv = Papa.unparse(csvData);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const fileName = `${user?.displayName || user?.email || 'user'}_customers_${new Date().toISOString().split('T')[0]}.csv`;
+    saveAs(blob, fileName);
+    
+    setToast({ message: `Exported ${customers.length} customers successfully`, type: 'success' });
+  };
+
+  const handleImportFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      setToast({ message: 'Please select a CSV file', type: 'error' });
+      return;
+    }
+
+    setImportFile(file);
+    setImportLoading(true);
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        console.log('CSV parsed:', results);
+        setImportData(results.data as any[]);
+        setImportPreview(results.data.slice(0, 10) as any[]); // Show first 10 rows
+        
+        // Auto-detect field mappings
+        const headers = Object.keys(results.data[0] || {});
+        const autoMapping: {[key: string]: string} = {};
+        
+        headers.forEach(header => {
+          const lowerHeader = header.toLowerCase();
+          if (lowerHeader.includes('name')) autoMapping[header] = 'name';
+          else if (lowerHeader.includes('email')) autoMapping[header] = 'email';
+          else if (lowerHeader.includes('phone')) autoMapping[header] = 'phone';
+          else if (lowerHeader === 'points' || lowerHeader.includes('current')) autoMapping[header] = 'points';
+          else if (lowerHeader.includes('lifetime')) autoMapping[header] = 'lifetime_points';
+          else if (lowerHeader.includes('created')) autoMapping[header] = 'created_at';
+          else if (lowerHeader.includes('birthday')) autoMapping[header] = 'birthday';
+          else if (lowerHeader.includes('visit')) autoMapping[header] = 'visit_count';
+          else if (lowerHeader.includes('reachable_email')) autoMapping[header] = 'reachable_email';
+          else if (lowerHeader.includes('reachable_sms')) autoMapping[header] = 'reachable_sms';
+          else if (lowerHeader.includes('reachable_push')) autoMapping[header] = 'reachable_push';
+        });
+        
+        setFieldMapping(autoMapping);
+        setImportLoading(false);
+        setShowImportModal(true);
+      },
+      error: (error) => {
+        console.error('CSV parsing error:', error);
+        setToast({ message: 'Error parsing CSV file', type: 'error' });
+        setImportLoading(false);
+      }
+    });
+  };
+
+  const handleImportCustomers = async () => {
+    if (!importData.length || !user?.uid) return;
+
+    setImportLoading(true);
+    setImportProgress(0);
+
+    try {
+      const batchSize = 500; // Firebase batch limit
+      const batches = [];
+      
+      for (let i = 0; i < importData.length; i += batchSize) {
+        batches.push(importData.slice(i, i + batchSize));
+      }
+
+      let importedCount = 0;
+      let skippedCount = 0;
+      let errorCount = 0;
+
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batch = batches[batchIndex];
+        
+        const customersToImport = batch.map((row: any) => {
+          const customerData: any = {
+            // Map CSV fields to Firebase structure
+            name: row[fieldMapping['name']] || '',
+            email: row[fieldMapping['email']] || '',
+            phoneNumber: row[fieldMapping['phone']] || '',
+            totalPoints: parseInt(row[fieldMapping['points']]) || 0,
+            lifetimePointsEarned: parseInt(row[fieldMapping['lifetime_points']]) || null,
+            createdAt: row[fieldMapping['created_at']] || new Date().toISOString(),
+            birthday: row[fieldMapping['birthday']] || null,
+            visitCount: parseInt(row[fieldMapping['visit_count']]) || 0,
+            notes: row[fieldMapping['notes']] || '',
+            customerSource: row[fieldMapping['customer_source']] || 'csv_import',
+            
+            // Marketing preferences
+            reachableEmail: row[fieldMapping['reachable_email']] === 'TRUE',
+            reachableSMS: row[fieldMapping['reachable_sms']] === 'TRUE',
+            reachablePush: row[fieldMapping['reachable_push']] === 'TRUE',
+            
+            // Additional fields
+            starred: row[fieldMapping['starred']] === 'TRUE',
+            wasRegistered: row[fieldMapping['was_registered']] === 'TRUE',
+            
+            // Outlet assignment
+            outletId: selectedOutletForImport || null,
+            outletName: selectedOutletForImport ? outlets.find(o => o.id === selectedOutletForImport)?.name || '' : '',
+            
+            // Import metadata
+            importedAt: new Date().toISOString(),
+            importSource: 'csv_bulk_import'
+          };
+
+          return customerData;
+        });
+
+        // Import this batch using AuthService
+        const response = await AuthService.bulkImportCustomers(user.uid, customersToImport, duplicateHandling);
+        
+        if (response.success) {
+          importedCount += response.imported || 0;
+          skippedCount += response.skipped || 0;
+          errorCount += response.errors || 0;
+        }
+
+        // Update progress
+        const progress = ((batchIndex + 1) / batches.length) * 100;
+        setImportProgress(progress);
+      }
+
+      // Refresh customer list
+      const customersResponse = await AuthService.getUserCustomers(user.uid);
+      if (customersResponse.success) {
+        setCustomers(customersResponse.customers);
+      }
+
+      setToast({ 
+        message: `Import completed! Imported: ${importedCount}, Skipped: ${skippedCount}, Errors: ${errorCount}`, 
+        type: 'success' 
+      });
+      
+      setShowImportModal(false);
+      resetImportState();
+
+    } catch (error: any) {
+      console.error('Import error:', error);
+      setToast({ message: 'Error importing customers', type: 'error' });
+    } finally {
+      setImportLoading(false);
+      setImportProgress(0);
+    }
+  };
+
+  const resetImportState = () => {
+    setImportFile(null);
+    setImportData([]);
+    setImportPreview([]);
+    setFieldMapping({});
+    setImportProgress(0);
+    setSelectedOutletForImport('');
+    setDuplicateHandling('skip');
   };
 
   // 4. RENDER HELPERS
@@ -1762,44 +2067,132 @@ const UserDetailsPage: React.FC = () => {
                 }).length})</h3>
                 
                 <div style={{
-                  position: 'relative',
-                  width: '300px'
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '1rem'
                 }}>
+                  {/* Import/Export Buttons */}
                   <div style={{
-                    position: 'absolute',
-                    left: '1rem',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    color: 'rgba(255, 255, 255, 0.5)',
-                    pointerEvents: 'none'
+                    display: 'flex',
+                    gap: '0.5rem'
                   }}>
-                    <Search size={16} />
+                    <input
+                      type="file"
+                      accept=".csv"
+                      onChange={handleImportFile}
+                      style={{ display: 'none' }}
+                      id="csv-import-input"
+                    />
+                    <button
+                      onClick={() => document.getElementById('csv-import-input')?.click()}
+                      disabled={importLoading}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        padding: '0.75rem 1rem',
+                        background: importLoading ? 'rgba(59, 130, 246, 0.3)' : 'rgba(59, 130, 246, 0.2)',
+                        border: '1px solid rgba(59, 130, 246, 0.3)',
+                        borderRadius: '8px',
+                        color: '#3b82f6',
+                        fontSize: '0.875rem',
+                        fontWeight: '500',
+                        cursor: importLoading ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!importLoading) {
+                          e.currentTarget.style.background = 'rgba(59, 130, 246, 0.3)';
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!importLoading) {
+                          e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                        }
+                      }}
+                    >
+                      {importLoading ? <Loader size={16} className="animate-spin" /> : <Upload size={16} />}
+                      {importLoading ? 'Processing...' : 'Import CSV'}
+                    </button>
+                    
+                    <button
+                      onClick={handleExportCSV}
+                      disabled={customers.length === 0}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        padding: '0.75rem 1rem',
+                        background: customers.length === 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(34, 197, 94, 0.2)',
+                        border: '1px solid rgba(34, 197, 94, 0.3)',
+                        borderRadius: '8px',
+                        color: customers.length === 0 ? 'rgba(34, 197, 94, 0.5)' : '#22c55e',
+                        fontSize: '0.875rem',
+                        fontWeight: '500',
+                        cursor: customers.length === 0 ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (customers.length > 0) {
+                          e.currentTarget.style.background = 'rgba(34, 197, 94, 0.3)';
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (customers.length > 0) {
+                          e.currentTarget.style.background = 'rgba(34, 197, 94, 0.2)';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                        }
+                      }}
+                    >
+                      <Download size={16} />
+                      Export CSV
+                    </button>
                   </div>
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search customers..."
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem 1rem 0.75rem 2.5rem',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      borderRadius: '12px',
-                      color: 'white',
-                      fontSize: '0.875rem',
-                      outline: 'none',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor = '#3b82f6';
-                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
-                  />
+
+                  {/* Search Bar */}
+                  <div style={{
+                    position: 'relative',
+                    width: '300px'
+                  }}>
+                    <div style={{
+                      position: 'absolute',
+                      left: '1rem',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      color: 'rgba(255, 255, 255, 0.5)',
+                      pointerEvents: 'none'
+                    }}>
+                      <Search size={16} />
+                    </div>
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Search customers..."
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem 1rem 0.75rem 2.5rem',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '12px',
+                        color: 'white',
+                        fontSize: '0.875rem',
+                        outline: 'none',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onFocus={(e) => {
+                        e.currentTarget.style.borderColor = '#3b82f6';
+                        e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
               
@@ -2647,6 +3040,349 @@ const UserDetailsPage: React.FC = () => {
               >
                 {editLoading && <Loader size={16} className="animate-spin" />}
                 {editLoading ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CSV Import Modal */}
+      {showImportModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '2rem'
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+            borderRadius: '20px',
+            padding: '2rem',
+            width: '90%',
+            maxWidth: '1000px',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '2rem',
+              paddingBottom: '1rem',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+            }}>
+              <h2 style={{ color: 'white', margin: 0, fontSize: '1.5rem', fontWeight: '600' }}>
+                Import Customers from CSV
+              </h2>
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  resetImportState();
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'rgba(255, 255, 255, 0.6)',
+                  cursor: 'pointer',
+                  padding: '0.5rem',
+                  borderRadius: '8px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = 'white';
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = 'rgba(255, 255, 255, 0.6)';
+                  e.currentTarget.style.background = 'none';
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Import Settings */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '2rem',
+              marginBottom: '2rem'
+            }}>
+              {/* Outlet Assignment */}
+              <div>
+                <label style={{
+                  display: 'block',
+                  color: 'rgba(255, 255, 255, 0.8)',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  marginBottom: '0.5rem'
+                }}>
+                  Assign customers to outlet:
+                </label>
+                <select
+                  value={selectedOutletForImport}
+                  onChange={(e) => setSelectedOutletForImport(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '12px',
+                    color: 'white',
+                    fontSize: '0.875rem',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="" style={{ background: '#1e293b', color: 'white' }}>
+                    Leave unassigned
+                  </option>
+                  {outlets.map(outlet => (
+                    <option key={outlet.id} value={outlet.id} style={{ background: '#1e293b', color: 'white' }}>
+                      {outlet.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Duplicate Handling */}
+              <div>
+                <label style={{
+                  display: 'block',
+                  color: 'rgba(255, 255, 255, 0.8)',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  marginBottom: '0.5rem'
+                }}>
+                  Handle duplicates:
+                </label>
+                <select
+                  value={duplicateHandling}
+                  onChange={(e) => setDuplicateHandling(e.target.value as 'skip' | 'update' | 'merge')}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '12px',
+                    color: 'white',
+                    fontSize: '0.875rem',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="skip" style={{ background: '#1e293b', color: 'white' }}>
+                    Skip duplicates
+                  </option>
+                  <option value="update" style={{ background: '#1e293b', color: 'white' }}>
+                    Update existing
+                  </option>
+                  <option value="merge" style={{ background: '#1e293b', color: 'white' }}>
+                    Merge data
+                  </option>
+                </select>
+              </div>
+            </div>
+
+            {/* Field Mapping */}
+            {importPreview.length > 0 && (
+              <div style={{ marginBottom: '2rem' }}>
+                <h3 style={{ color: 'white', marginBottom: '1rem', fontSize: '1.1rem' }}>
+                  Field Mapping
+                </h3>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                  gap: '1rem',
+                  marginBottom: '1.5rem'
+                }}>
+                  {Object.keys(importPreview[0] || {}).map(csvField => (
+                    <div key={csvField}>
+                      <label style={{
+                        display: 'block',
+                        color: 'rgba(255, 255, 255, 0.7)',
+                        fontSize: '0.75rem',
+                        marginBottom: '0.25rem'
+                      }}>
+                        CSV: {csvField}
+                      </label>
+                      <select
+                        value={fieldMapping[csvField] || ''}
+                        onChange={(e) => setFieldMapping(prev => ({
+                          ...prev,
+                          [csvField]: e.target.value
+                        }))}
+                        style={{
+                          width: '100%',
+                          padding: '0.5rem',
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          border: '1px solid rgba(255, 255, 255, 0.2)',
+                          borderRadius: '8px',
+                          color: 'white',
+                          fontSize: '0.75rem'
+                        }}
+                      >
+                        <option value="" style={{ background: '#1e293b' }}>Skip field</option>
+                        <option value="name" style={{ background: '#1e293b' }}>Name</option>
+                        <option value="email" style={{ background: '#1e293b' }}>Email</option>
+                        <option value="phone" style={{ background: '#1e293b' }}>Phone</option>
+                        <option value="points" style={{ background: '#1e293b' }}>Current Points</option>
+                        <option value="lifetime_points" style={{ background: '#1e293b' }}>Lifetime Points</option>
+                        <option value="created_at" style={{ background: '#1e293b' }}>Created Date</option>
+                        <option value="birthday" style={{ background: '#1e293b' }}>Birthday</option>
+                        <option value="visit_count" style={{ background: '#1e293b' }}>Visit Count</option>
+                        <option value="notes" style={{ background: '#1e293b' }}>Notes</option>
+                        <option value="reachable_email" style={{ background: '#1e293b' }}>Email Opt-in</option>
+                        <option value="reachable_sms" style={{ background: '#1e293b' }}>SMS Opt-in</option>
+                        <option value="reachable_push" style={{ background: '#1e293b' }}>Push Opt-in</option>
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Preview */}
+            {importPreview.length > 0 && (
+              <div style={{ marginBottom: '2rem' }}>
+                <h3 style={{ color: 'white', marginBottom: '1rem', fontSize: '1.1rem' }}>
+                  Preview ({importData.length} total customers)
+                </h3>
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                }}>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(5, 1fr)',
+                    gap: '1rem',
+                    padding: '1rem',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                    fontSize: '0.75rem',
+                    fontWeight: '600',
+                    color: 'rgba(255, 255, 255, 0.8)'
+                  }}>
+                    <div>Name</div>
+                    <div>Email</div>
+                    <div>Phone</div>
+                    <div>Points</div>
+                    <div>Email Opt-in</div>
+                  </div>
+                  {importPreview.slice(0, 5).map((row, index) => (
+                    <div key={index} style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(5, 1fr)',
+                      gap: '1rem',
+                      padding: '1rem',
+                      borderBottom: index < 4 ? '1px solid rgba(255, 255, 255, 0.05)' : 'none',
+                      fontSize: '0.75rem',
+                      color: 'rgba(255, 255, 255, 0.7)'
+                    }}>
+                      <div>{row[fieldMapping['name']] || 'N/A'}</div>
+                      <div>{row[fieldMapping['email']] || 'N/A'}</div>
+                      <div>{row[fieldMapping['phone']] || 'N/A'}</div>
+                      <div>{row[fieldMapping['points']] || '0'}</div>
+                      <div>{row[fieldMapping['reachable_email']] === 'TRUE' ? '✅ Yes' : '❌ No'}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Progress Bar */}
+            {importLoading && (
+              <div style={{ marginBottom: '2rem' }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: '0.5rem'
+                }}>
+                  <span style={{ color: 'white', fontSize: '0.875rem' }}>
+                    Importing customers...
+                  </span>
+                  <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                    {Math.round(importProgress)}%
+                  </span>
+                </div>
+                <div style={{
+                  width: '100%',
+                  height: '8px',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  borderRadius: '4px',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    width: `${importProgress}%`,
+                    height: '100%',
+                    background: 'linear-gradient(90deg, #3b82f6 0%, #1d4ed8 100%)',
+                    transition: 'width 0.3s ease'
+                  }} />
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div style={{
+              display: 'flex',
+              gap: '1rem',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  resetImportState();
+                }}
+                disabled={importLoading}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '12px',
+                  color: 'rgba(255, 255, 255, 0.8)',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  cursor: importLoading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  opacity: importLoading ? 0.6 : 1
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleImportCustomers}
+                disabled={importLoading || importData.length === 0}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.75rem 1.5rem',
+                  background: importLoading || importData.length === 0 
+                    ? 'rgba(59, 130, 246, 0.3)' 
+                    : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  color: 'white',
+                  fontSize: '0.875rem',
+                  fontWeight: '600',
+                  cursor: importLoading || importData.length === 0 ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                {importLoading && <Loader size={16} className="animate-spin" />}
+                {importLoading ? 'Importing...' : `Import ${importData.length} Customers`}
               </button>
             </div>
           </div>

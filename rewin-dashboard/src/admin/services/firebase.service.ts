@@ -244,7 +244,7 @@ export class AuthService {
     }
   }
 
-  // Get user count for dashboard
+  // Get user count for dashboard (original working approach)
   static async getUserCount() {
     try {
       const usersCollection = collection(db, 'users');
@@ -745,8 +745,13 @@ export class AuthService {
         const customerData = doc.data();
         const customerId = doc.id;
         
-        // Calculate current balance from transactions for this customer
+        // Calculate current balance and points redeemed from transactions for this customer
         let currentBalance = 0;
+        let totalPointsRedeemed = 0;
+        let totalPointsEarned = 0;
+        let firstVisitDate = null;
+        let lastVisitDate = null;
+        
         const customerPhone = customerData.phoneNumber || customerData.phone;
         
         const customerTransactions = transactions.filter(t => {
@@ -766,6 +771,21 @@ export class AuthService {
         
         console.log(`Customer ${customerId} (${customerPhone}): found ${customerTransactions.length} transactions`);
         
+        // Sort transactions by date to find first/last visit
+        const sortedTransactions = customerTransactions.sort((a, b) => {
+          const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+          const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+          return dateA.getTime() - dateB.getTime();
+        });
+        
+        if (sortedTransactions.length > 0) {
+          const firstTransaction = sortedTransactions[0];
+          const lastTransaction = sortedTransactions[sortedTransactions.length - 1];
+          
+          firstVisitDate = firstTransaction.createdAt?.toDate ? firstTransaction.createdAt.toDate() : new Date(firstTransaction.createdAt);
+          lastVisitDate = lastTransaction.createdAt?.toDate ? lastTransaction.createdAt.toDate() : new Date(lastTransaction.createdAt);
+        }
+        
         customerTransactions.forEach(transaction => {
           const pointsChanged = transaction.pointsChanged || 0;
           const transactionType = transaction.transactionType || '';
@@ -775,12 +795,14 @@ export class AuthService {
           
           if (transactionType.toUpperCase() === 'EARNED' && isManualTransaction && pointsChanged > 0) {
             currentBalance += pointsChanged;
+            totalPointsEarned += pointsChanged;
           } else if (transactionType.toUpperCase() === 'REDEEMED' && pointsChanged < 0) {
             currentBalance += pointsChanged; // pointsChanged is already negative for redeemed
+            totalPointsRedeemed += Math.abs(pointsChanged); // Store as positive number
           }
         });
         
-        console.log(`Customer ${customerId}: stored totalPoints=${customerData.totalPoints}, calculated currentBalance=${currentBalance}`);
+        console.log(`Customer ${customerId}: stored totalPoints=${customerData.totalPoints}, calculated currentBalance=${currentBalance}, pointsRedeemed=${totalPointsRedeemed}`);
         
         // Use calculated balance if we found transactions, otherwise use stored totalPoints
         const finalBalance = customerTransactions.length > 0 ? currentBalance : (customerData.totalPoints || 0);
@@ -792,7 +814,14 @@ export class AuthService {
           totalPoints: Math.max(0, finalBalance), // Ensure non-negative
           storedTotalPoints: customerData.totalPoints, // Keep original for reference
           calculatedBalance: currentBalance,
-          transactionCount: customerTransactions.length
+          transactionCount: customerTransactions.length,
+          // Add calculated fields for CSV export
+          pointsRedeemed: totalPointsRedeemed,
+          totalPointsRedeemed: totalPointsRedeemed,
+          lifetimePointsEarned: totalPointsEarned || customerData.lifetimePointsEarned || 0,
+          firstVisitedAt: firstVisitDate || customerData.firstVisitedAt || customerData.createdAt,
+          lastVisitedAt: lastVisitDate || customerData.lastVisitedAt || customerData.updatedAt,
+          visitCount: customerTransactions.length || customerData.visitCount || 0
         };
       });
       
@@ -1103,6 +1132,120 @@ export class AuthService {
         growthData: [],
         totalCustomers: 0,
         error: error.message
+      };
+    }
+  }
+
+  // 11. BULK IMPORT CUSTOMERS
+  static async bulkImportCustomers(userId: string, customers: any[], duplicateHandling: 'skip' | 'update' | 'merge') {
+    try {
+      console.log(`📥 Bulk importing ${customers.length} customers for user: ${userId}`);
+      
+      let importedCount = 0;
+      let skippedCount = 0;
+      let errorCount = 0;
+      const errors: string[] = [];
+
+      // Get existing customers to check for duplicates
+      const existingCustomersRef = collection(db, 'users', userId, 'customers');
+      const existingCustomersSnapshot = await getDocs(existingCustomersRef);
+      const existingCustomers = new Map();
+      
+      existingCustomersSnapshot.docs.forEach(doc => {
+        const data = doc.data();
+        const phone = data.phoneNumber || data.phone;
+        const email = data.email;
+        if (phone) existingCustomers.set(phone, { id: doc.id, data });
+        if (email) existingCustomers.set(email, { id: doc.id, data });
+      });
+
+      // Process customers in batches
+      const batchSize = 500;
+      for (let i = 0; i < customers.length; i += batchSize) {
+        const batch = writeBatch(db);
+        const batchCustomers = customers.slice(i, i + batchSize);
+        
+        for (const customerData of batchCustomers) {
+          try {
+            const phone = customerData.phoneNumber;
+            const email = customerData.email;
+            
+            // Check for duplicates
+            const existingByPhone = phone ? existingCustomers.get(phone) : null;
+            const existingByEmail = email ? existingCustomers.get(email) : null;
+            const existing = existingByPhone || existingByEmail;
+            
+            if (existing) {
+              if (duplicateHandling === 'skip') {
+                skippedCount++;
+                continue;
+              } else if (duplicateHandling === 'update') {
+                // Update existing customer
+                const customerRef = doc(db, 'users', userId, 'customers', existing.id);
+                batch.update(customerRef, {
+                  ...customerData,
+                  updatedAt: serverTimestamp()
+                });
+                importedCount++;
+              } else if (duplicateHandling === 'merge') {
+                // Merge data (keep existing data, add new fields)
+                const customerRef = doc(db, 'users', userId, 'customers', existing.id);
+                const mergedData = {
+                  ...existing.data,
+                  ...customerData,
+                  totalPoints: Math.max(existing.data.totalPoints || 0, customerData.totalPoints || 0),
+                  updatedAt: serverTimestamp()
+                };
+                batch.update(customerRef, mergedData);
+                importedCount++;
+              }
+            } else {
+              // Create new customer
+              const customerId = `customer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+              const customerRef = doc(db, 'users', userId, 'customers', customerId);
+              
+              const newCustomerData = {
+                ...customerData,
+                customerId,
+                createdAt: customerData.createdAt || serverTimestamp(),
+                updatedAt: serverTimestamp()
+              };
+              
+              batch.set(customerRef, newCustomerData);
+              importedCount++;
+            }
+          } catch (error: any) {
+            console.error('Error processing customer:', error);
+            errors.push(`Customer ${customerData.name || customerData.email || 'unknown'}: ${error.message}`);
+            errorCount++;
+          }
+        }
+        
+        // Commit this batch
+        await batch.commit();
+        console.log(`✅ Batch ${Math.floor(i / batchSize) + 1} imported successfully`);
+      }
+
+      console.log(`✅ Bulk import completed: ${importedCount} imported, ${skippedCount} skipped, ${errorCount} errors`);
+      
+      return {
+        success: true,
+        imported: importedCount,
+        skipped: skippedCount,
+        errors: errorCount,
+        errorDetails: errors,
+        message: `Import completed: ${importedCount} imported, ${skippedCount} skipped, ${errorCount} errors`
+      };
+      
+    } catch (error: any) {
+      console.error('❌ Bulk import error:', error);
+      return {
+        success: false,
+        imported: 0,
+        skipped: 0,
+        errors: customers.length,
+        errorDetails: [error.message],
+        message: 'Bulk import failed'
       };
     }
   }
