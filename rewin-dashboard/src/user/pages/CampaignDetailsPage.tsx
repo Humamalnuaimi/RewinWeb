@@ -2,6 +2,7 @@ import React, { useState, useEffect, memo } from 'react';
 import { firestore } from '../../firebase/config';
 import { doc, getDoc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
 import { type User } from 'firebase/auth';
+import { Users, Star, Target } from 'lucide-react';
 
 interface CampaignDetailsPageProps {
   user: User;
@@ -835,7 +836,7 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
             card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
           }}>
             <div style={{ position: 'absolute', top: '20px', right: '20px', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255, 255, 255, 0.1)', color: '#3b82f6', zIndex: 2 }}>
-              <span style={{ fontSize: '1.5rem' }}>👥</span>
+              <Users size={24} color="#3b82f6" />
             </div>
             <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>
               Total Assignments
@@ -875,7 +876,7 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
             card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
           }}>
             <div style={{ position: 'absolute', top: '20px', right: '20px', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255, 255, 255, 0.1)', color: '#10b981', zIndex: 2 }}>
-              <span style={{ fontSize: '1.5rem' }}>⭐</span>
+              <Star size={24} color="#10b981" />
             </div>
             <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>
               Active Promotions
@@ -915,7 +916,7 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
             card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
           }}>
             <div style={{ position: 'absolute', top: '20px', right: '20px', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255, 255, 255, 0.1)', color: '#a855f7', zIndex: 2 }}>
-              <span style={{ fontSize: '1.5rem' }}>🎯</span>
+              <Target size={24} color="#a855f7" />
             </div>
             <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>
               Used Promotions

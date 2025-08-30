@@ -15,11 +15,13 @@
  */
 import React, { useState, useEffect, useRef } from 'react';
 import { type User } from 'firebase/auth';
+import { Smartphone, Save, CheckCircle, AlertCircle, X } from 'lucide-react';
 import { firestore, auth } from '../../firebase/config';
 import {
   collection,
   doc,
   addDoc,
+  setDoc,
   getDocs,
   query,
   where,
@@ -117,10 +119,31 @@ interface CampaignForm {
 }
 
 const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack, currentPage, setCurrentPage, setSelectedCampaignId: propSetSelectedCampaignId }) => {
-  const [activeTab, setActiveTab] = useState<'campaigns' | 'promotions'>('campaigns');
+  const [activeTab, setActiveTab] = useState<'campaigns' | 'promotions' | 'rewards'>('campaigns');
   const [showCreateCampaign, setShowCreateCampaign] = useState(false);
   const [showCreatePromotion, setShowCreatePromotion] = useState(false);
   const [loading, setLoading] = useState(false);
+  
+  // 🎯 REWARD SETTINGS STATE
+  const [rewardType, setRewardType] = useState<'dollar' | 'percentage'>('dollar');
+  const [pointsFor5Units, setPointsFor5Units] = useState(100); // Renamed for flexibility
+  const [rewardIncrement, setRewardIncrement] = useState(5); // New: Every $5, $10, etc.
+  const [maxRewardDisplay, setMaxRewardDisplay] = useState(40);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingRewards, setIsLoadingRewards] = useState(true);
+  
+  // 🎨 NOTIFICATION SYSTEM STATE
+  const [notification, setNotification] = useState<{
+    show: boolean;
+    type: 'success' | 'error' | 'info';
+    title: string;
+    message: string;
+  }>({
+    show: false,
+    type: 'success',
+    title: '',
+    message: ''
+  });
   
   // 🔥 REAL DATA ARRAYS - Connected to Firebase
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -1746,6 +1769,149 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
     }
   };
 
+  // 🎯 REWARD SETTINGS FUNCTIONS
+  const loadRewardSettings = async () => {
+    try {
+      setIsLoadingRewards(true);
+      console.log('🎯 Loading reward settings...');
+      
+      if (!user) return;
+      
+      const settingsRef = doc(firestore, 'users', user.uid, 'rewardSettings', 'config');
+      const settingsDoc = await getDoc(settingsRef);
+      
+      if (settingsDoc.exists()) {
+        const settings = settingsDoc.data();
+        setRewardType(settings.rewardType || 'dollar');
+        setPointsFor5Units(settings.pointsFor5Units || settings.pointsFor5Dollars || 100); // Backward compatibility
+        setRewardIncrement(settings.rewardIncrement || 5); // Default to every $5
+        setMaxRewardDisplay(settings.maxRewardDisplay || 40);
+        console.log('✅ Loaded reward settings:', settings);
+      } else {
+        // Use defaults for new users
+        setRewardType('dollar');
+        setPointsFor5Units(100);
+        setRewardIncrement(5);
+        setMaxRewardDisplay(40);
+        console.log('📝 Using default reward settings');
+      }
+    } catch (error) {
+      console.error('❌ Error loading reward settings:', error);
+      // Use defaults on error
+      setRewardType('dollar');
+      setPointsFor5Units(100);
+      setRewardIncrement(5);
+      setMaxRewardDisplay(40);
+    } finally {
+      setIsLoadingRewards(false);
+    }
+  };
+
+  const saveRewardSettings = async () => {
+    try {
+      setIsSaving(true);
+      console.log('💾 Saving reward settings...');
+      
+      if (!user) throw new Error('No authenticated user');
+      
+      const settingsData = {
+        rewardType: rewardType,
+        pointsFor5Units: parseInt(pointsFor5Units.toString()),
+        rewardIncrement: parseInt(rewardIncrement.toString()),
+        maxRewardDisplay: parseInt(maxRewardDisplay.toString()),
+        isActive: true,
+        lastUpdated: serverTimestamp()
+      };
+      
+      const settingsRef = doc(firestore, 'users', user.uid, 'rewardSettings', 'config');
+      await updateDoc(settingsRef, settingsData).catch(async (error) => {
+        console.log('Document does not exist, creating it...', error);
+        // If document doesn't exist, create it with setDoc (not addDoc)
+        await setDoc(settingsRef, settingsData);
+      });
+      
+      console.log('✅ Reward settings saved successfully');
+      
+      // Show themed success notification
+      showNotification(
+        'success',
+        'Settings Saved!',
+        'Your reward configuration has been saved successfully and is now active.'
+      );
+      
+    } catch (error) {
+      console.error('❌ Error saving reward settings:', error);
+      showNotification(
+        'error',
+        'Save Failed',
+        'Unable to save reward settings. Please check your connection and try again.'
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const generatePreviewRewards = () => {
+    const rewards = [];
+    const pointsPer5Units = parseInt(pointsFor5Units.toString());
+    const maxDisplay = parseInt(maxRewardDisplay.toString());
+    const increment = parseInt(rewardIncrement.toString());
+    
+    // Generate custom increments up to max display
+    for (let amount = increment; amount <= maxDisplay; amount += increment) {
+      const requiredPoints = (amount / 5) * pointsPer5Units;
+      const coinCount = Math.ceil(amount / 10); // 1-2 coins for $5-$10 or 5%-10%, etc.
+      const coins = '🪙'.repeat(Math.min(coinCount, 4));
+      
+      rewards.push({
+        amount,
+        points: requiredPoints,
+        coins,
+        displayText: rewardType === 'percentage' ? `${amount}% OFF` : `$${amount} OFF`
+      });
+    }
+    
+    return rewards.slice(0, 8); // Show max 8 in preview
+  };
+
+  const handlePointsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(e.target.value);
+    if (value >= 10 && value <= 1000) {
+      setPointsFor5Units(value);
+    }
+  };
+
+  const handleRewardTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setRewardType(e.target.value as 'dollar' | 'percentage');
+  };
+
+  const handleIncrementChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setRewardIncrement(parseInt(e.target.value));
+  };
+
+  const handleMaxDisplayChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setMaxRewardDisplay(parseInt(e.target.value));
+  };
+
+  // 🎨 NOTIFICATION HELPER FUNCTIONS
+  const showNotification = (type: 'success' | 'error' | 'info', title: string, message: string) => {
+    setNotification({
+      show: true,
+      type,
+      title,
+      message
+    });
+    
+    // Auto-hide after 4 seconds
+    setTimeout(() => {
+      setNotification(prev => ({ ...prev, show: false }));
+    }, 4000);
+  };
+
+  const hideNotification = () => {
+    setNotification(prev => ({ ...prev, show: false }));
+  };
+
   // 🗑️ DELETE PROMOTION FUNCTIONS
   const handleDeleteClick = (promotion: Promotion) => {
     setPromotionToDelete(promotion);
@@ -1952,6 +2118,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
     loadPromotions();
     loadCampaigns();
     loadOutlets();
+    loadRewardSettings();
   }, [user]);
 
   // 🤖 AUTOMATIC PROCESSING LIFECYCLE
@@ -2332,7 +2499,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
         {/* Tab Navigation */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
+          gridTemplateColumns: '1fr 1fr 1fr',
           gap: '1rem',
           marginBottom: '3rem'
         }}>
@@ -2421,6 +2588,49 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             <span style={{ fontSize: '1.2rem' }}>🔵</span>
             <span>Promotions ({promotions.length})</span>
           </button>
+          
+          <button
+            onClick={() => setActiveTab('rewards')}
+            style={{
+              background: activeTab === 'rewards' 
+                ? 'rgba(245, 158, 11, 0.15)' 
+                : 'rgba(255, 255, 255, 0.05)',
+              border: activeTab === 'rewards' 
+                ? '2px solid rgba(245, 158, 11, 0.4)' 
+                : '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '20px',
+              padding: '1.5rem 2rem',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '1.1rem',
+              fontWeight: activeTab === 'rewards' ? '700' : '500',
+              transition: 'all 0.3s ease',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              boxShadow: activeTab === 'rewards' 
+                ? '0 8px 32px rgba(245, 158, 11, 0.2)' 
+                : '0 4px 20px rgba(0, 0, 0, 0.1)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.75rem'
+            }}
+            onMouseEnter={(e) => {
+              if (activeTab !== 'rewards') {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (activeTab !== 'rewards') {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }
+            }}
+          >
+            <span style={{ fontSize: '1.2rem' }}>🟡</span>
+            <span>Point Rewards</span>
+          </button>
         </div>
 
         {/* Create Button */}
@@ -2429,17 +2639,20 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             onClick={() => {
               if (activeTab === 'campaigns') {
                 setShowCreateCampaign(true);
-              } else {
+              } else if (activeTab === 'promotions') {
                 setShowCreatePromotion(true);
               }
+              // No create action for rewards tab - it's settings only
             }}
-            disabled={loading}
+            disabled={loading || activeTab === 'rewards'}
             style={{
               background: loading 
                 ? 'rgba(107, 114, 128, 0.3)' 
                 : (activeTab === 'campaigns' 
                   ? 'linear-gradient(135deg, #10b981, #059669)' 
-                  : 'linear-gradient(135deg, #3b82f6, #2563eb)'),
+                  : activeTab === 'promotions'
+                  ? 'linear-gradient(135deg, #3b82f6, #2563eb)'
+                  : 'rgba(107, 114, 128, 0.3)'), // Disabled for rewards
               border: 'none',
               borderRadius: '16px',
               padding: '1.25rem 2.5rem',
@@ -2481,7 +2694,9 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               {loading ? '⏳' : '+'}
             </span>
             <span>
-              {loading ? 'Processing...' : `Create New ${activeTab === 'campaigns' ? 'Campaign' : 'Promotion'}`}
+              {loading ? 'Processing...' : 
+                activeTab === 'rewards' ? 'Configure Reward Settings Below' :
+                `Create New ${activeTab === 'campaigns' ? 'Campaign' : 'Promotion'}`}
             </span>
           </button>
         </div>
@@ -2839,7 +3054,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 </div>
               )}
           </div>
-        ) : (
+        ) : activeTab === 'promotions' ? (
           <div>
             <h2 style={{ color: 'white', marginBottom: '1.5rem' }}>
               🔵 Promotions ({promotions.length})
@@ -3054,7 +3269,337 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               )}
             </div>
           </div>
-        )}
+        ) : activeTab === 'rewards' ? (
+          <div>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h2 style={{ color: 'white', margin: 0 }}>
+                🟡 Point Rewards Configuration
+              </h2>
+            </div>
+            
+            {isLoadingRewards ? (
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                borderRadius: '15px',
+                padding: '3rem',
+                textAlign: 'center',
+                backdropFilter: 'blur(20px)',
+                border: '1px solid rgba(255, 255, 255, 0.2)'
+              }}>
+                <div style={{ color: 'white', fontSize: '1.2rem' }}>
+                  ⏳ Loading reward settings...
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                borderRadius: '15px',
+                padding: '2rem',
+                backdropFilter: 'blur(20px)',
+                border: '1px solid rgba(255, 255, 255, 0.2)'
+              }}>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr 1fr 1fr',
+                  gap: '2rem',
+                  marginBottom: '2rem'
+                }}>
+                  {/* Reward Type Setting */}
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    borderRadius: '12px',
+                    padding: '1.5rem',
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}>
+                    <label style={{
+                      display: 'block',
+                      color: 'white',
+                      fontSize: '1.1rem',
+                      fontWeight: '600',
+                      marginBottom: '0.75rem'
+                    }}>
+                      Reward Type:
+                    </label>
+                    <select
+                      value={rewardType}
+                      onChange={handleRewardTypeChange}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: '8px',
+                        color: 'white',
+                        fontSize: '1rem',
+                        outline: 'none'
+                      }}
+                    >
+                      <option value="dollar" style={{ background: '#1f2937', color: 'white' }}>
+                        Dollar Amount ($5, $10, $15...)
+                      </option>
+                      <option value="percentage" style={{ background: '#1f2937', color: 'white' }}>
+                        Percentage (5%, 10%, 15%...)
+                      </option>
+                    </select>
+                  </div>
+
+                  {/* Points per Unit Setting */}
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    borderRadius: '12px',
+                    padding: '1.5rem',
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}>
+                    <label style={{
+                      display: 'block',
+                      color: 'white',
+                      fontSize: '1.1rem',
+                      fontWeight: '600',
+                      marginBottom: '0.75rem'
+                    }}>
+                      Points needed for {rewardType === 'percentage' ? '5% OFF' : '$5 OFF'}:
+                    </label>
+                    <input
+                      type="number"
+                      value={pointsFor5Units}
+                      onChange={handlePointsChange}
+                      min="10"
+                      max="1000"
+                      step="10"
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: '8px',
+                        color: 'white',
+                        fontSize: '1rem',
+                        outline: 'none',
+                        marginBottom: '0.5rem'
+                      }}
+                    />
+                    <small style={{
+                      color: 'rgba(255, 255, 255, 0.7)',
+                      fontSize: '0.875rem'
+                    }}>
+                      Current: {pointsFor5Units} points = {rewardType === 'percentage' ? '5% OFF' : '$5 OFF'}
+                    </small>
+                  </div>
+
+                  {/* Reward Increment Setting */}
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    borderRadius: '12px',
+                    padding: '1.5rem',
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}>
+                    <label style={{
+                      display: 'block',
+                      color: 'white',
+                      fontSize: '1.1rem',
+                      fontWeight: '600',
+                      marginBottom: '0.75rem'
+                    }}>
+                      Reward Increment:
+                    </label>
+                    <select
+                      value={rewardIncrement}
+                      onChange={handleIncrementChange}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: '8px',
+                        color: 'white',
+                        fontSize: '1rem',
+                        outline: 'none'
+                      }}
+                    >
+                      <option value="5" style={{ background: '#1f2937', color: 'white' }}>
+                        Every {rewardType === 'percentage' ? '5%' : '$5'}
+                      </option>
+                      <option value="10" style={{ background: '#1f2937', color: 'white' }}>
+                        Every {rewardType === 'percentage' ? '10%' : '$10'}
+                      </option>
+                      <option value="15" style={{ background: '#1f2937', color: 'white' }}>
+                        Every {rewardType === 'percentage' ? '15%' : '$15'}
+                      </option>
+                      <option value="20" style={{ background: '#1f2937', color: 'white' }}>
+                        Every {rewardType === 'percentage' ? '20%' : '$20'}
+                      </option>
+                      <option value="25" style={{ background: '#1f2937', color: 'white' }}>
+                        Every {rewardType === 'percentage' ? '25%' : '$25'}
+                      </option>
+                    </select>
+                    <small style={{
+                      color: 'rgba(255, 255, 255, 0.7)',
+                      fontSize: '0.875rem',
+                      display: 'block',
+                      marginTop: '0.5rem'
+                    }}>
+                      Shows: {rewardType === 'percentage' ? `${rewardIncrement}%, ${rewardIncrement * 2}%, ${rewardIncrement * 3}%...` : `$${rewardIncrement}, $${rewardIncrement * 2}, $${rewardIncrement * 3}...`}
+                    </small>
+                  </div>
+
+                  {/* Max Display Setting */}
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    borderRadius: '12px',
+                    padding: '1.5rem',
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}>
+                    <label style={{
+                      display: 'block',
+                      color: 'white',
+                      fontSize: '1.1rem',
+                      fontWeight: '600',
+                      marginBottom: '0.75rem'
+                    }}>
+                      Maximum reward to display:
+                    </label>
+                    <select
+                      value={maxRewardDisplay}
+                      onChange={handleMaxDisplayChange}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: '8px',
+                        color: 'white',
+                        fontSize: '1rem',
+                        outline: 'none'
+                      }}
+                    >
+                      <option value="20" style={{ background: '#1f2937', color: 'white' }}>
+                        Up to {rewardType === 'percentage' ? '20%' : '$20'} OFF
+                      </option>
+                      <option value="40" style={{ background: '#1f2937', color: 'white' }}>
+                        Up to {rewardType === 'percentage' ? '40%' : '$40'} OFF
+                      </option>
+                      <option value="60" style={{ background: '#1f2937', color: 'white' }}>
+                        Up to {rewardType === 'percentage' ? '60%' : '$60'} OFF
+                      </option>
+                      <option value="80" style={{ background: '#1f2937', color: 'white' }}>
+                        Up to {rewardType === 'percentage' ? '80%' : '$80'} OFF
+                      </option>
+                      <option value="100" style={{ background: '#1f2937', color: 'white' }}>
+                        Up to {rewardType === 'percentage' ? '100%' : '$100'} OFF
+                      </option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Preview Section */}
+                <div style={{
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  borderRadius: '12px',
+                  padding: '1.5rem',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  marginBottom: '2rem'
+                }}>
+                  <h4 style={{
+                    color: '#f59e0b',
+                    margin: '0 0 1rem 0',
+                    fontSize: '1.2rem',
+                    fontWeight: '600',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}>
+                    <Smartphone size={20} color="#f59e0b" />
+                    Customer Preview:
+                  </h4>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gap: '1rem'
+                  }}>
+                    {generatePreviewRewards().map(reward => (
+                      <div key={reward.amount} style={{
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        borderRadius: '8px',
+                        padding: '1rem',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{
+                          color: '#f59e0b',
+                          fontSize: '1.5rem',
+                          fontWeight: '700',
+                          marginBottom: '0.25rem'
+                        }}>
+                          {reward.displayText}
+                        </div>
+                        <div style={{
+                          color: 'rgba(255, 255, 255, 0.8)',
+                          fontSize: '0.875rem',
+                          marginBottom: '0.25rem'
+                        }}>
+                          {reward.points} pts
+                        </div>
+                        <div style={{ fontSize: '1.2rem' }}>
+                          {reward.coins}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Save Button */}
+                <div style={{ textAlign: 'center' }}>
+                  <button
+                    onClick={saveRewardSettings}
+                    disabled={isSaving}
+                    style={{
+                      background: isSaving 
+                        ? 'rgba(107, 114, 128, 0.3)' 
+                        : 'linear-gradient(135deg, #f59e0b, #d97706)',
+                      border: 'none',
+                      borderRadius: '12px',
+                      padding: '1rem 2rem',
+                      color: 'white',
+                      fontSize: '1.1rem',
+                      fontWeight: '600',
+                      cursor: isSaving ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.3s ease',
+                      boxShadow: isSaving 
+                        ? 'none' 
+                        : '0 8px 32px rgba(245, 158, 11, 0.3)',
+                      opacity: isSaving ? 0.6 : 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      margin: '0 auto'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isSaving) {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 12px 40px rgba(245, 158, 11, 0.4)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isSaving) {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = '0 8px 32px rgba(245, 158, 11, 0.3)';
+                      }
+                    }}
+                  >
+                    {isSaving ? (
+                      <span style={{ fontSize: '1.2rem' }}>⏳</span>
+                    ) : (
+                      <Save size={20} />
+                    )}
+                    <span>
+                      {isSaving ? 'Saving...' : 'Save Settings'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
       </main>
 
       {/* ✅ SUCCESS NOTIFICATION */}
@@ -5043,6 +5588,129 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
           </div>
         </div>
       )}
+
+      {/* 🎨 THEMED NOTIFICATION SYSTEM */}
+      {notification.show && (
+        <div style={{
+          position: 'fixed',
+          top: '2rem',
+          right: '2rem',
+          zIndex: 9999,
+          maxWidth: '400px',
+          background: notification.type === 'success' 
+            ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.95) 0%, rgba(5, 150, 105, 0.95) 100%)'
+            : notification.type === 'error'
+            ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.95) 0%, rgba(220, 38, 38, 0.95) 100%)'
+            : 'linear-gradient(135deg, rgba(59, 130, 246, 0.95) 0%, rgba(37, 99, 235, 0.95) 100%)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          border: `1px solid ${
+            notification.type === 'success' 
+              ? 'rgba(16, 185, 129, 0.3)'
+              : notification.type === 'error'
+              ? 'rgba(239, 68, 68, 0.3)'
+              : 'rgba(59, 130, 246, 0.3)'
+          }`,
+          borderRadius: '16px',
+          padding: '1.5rem',
+          boxShadow: notification.type === 'success'
+            ? '0 20px 40px rgba(16, 185, 129, 0.3), 0 0 0 1px rgba(16, 185, 129, 0.1)'
+            : notification.type === 'error'
+            ? '0 20px 40px rgba(239, 68, 68, 0.3), 0 0 0 1px rgba(239, 68, 68, 0.1)'
+            : '0 20px 40px rgba(59, 130, 246, 0.3), 0 0 0 1px rgba(59, 130, 246, 0.1)',
+          animation: 'slideInFromRight 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+          color: 'white'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '1rem'
+          }}>
+            {/* Icon */}
+            <div style={{
+              flexShrink: 0,
+              width: '40px',
+              height: '40px',
+              borderRadius: '12px',
+              background: 'rgba(255, 255, 255, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px solid rgba(255, 255, 255, 0.3)'
+            }}>
+              {notification.type === 'success' ? (
+                <CheckCircle size={20} color="white" />
+              ) : notification.type === 'error' ? (
+                <AlertCircle size={20} color="white" />
+              ) : (
+                <Smartphone size={20} color="white" />
+              )}
+            </div>
+
+            {/* Content */}
+            <div style={{ flex: 1 }}>
+              <h4 style={{
+                margin: '0 0 0.5rem 0',
+                fontSize: '1.1rem',
+                fontWeight: '700',
+                color: 'white'
+              }}>
+                {notification.title}
+              </h4>
+              <p style={{
+                margin: 0,
+                fontSize: '0.9rem',
+                color: 'rgba(255, 255, 255, 0.9)',
+                lineHeight: '1.4'
+              }}>
+                {notification.message}
+              </p>
+            </div>
+
+            {/* Close Button */}
+            <button
+              onClick={hideNotification}
+              style={{
+                background: 'rgba(255, 255, 255, 0.2)',
+                border: '1px solid rgba(255, 255, 255, 0.3)',
+                borderRadius: '8px',
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                flexShrink: 0
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
+                e.currentTarget.style.transform = 'scale(1.1)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+                e.currentTarget.style.transform = 'scale(1)';
+              }}
+            >
+              <X size={16} color="white" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* CSS Animation Styles */}
+      <style>{`
+        @keyframes slideInFromRight {
+          from {
+            transform: translateX(100%) scale(0.8);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0) scale(1);
+            opacity: 1;
+          }
+        }
+      `}</style>
     </div>
   );
 };

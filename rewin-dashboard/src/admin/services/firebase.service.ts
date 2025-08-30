@@ -5,7 +5,7 @@
 
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, signOut, type User, createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithCredential, GoogleAuthProvider as GoogleAuthProviderType } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, collection, getDocs, query, orderBy, serverTimestamp, deleteDoc, writeBatch } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, orderBy, serverTimestamp, deleteDoc, writeBatch } from 'firebase/firestore';
 import BackendEmailService from './backend-email.service';
 
 // Firebase configuration for Rewin project - MUST match the original dashboard config
@@ -609,7 +609,88 @@ export class AuthService {
     }
   }
 
-  // 6. GET SINGLE USER BY ID
+  // 6. UPDATE USER
+  static async updateUser(userId: string, userData: { displayName?: string; email?: string }) {
+    try {
+      console.log(`✏️ Updating user: ${userId}`, userData);
+      
+      const userDocRef = doc(db, 'users', userId);
+      const userDocSnapshot = await getDoc(userDocRef);
+      
+      if (!userDocSnapshot.exists()) {
+        return {
+          success: false,
+          error: 'User not found',
+          user: null
+        };
+      }
+      
+      // Update the user document in Firestore
+      const updateData: any = {};
+      if (userData.displayName !== undefined) {
+        updateData.displayName = userData.displayName;
+      }
+      if (userData.email !== undefined) {
+        updateData.email = userData.email;
+      }
+      updateData.updatedAt = serverTimestamp();
+      
+      await updateDoc(userDocRef, updateData);
+      
+      console.log(`✅ User ${userId} updated successfully`);
+      
+      return {
+        success: true,
+        message: 'User updated successfully',
+        error: null
+      };
+      
+    } catch (error: any) {
+      console.error('❌ Error updating user:', error);
+      return {
+        success: false,
+        error: error.message,
+        user: null
+      };
+    }
+  }
+
+  // 6.1. CREATE OUTLET FOR USER
+  static async createOutlet(userId: string, outletData: { name: string; location?: string; address?: string }) {
+    try {
+      console.log(`🏪 Creating outlet for user: ${userId}`, outletData);
+      
+      // Generate a unique outlet ID
+      const outletId = `outlet_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      const outletDocRef = doc(db, 'users', userId, 'outlets', outletId);
+      
+      const newOutlet = {
+        name: outletData.name.trim(),
+        location: outletData.location?.trim() || '',
+        address: outletData.address?.trim() || '',
+        isActive: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        userId: userId
+      };
+      
+      await setDoc(outletDocRef, newOutlet);
+      
+      console.log(`✅ Outlet ${outletId} created successfully for user ${userId}`);
+      return { 
+        success: true, 
+        outlet: { id: outletId, ...newOutlet }, 
+        message: 'Outlet created successfully',
+        error: null 
+      };
+    } catch (error: any) {
+      console.error('❌ Error creating outlet:', error);
+      return { success: false, outlet: null, error: error.message };
+    }
+  }
+
+  // 7. GET SINGLE USER BY ID
   static async getUserById(userId: string) {
     try {
       console.log(`🔍 Fetching user by ID: ${userId}`);
@@ -647,7 +728,7 @@ export class AuthService {
     }
   }
 
-  // 7. GET USER'S CUSTOMERS
+  // 7. GET USER'S CUSTOMERS (with calculated current balance)
   static async getUserCustomers(userId: string) {
     try {
       console.log(`👥 Fetching customers for user: ${userId}`);
@@ -655,10 +736,65 @@ export class AuthService {
       const customersRef = collection(db, 'users', userId, 'customers');
       const customersSnapshot = await getDocs(customersRef);
       
-      const customers = customersSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      // Get transactions to calculate current balance for each customer
+      const transactionsRef = collection(db, 'users', userId, 'web_transactions');
+      const transactionsSnapshot = await getDocs(transactionsRef);
+      const transactions = transactionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      const customers = customersSnapshot.docs.map(doc => {
+        const customerData = doc.data();
+        const customerId = doc.id;
+        
+        // Calculate current balance from transactions for this customer
+        let currentBalance = 0;
+        const customerPhone = customerData.phoneNumber || customerData.phone;
+        
+        const customerTransactions = transactions.filter(t => {
+          // Match by customerId, customerPhone, or phone number (with and without +)
+          const transactionPhone = t.customerPhone || t.phone;
+          const phoneMatch = customerPhone && transactionPhone && (
+            customerPhone === transactionPhone ||
+            customerPhone.replace(/^\+/, '') === transactionPhone.replace(/^\+/, '') ||
+            customerPhone === transactionPhone.replace(/^\+/, '') ||
+            customerPhone.replace(/^\+/, '') === transactionPhone
+          );
+          
+          return t.customerId === customerId || 
+                 t.customerId === customerData.customerId ||
+                 phoneMatch;
+        });
+        
+        console.log(`Customer ${customerId} (${customerPhone}): found ${customerTransactions.length} transactions`);
+        
+        customerTransactions.forEach(transaction => {
+          const pointsChanged = transaction.pointsChanged || 0;
+          const transactionType = transaction.transactionType || '';
+          const isManualTransaction = transaction.isManualTransaction || false;
+          
+          console.log(`  Transaction: ${transactionType}, points: ${pointsChanged}, manual: ${isManualTransaction}`);
+          
+          if (transactionType.toUpperCase() === 'EARNED' && isManualTransaction && pointsChanged > 0) {
+            currentBalance += pointsChanged;
+          } else if (transactionType.toUpperCase() === 'REDEEMED' && pointsChanged < 0) {
+            currentBalance += pointsChanged; // pointsChanged is already negative for redeemed
+          }
+        });
+        
+        console.log(`Customer ${customerId}: stored totalPoints=${customerData.totalPoints}, calculated currentBalance=${currentBalance}`);
+        
+        // Use calculated balance if we found transactions, otherwise use stored totalPoints
+        const finalBalance = customerTransactions.length > 0 ? currentBalance : (customerData.totalPoints || 0);
+        
+        return {
+          id: customerId,
+          ...customerData,
+          // Use calculated current balance or fallback to stored totalPoints
+          totalPoints: Math.max(0, finalBalance), // Ensure non-negative
+          storedTotalPoints: customerData.totalPoints, // Keep original for reference
+          calculatedBalance: currentBalance,
+          transactionCount: customerTransactions.length
+        };
+      });
       
       console.log(`✅ Found ${customers.length} customers for user ${userId}`);
       
@@ -678,7 +814,7 @@ export class AuthService {
     }
   }
 
-  // 8. GET USER'S OUTLETS
+  // 8. GET USER'S OUTLETS (with customer counts based on home outlet like old admin panel)
   static async getUserOutlets(userId: string) {
     try {
       console.log(`🏪 Fetching outlets for user: ${userId}`);
@@ -686,10 +822,55 @@ export class AuthService {
       const outletsRef = collection(db, 'users', userId, 'outlets');
       const outletsSnapshot = await getDocs(outletsRef);
       
-      const outlets = outletsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      // Also fetch customers to calculate outlet customer counts
+      const customersRef = collection(db, 'users', userId, 'customers');
+      const customersSnapshot = await getDocs(customersRef);
+      const userCustomers = customersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      console.log(`Found ${userCustomers.length} customers for user ${userId}`);
+      
+      const outlets = [];
+      
+      // Process outlets with customer counts (matching old admin panel logic)
+      for (const outletDoc of outletsSnapshot.docs) {
+        const outletData = outletDoc.data();
+        const outletId = outletDoc.id;
+        
+        // Count customers for this specific outlet using outletId (primary) and outletName (fallback)
+        // Each customer belongs to one home outlet based on their stable outletId field
+        const outletCustomers = userCustomers.filter(customer => {
+          const customerOutletId = customer.outletId;        // Stable field - use this first
+          const customerOutletName = customer.outletName;    // Stable field - fallback only
+          const currentOutletId = outletDoc.id;
+          const outletName = outletData.name;
+          
+          // PRIMARY: Match by outletId (most reliable - this is the stable field)
+          let matches = false;
+          if (customerOutletId && customerOutletId === currentOutletId) {
+            matches = true;
+            console.log(`Customer ${customer.id} matched by outletId: ${customerOutletId} === ${currentOutletId}`);
+          }
+          // FALLBACK: Only if outletId is missing, try outletName (case-insensitive)
+          else if (!customerOutletId && customerOutletName && outletName && customerOutletName.toLowerCase() === outletName.toLowerCase()) {
+            matches = true;
+            console.log(`Customer ${customer.id} matched by outletName (fallback): ${customerOutletName} === ${outletName}`);
+          }
+          // NO FALLBACK: If customer has outletId but it doesn't match, don't assign to any outlet
+          // This prevents customers from being assigned to multiple outlets with the same name
+          
+          return matches;
+        });
+        
+        console.log(`Outlet ${outletId} has ${outletCustomers.length} customers`);
+        
+        outlets.push({
+          id: outletDoc.id,
+          ...outletData,
+          customerCount: outletCustomers.length,
+          // Normalize display name to uppercase for consistency
+          displayName: outletData.name ? outletData.name.toUpperCase() : outletData.name
+        });
+      }
       
       console.log(`✅ Found ${outlets.length} outlets for user ${userId}`);
       
@@ -802,11 +983,23 @@ export class AuthService {
       
       const checkInsCount = filteredVisits.length;
       
+      // Calculate current total points balance (sum of all customers' calculated current balance)
+      let totalCurrentPoints = 0;
+      
+      // Get customers with calculated current balance
+      const customersResponse = await this.getUserCustomers(userId);
+      if (customersResponse.success) {
+        customersResponse.customers.forEach(customer => {
+          totalCurrentPoints += customer.totalPoints || 0; // This is now the calculated current balance
+        });
+      }
+
       console.log(`✅ Analytics calculated for user ${userId}:`, {
         customersCount,
         totalRevenue: Math.round(totalRevenue * 100) / 100,
         totalPointsEarned,
         totalPointsRedeemed,
+        totalCurrentPoints,
         checkInsCount,
         transactionsCount: filteredTransactions.length
       });
@@ -816,8 +1009,9 @@ export class AuthService {
         analytics: {
           customersCount,
           totalRevenue: Math.round(totalRevenue * 100) / 100,
-          totalPoints: totalPointsEarned,
+          totalPointsEarned,
           totalPointsRedeemed,
+          totalCurrentPoints, // Current points balance across all customers
           checkInsCount,
           transactionsCount: filteredTransactions.length
         },
@@ -836,6 +1030,78 @@ export class AuthService {
           checkInsCount: 0,
           transactionsCount: 0
         },
+        error: error.message
+      };
+    }
+  }
+
+  // 10. GET CUSTOMER GROWTH OVER TIME
+  static async getCustomerGrowth(userId: string, days: number = 7) {
+    try {
+      console.log(`📈 Fetching customer growth for user: ${userId}, last ${days} days`);
+      
+      const customersRef = collection(db, 'users', userId, 'customers');
+      const customersSnapshot = await getDocs(customersRef);
+      
+      const customers = customersSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt || data.timestamp || new Date()
+        };
+      });
+
+      // Create array for the last N days
+      const growthData = [];
+      const now = new Date();
+      
+      for (let i = days - 1; i >= 0; i--) {
+        const date = new Date(now);
+        date.setDate(date.getDate() - i);
+        date.setHours(0, 0, 0, 0);
+        
+        const nextDate = new Date(date);
+        nextDate.setDate(nextDate.getDate() + 1);
+        
+        // Count customers created on this day
+        const customersOnDay = customers.filter(customer => {
+          let customerDate;
+          if (customer.createdAt && customer.createdAt.toDate) {
+            customerDate = customer.createdAt.toDate();
+          } else if (customer.createdAt) {
+            customerDate = new Date(customer.createdAt);
+          } else {
+            return false;
+          }
+          return customerDate >= date && customerDate < nextDate;
+        });
+
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        
+        growthData.push({
+          date: date.toISOString().split('T')[0],
+          dayName: dayNames[date.getDay()],
+          count: customersOnDay.length,
+          isToday: i === 0
+        });
+      }
+
+      console.log(`✅ Customer growth data calculated:`, growthData);
+      
+      return {
+        success: true,
+        growthData,
+        totalCustomers: customers.length,
+        error: null
+      };
+      
+    } catch (error: any) {
+      console.error('❌ Error fetching customer growth:', error);
+      return {
+        success: false,
+        growthData: [],
+        totalCustomers: 0,
         error: error.message
       };
     }

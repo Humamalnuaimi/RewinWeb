@@ -98,6 +98,13 @@ service cloud.firestore {
           allow read, write: if request.auth == null;
         }
       }
+      
+      // 🎯 ADD THIS: Reward Settings Configuration
+      match /rewardSettings/{settingId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+        // 🤖 ADD: Allow Cloud Functions access
+        allow read, write: if request.auth == null;
+      }
     }
     
     // 🏢 KEEP EXISTING BUSINESS COLLECTION (for mobile app compatibility)

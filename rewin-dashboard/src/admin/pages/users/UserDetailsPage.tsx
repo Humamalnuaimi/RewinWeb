@@ -25,7 +25,10 @@ import {
   Eye,
   Settings,
   AlertCircle,
-  Loader
+  Loader,
+  Plus,
+  X,
+  Search
 } from 'lucide-react';
 import AuthService from '../../services/firebase.service';
 
@@ -85,11 +88,24 @@ const UserDetailsPage: React.FC = () => {
   const [analytics, setAnalytics] = useState<UserAnalytics | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [outlets, setOutlets] = useState<Outlet[]>([]);
+  const [customerGrowth, setCustomerGrowth] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [timePeriod, setTimePeriod] = useState<TimePeriod>('today');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editFormData, setEditFormData] = useState({ displayName: '', email: '' });
+
+  // Add Outlet Modal State
+  const [showAddOutletModal, setShowAddOutletModal] = useState(false);
+  const [addOutletLoading, setAddOutletLoading] = useState(false);
+  const [outletFormData, setOutletFormData] = useState({
+    name: '',
+    location: ''
+  });
   const [activeTab, setActiveTab] = useState<'overview' | 'customers' | 'outlets' | 'analytics'>('overview');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -126,6 +142,12 @@ const UserDetailsPage: React.FC = () => {
         const outletsResponse = await AuthService.getUserOutlets(userId!);
         if (outletsResponse.success) {
           setOutlets(outletsResponse.outlets);
+        }
+
+        // Fetch customer growth data
+        const growthResponse = await AuthService.getCustomerGrowth(userId!, 7);
+        if (growthResponse.success) {
+          setCustomerGrowth(growthResponse.growthData);
         }
         
       } else {
@@ -194,6 +216,77 @@ const UserDetailsPage: React.FC = () => {
       setToast({ message: 'Failed to delete user', type: 'error' });
     } finally {
       setDeleteLoading(false);
+    }
+  };
+
+  const handleEditUser = () => {
+    if (!user) return;
+    setEditFormData({
+      displayName: user.displayName || user.email || '',
+      email: user.email || ''
+    });
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!user) return;
+    
+    try {
+      setEditLoading(true);
+      
+      const response = await AuthService.updateUser(user.uid, {
+        displayName: editFormData.displayName,
+        email: editFormData.email
+      });
+      
+      if (response.success) {
+        setToast({ message: 'User updated successfully', type: 'success' });
+        setShowEditModal(false);
+        // Refresh user data
+        await fetchUserData();
+      } else {
+        setToast({ message: response.error || 'Failed to update user', type: 'error' });
+      }
+    } catch (error: any) {
+      setToast({ message: error.message || 'Failed to update user', type: 'error' });
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  // Add Outlet Handlers
+  const handleAddOutlet = () => {
+    setOutletFormData({ name: '', location: '' });
+    setShowAddOutletModal(true);
+  };
+
+  const handleSaveOutlet = async () => {
+    if (!user?.uid || !outletFormData.name.trim()) {
+      setToast({ message: 'Please enter an outlet name', type: 'error' });
+      return;
+    }
+    
+    setAddOutletLoading(true);
+    try {
+      const result = await AuthService.createOutlet(user.uid, {
+        name: outletFormData.name,
+        location: outletFormData.location
+      });
+      
+      if (result.success) {
+        setToast({ message: 'Outlet created successfully!', type: 'success' });
+        setShowAddOutletModal(false);
+        setOutletFormData({ name: '', location: '' });
+        // Refresh outlets data
+        await fetchUserData();
+      } else {
+        setToast({ message: result.error || 'Failed to create outlet', type: 'error' });
+      }
+    } catch (error: any) {
+      console.error('Error creating outlet:', error);
+      setToast({ message: 'An error occurred while creating outlet', type: 'error' });
+    } finally {
+      setAddOutletLoading(false);
     }
   };
 
@@ -326,6 +419,7 @@ const UserDetailsPage: React.FC = () => {
           flexWrap: 'wrap'
         }}>
           <button
+            onClick={handleEditUser}
             style={{
               padding: '0.75rem 1.5rem',
               background: 'rgba(255, 255, 255, 0.1)',
@@ -855,6 +949,83 @@ const UserDetailsPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Points Redeemed */}
+      <div style={{
+        background: 'rgba(255, 255, 255, 0.05)',
+        backdropFilter: 'blur(20px)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        borderRadius: '20px',
+        padding: '2rem',
+        position: 'relative',
+        overflow: 'hidden',
+        transition: 'all 0.3s ease',
+        cursor: 'pointer'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-5px)';
+        e.currentTarget.style.boxShadow = '0 10px 30px rgba(239, 68, 68, 0.2)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = 'none';
+      }}>
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '4px',
+          background: 'linear-gradient(90deg, #ef4444, #dc2626)',
+          borderRadius: '20px 20px 0 0'
+        }} />
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          position: 'relative',
+          zIndex: 1
+        }}>
+          <div>
+            <p style={{
+              color: 'rgba(255, 255, 255, 0.7)',
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              margin: '0 0 0.5rem 0'
+            }}>
+              Points Redeemed
+            </p>
+            <p style={{
+              color: 'white',
+              fontSize: '2.5rem',
+              fontWeight: '700',
+              margin: '0 0 0.25rem 0'
+            }}>
+              {formatNumber(analytics?.totalPointsRedeemed || 0)}
+            </p>
+            <p style={{
+              color: 'rgba(255, 255, 255, 0.6)',
+              fontSize: '0.75rem',
+              margin: 0
+            }}>
+              {getTimePeriodLabel(timePeriod)}
+            </p>
+          </div>
+          <div style={{
+            width: '60px',
+            height: '60px',
+            background: 'rgba(239, 68, 68, 0.2)',
+            borderRadius: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+
+            border: '1px solid rgba(239, 68, 68, 0.3)'
+          }}>
+            <Gift size={28} color="#ef4444" />
+          </div>
+        </div>
+      </div>
+
       {/* Total Check-ins */}
       <div style={{
         background: 'rgba(255, 255, 255, 0.05)',
@@ -1295,63 +1466,732 @@ const UserDetailsPage: React.FC = () => {
           )}
 
           {!analyticsLoading && activeTab === 'overview' && (
-            <div style={{
-              color: 'white',
-              textAlign: 'center',
-              padding: '2rem'
-            }}>
-              <TrendingUp size={48} style={{ marginBottom: '1rem', opacity: 0.7 }} />
-              <h3 style={{ marginBottom: '0.5rem' }}>Overview Dashboard</h3>
-              <p style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
-                Detailed overview charts and metrics will be implemented here
-              </p>
+            <div>
+              <h3 style={{ color: 'white', marginBottom: '1.5rem' }}>Overview Dashboard</h3>
+              
+              {/* Customer Growth Chart */}
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                backdropFilter: 'blur(20px)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '20px',
+                padding: '2rem',
+                marginBottom: '2rem'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem',
+                  marginBottom: '1.5rem'
+                }}>
+                  <TrendingUp size={24} color="#3b82f6" />
+                  <h4 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>Customer Growth Over Time</h4>
+                </div>
+                <div style={{
+                  height: '300px',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  padding: '2rem',
+                  position: 'relative'
+                }}>
+                  {customers.length > 0 ? (
+                    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginBottom: '2rem'
+                      }}>
+                        <div>
+                          <h4 style={{ color: 'white', margin: '0 0 0.25rem 0', fontSize: '1.25rem' }}>
+                            Customer Growth
+                          </h4>
+                          <p style={{ color: 'rgba(255, 255, 255, 0.6)', margin: 0, fontSize: '0.875rem' }}>
+                            Total customers: {customers.length}
+                          </p>
+                        </div>
+                        <div style={{
+                          background: 'rgba(34, 197, 94, 0.1)',
+                          border: '1px solid rgba(34, 197, 94, 0.2)',
+                          borderRadius: '8px',
+                          padding: '0.5rem 1rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem'
+                        }}>
+                          <TrendingUp size={16} color="#22c55e" />
+                          <span style={{ color: '#22c55e', fontSize: '0.875rem', fontWeight: '600' }}>
+                            Growing
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {/* Real Customer Growth Chart */}
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'end', gap: '1rem', paddingTop: '1rem' }}>
+                        {customerGrowth.length > 0 ? customerGrowth.map((day, i) => {
+                          const maxCount = Math.max(...customerGrowth.map(d => d.count), 1);
+                          const height = Math.max(20, (day.count / maxCount) * 80);
+                          
+                          return (
+                            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                              <div 
+                                style={{
+                                  width: '100%',
+                                  height: `${height}%`,
+                                  background: day.isToday 
+                                    ? 'linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%)'
+                                    : 'linear-gradient(180deg, rgba(59, 130, 246, 0.8) 0%, rgba(59, 130, 246, 0.4) 100%)',
+                                  borderRadius: '4px 4px 0 0',
+                                  marginBottom: '0.5rem',
+                                  transition: 'all 0.3s ease',
+                                  cursor: 'pointer',
+                                  position: 'relative'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.transform = 'scaleY(1.1)';
+                                  // Show tooltip
+                                  const tooltip = document.createElement('div');
+                                  tooltip.innerHTML = `${day.count} new customers`;
+                                  tooltip.style.cssText = `
+                                    position: absolute;
+                                    bottom: 110%;
+                                    left: 50%;
+                                    transform: translateX(-50%);
+                                    background: rgba(0, 0, 0, 0.8);
+                                    color: white;
+                                    padding: 0.5rem;
+                                    border-radius: 4px;
+                                    font-size: 0.75rem;
+                                    white-space: nowrap;
+                                    z-index: 1000;
+                                  `;
+                                  e.currentTarget.appendChild(tooltip);
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.transform = 'scaleY(1)';
+                                  // Remove tooltip
+                                  const tooltip = e.currentTarget.querySelector('div');
+                                  if (tooltip) tooltip.remove();
+                                }}
+                              />
+                              <span style={{
+                                color: day.isToday ? '#3b82f6' : 'rgba(255, 255, 255, 0.6)',
+                                fontSize: '0.75rem',
+                                fontWeight: day.isToday ? '600' : '400'
+                              }}>
+                                {day.dayName}
+                              </span>
+                            </div>
+                          );
+                        }) : (
+                          // Fallback if no growth data
+                          Array.from({ length: 7 }, (_, i) => {
+                            const dayName = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i];
+                            const isToday = i === 6;
+                            
+                            return (
+                              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <div style={{
+                                  width: '100%',
+                                  height: '20%',
+                                  background: 'rgba(59, 130, 246, 0.3)',
+                                  borderRadius: '4px 4px 0 0',
+                                  marginBottom: '0.5rem'
+                                }} />
+                                <span style={{
+                                  color: isToday ? '#3b82f6' : 'rgba(255, 255, 255, 0.6)',
+                                  fontSize: '0.75rem',
+                                  fontWeight: isToday ? '600' : '400'
+                                }}>
+                                  {dayName}
+                                </span>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      textAlign: 'center'
+                    }}>
+                      <div>
+                        <TrendingUp size={48} style={{ marginBottom: '1rem', opacity: 0.5, color: '#6b7280' }} />
+                        <p style={{ color: 'rgba(255, 255, 255, 0.7)', margin: 0 }}>
+                          No customer data available yet
+                        </p>
+                        <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.875rem', margin: '0.5rem 0 0 0' }}>
+                          Customer growth will appear here once data is available
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Points Analytics */}
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                backdropFilter: 'blur(20px)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '20px',
+                padding: '2rem'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem',
+                  marginBottom: '1.5rem'
+                }}>
+                  <Star size={24} color="#f59e0b" />
+                  <h4 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>Points Analytics</h4>
+                </div>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '1rem'
+                }}>
+                  <div style={{
+                    background: 'rgba(34, 197, 94, 0.1)',
+                    border: '1px solid rgba(34, 197, 94, 0.2)',
+                    borderRadius: '12px',
+                    padding: '1.5rem',
+                    textAlign: 'center'
+                  }}>
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      background: 'rgba(34, 197, 94, 0.2)',
+                      borderRadius: '10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto 1rem auto'
+                    }}>
+                      <TrendingUp size={20} color="#22c55e" />
+                    </div>
+                    <p style={{ color: '#22c55e', fontSize: '1.5rem', fontWeight: '700', margin: '0 0 0.25rem 0' }}>
+                      {formatNumber(analytics?.totalCurrentPoints || 0)}
+                    </p>
+                    <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', margin: 0 }}>
+                      Current Points
+                    </p>
+                  </div>
+                  
+                  <div style={{
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.2)',
+                    borderRadius: '12px',
+                    padding: '1.5rem',
+                    textAlign: 'center'
+                  }}>
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      background: 'rgba(239, 68, 68, 0.2)',
+                      borderRadius: '10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto 1rem auto'
+                    }}>
+                      <Gift size={20} color="#ef4444" />
+                    </div>
+                    <p style={{ color: '#ef4444', fontSize: '1.5rem', fontWeight: '700', margin: '0 0 0.25rem 0' }}>
+                      {formatNumber(analytics?.totalPointsRedeemed || 0)}
+                    </p>
+                    <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', margin: 0 }}>
+                      Points Redeemed
+                    </p>
+                  </div>
+                  
+                  <div style={{
+                    background: 'rgba(59, 130, 246, 0.1)',
+                    border: '1px solid rgba(59, 130, 246, 0.2)',
+                    borderRadius: '12px',
+                    padding: '1.5rem',
+                    textAlign: 'center'
+                  }}>
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      background: 'rgba(59, 130, 246, 0.2)',
+                      borderRadius: '10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto 1rem auto'
+                    }}>
+                      <DollarSign size={20} color="#3b82f6" />
+                    </div>
+                    <p style={{ color: '#3b82f6', fontSize: '1.5rem', fontWeight: '700', margin: '0 0 0.25rem 0' }}>
+                      {formatCurrency(analytics?.totalRevenue || 0)}
+                    </p>
+                    <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', margin: 0 }}>
+                      Total Revenue
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
           {!analyticsLoading && activeTab === 'customers' && (
             <div>
-              <h3 style={{ color: 'white', marginBottom: '1.5rem' }}>Customer List</h3>
               <div style={{
-                color: 'white',
-                textAlign: 'center',
-                padding: '2rem'
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '1.5rem'
               }}>
-                <Users size={48} style={{ marginBottom: '1rem', opacity: 0.7 }} />
-                <p style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
-                  Customer management table will be implemented here
-                </p>
+                <h3 style={{ color: 'white', margin: 0 }}>Customer List ({customers.filter(customer => {
+                  if (!searchTerm) return true;
+                  const name = customer.firstName && customer.lastName 
+                    ? `${customer.firstName} ${customer.lastName}`
+                    : customer.name || customer.displayName || '';
+                  const phone = customer.phoneNumber || customer.phone || '';
+                  const outlet = customer.outletName || '';
+                  return name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         phone.includes(searchTerm) ||
+                         outlet.toLowerCase().includes(searchTerm.toLowerCase());
+                }).length})</h3>
+                
+                <div style={{
+                  position: 'relative',
+                  width: '300px'
+                }}>
+                  <div style={{
+                    position: 'absolute',
+                    left: '1rem',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'rgba(255, 255, 255, 0.5)',
+                    pointerEvents: 'none'
+                  }}>
+                    <Search size={16} />
+                  </div>
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search customers..."
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem 1rem 0.75rem 2.5rem',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '12px',
+                      color: 'white',
+                      fontSize: '0.875rem',
+                      outline: 'none',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onFocus={(e) => {
+                      e.currentTarget.style.borderColor = '#3b82f6';
+                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  />
+                </div>
               </div>
+              
+              {customers.length > 0 ? (
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '20px',
+                  overflow: 'hidden'
+                }}>
+                  {/* Table Header */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr 1fr 1fr',
+                    gap: '1rem',
+                    padding: '1.5rem 2rem',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}>
+                    <div style={{ color: 'rgba(255, 255, 255, 0.8)', fontWeight: '600', fontSize: '0.875rem' }}>
+                      Customer Name
+                    </div>
+                    <div style={{ color: 'rgba(255, 255, 255, 0.8)', fontWeight: '600', fontSize: '0.875rem' }}>
+                      Phone Number
+                    </div>
+                    <div style={{ color: 'rgba(255, 255, 255, 0.8)', fontWeight: '600', fontSize: '0.875rem' }}>
+                      Total Points
+                    </div>
+                    <div style={{ color: 'rgba(255, 255, 255, 0.8)', fontWeight: '600', fontSize: '0.875rem' }}>
+                      Home Outlet
+                    </div>
+                  </div>
+                  
+                  {/* Table Body */}
+                  <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                    {customers.filter(customer => {
+                      if (!searchTerm) return true;
+                      const name = customer.firstName && customer.lastName 
+                        ? `${customer.firstName} ${customer.lastName}`
+                        : customer.name || customer.displayName || '';
+                      const phone = customer.phoneNumber || customer.phone || '';
+                      const outlet = customer.outletName || '';
+                      return name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                             phone.includes(searchTerm) ||
+                             outlet.toLowerCase().includes(searchTerm.toLowerCase());
+                    }).map((customer, index) => (
+                      <div key={customer.id || index} style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr 1fr 1fr',
+                        gap: '1rem',
+                        padding: '1.5rem 2rem',
+                        borderBottom: index < customers.length - 1 ? '1px solid rgba(255, 255, 255, 0.05)' : 'none',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                      }}>
+                        <div style={{ color: 'white', fontWeight: '500' }}>
+                          {customer.firstName && customer.lastName 
+                            ? `${customer.firstName} ${customer.lastName}`
+                            : customer.name || customer.displayName || 'N/A'
+                          }
+                        </div>
+                        <div style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                          {customer.phoneNumber || customer.phone || 'N/A'}
+                        </div>
+                        <div style={{ color: '#22c55e', fontWeight: '600' }}>
+                          {formatNumber(customer.totalPoints || customer.points || 0)}
+                        </div>
+                        <div style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+                          {customer.outletName || 'N/A'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '20px',
+                  padding: '3rem',
+                  textAlign: 'center'
+                }}>
+                  <Users size={48} style={{ marginBottom: '1rem', opacity: 0.5, color: '#6b7280' }} />
+                  <h4 style={{ color: 'white', margin: '0 0 0.5rem 0' }}>No Customers Found</h4>
+                  <p style={{ color: 'rgba(255, 255, 255, 0.6)', margin: 0 }}>
+                    This user doesn't have any customers yet.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
           {!analyticsLoading && activeTab === 'outlets' && (
             <div>
-              <h3 style={{ color: 'white', marginBottom: '1.5rem' }}>Business Outlets</h3>
               <div style={{
-                color: 'white',
-                textAlign: 'center',
-                padding: '2rem'
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '1.5rem'
               }}>
-                <Building2 size={48} style={{ marginBottom: '1rem', opacity: 0.7 }} />
-                <p style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
-                  Outlets management interface will be implemented here
-                </p>
+                <h3 style={{ color: 'white', margin: 0 }}>Business Outlets ({outlets.length})</h3>
+                <button
+                  onClick={handleAddOutlet}
+                  style={{
+                    background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                    border: 'none',
+                    borderRadius: '12px',
+                    padding: '0.75rem 1.5rem',
+                    color: 'white',
+                    fontSize: '0.875rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 4px 12px rgba(34, 197, 94, 0.3)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 8px 20px rgba(34, 197, 94, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(34, 197, 94, 0.3)';
+                  }}
+                >
+                  <Plus size={16} />
+                  Add Outlet
+                </button>
               </div>
+              
+              {outlets.length > 0 ? (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                  gap: '1.5rem'
+                }}>
+                  {outlets.map((outlet, index) => (
+                    <div key={outlet.id || index} style={{
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      backdropFilter: 'blur(20px)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '20px',
+                      padding: '2rem',
+                      position: 'relative',
+                      transition: 'all 0.3s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-4px)';
+                      e.currentTarget.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.3)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}>
+                      {/* Outlet Header */}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '1rem',
+                        marginBottom: '1.5rem'
+                      }}>
+                        <div style={{
+                          width: '50px',
+                          height: '50px',
+                          background: 'rgba(34, 197, 94, 0.2)',
+                          borderRadius: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          border: '1px solid rgba(34, 197, 94, 0.3)'
+                        }}>
+                          <Building2 size={24} color="#22c55e" />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <h4 style={{ 
+                            color: 'white', 
+                            margin: '0 0 0.25rem 0',
+                            fontSize: '1.25rem',
+                            fontWeight: '700'
+                          }}>
+                            {outlet.displayName || outlet.name || 'Unnamed Outlet'}
+                          </h4>
+                          <p style={{ 
+                            color: 'rgba(255, 255, 255, 0.6)', 
+                            margin: 0,
+                            fontSize: '0.875rem'
+                          }}>
+                            Outlet ID: {outlet.id}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Customer Count */}
+                      <div style={{
+                        background: 'rgba(59, 130, 246, 0.1)',
+                        border: '1px solid rgba(59, 130, 246, 0.2)',
+                        borderRadius: '12px',
+                        padding: '1.5rem',
+                        textAlign: 'center',
+                        marginBottom: '1rem'
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.75rem',
+                          marginBottom: '0.5rem'
+                        }}>
+                          <Users size={20} color="#3b82f6" />
+                          <span style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '0.875rem' }}>
+                            Home Customers
+                          </span>
+                        </div>
+                        <p style={{ 
+                          color: '#3b82f6', 
+                          fontSize: '2rem', 
+                          fontWeight: '700', 
+                          margin: 0 
+                        }}>
+                          {outlet.customerCount || 0}
+                        </p>
+                      </div>
+
+                      {/* Outlet Details */}
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '1rem'
+                      }}>
+                        <div>
+                          <p style={{ 
+                            color: 'rgba(255, 255, 255, 0.6)', 
+                            fontSize: '0.75rem',
+                            margin: '0 0 0.25rem 0',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em'
+                          }}>
+                            Location
+                          </p>
+                          <p style={{ color: 'white', margin: 0, fontSize: '0.875rem' }}>
+                            {outlet.location || outlet.address || 'N/A'}
+                          </p>
+                        </div>
+                        <div>
+                          <p style={{ 
+                            color: 'rgba(255, 255, 255, 0.6)', 
+                            fontSize: '0.75rem',
+                            margin: '0 0 0.25rem 0',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em'
+                          }}>
+                            Status
+                          </p>
+                          <div style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            background: outlet.isActive !== false ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                            border: outlet.isActive !== false ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
+                            borderRadius: '6px',
+                            padding: '0.25rem 0.5rem'
+                          }}>
+                            <div style={{
+                              width: '6px',
+                              height: '6px',
+                              borderRadius: '50%',
+                              background: outlet.isActive !== false ? '#22c55e' : '#ef4444'
+                            }} />
+                            <span style={{ 
+                              color: outlet.isActive !== false ? '#22c55e' : '#ef4444',
+                              fontSize: '0.75rem',
+                              fontWeight: '500'
+                            }}>
+                              {outlet.isActive !== false ? 'Active' : 'Inactive'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '20px',
+                  padding: '3rem',
+                  textAlign: 'center'
+                }}>
+                  <Building2 size={48} style={{ marginBottom: '1rem', opacity: 0.5, color: '#6b7280' }} />
+                  <h4 style={{ color: 'white', margin: '0 0 0.5rem 0' }}>No Outlets Found</h4>
+                  <p style={{ color: 'rgba(255, 255, 255, 0.6)', margin: 0 }}>
+                    This user doesn't have any business outlets yet.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
           {!analyticsLoading && activeTab === 'analytics' && (
             <div>
               <h3 style={{ color: 'white', marginBottom: '1.5rem' }}>Advanced Analytics</h3>
+              
               <div style={{
-                color: 'white',
-                textAlign: 'center',
-                padding: '2rem'
+                background: 'rgba(255, 255, 255, 0.05)',
+                backdropFilter: 'blur(20px)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '20px',
+                padding: '3rem',
+                textAlign: 'center'
               }}>
-                <Activity size={48} style={{ marginBottom: '1rem', opacity: 0.7 }} />
-                <p style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
-                  Advanced analytics charts and reports will be implemented here
+                <Activity size={48} style={{ marginBottom: '1.5rem', opacity: 0.5, color: '#f59e0b' }} />
+                <h4 style={{ color: 'white', margin: '0 0 1rem 0' }}>Advanced Analytics Coming Soon</h4>
+                <p style={{ color: 'rgba(255, 255, 255, 0.7)', marginBottom: '2rem', lineHeight: '1.6' }}>
+                  This section will include detailed charts and reports such as:
                 </p>
+                
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                  gap: '1rem',
+                  marginBottom: '2rem'
+                }}>
+                  <div style={{
+                    background: 'rgba(59, 130, 246, 0.1)',
+                    border: '1px solid rgba(59, 130, 246, 0.2)',
+                    borderRadius: '12px',
+                    padding: '1.5rem'
+                  }}>
+                    <TrendingUp size={24} color="#3b82f6" style={{ marginBottom: '0.5rem' }} />
+                    <h5 style={{ color: 'white', margin: '0 0 0.5rem 0', fontSize: '1rem' }}>Revenue Trends</h5>
+                    <p style={{ color: 'rgba(255, 255, 255, 0.6)', margin: 0, fontSize: '0.875rem' }}>
+                      Monthly and yearly revenue analysis
+                    </p>
+                  </div>
+                  
+                  <div style={{
+                    background: 'rgba(34, 197, 94, 0.1)',
+                    border: '1px solid rgba(34, 197, 94, 0.2)',
+                    borderRadius: '12px',
+                    padding: '1.5rem'
+                  }}>
+                    <Users size={24} color="#22c55e" style={{ marginBottom: '0.5rem' }} />
+                    <h5 style={{ color: 'white', margin: '0 0 0.5rem 0', fontSize: '1rem' }}>Customer Behavior</h5>
+                    <p style={{ color: 'rgba(255, 255, 255, 0.6)', margin: 0, fontSize: '0.875rem' }}>
+                      Visit patterns and loyalty metrics
+                    </p>
+                  </div>
+                  
+                  <div style={{
+                    background: 'rgba(168, 85, 247, 0.1)',
+                    border: '1px solid rgba(168, 85, 247, 0.2)',
+                    borderRadius: '12px',
+                    padding: '1.5rem'
+                  }}>
+                    <Building2 size={24} color="#a855f7" style={{ marginBottom: '0.5rem' }} />
+                    <h5 style={{ color: 'white', margin: '0 0 0.5rem 0', fontSize: '1rem' }}>Outlet Performance</h5>
+                    <p style={{ color: 'rgba(255, 255, 255, 0.6)', margin: 0, fontSize: '0.875rem' }}>
+                      Comparative outlet analytics
+                    </p>
+                  </div>
+                </div>
+                
+                <div style={{
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  border: '1px solid rgba(245, 158, 11, 0.2)',
+                  borderRadius: '12px',
+                  padding: '1rem 1.5rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.75rem'
+                }}>
+                  <div style={{
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    background: '#f59e0b'
+                  }} />
+                  <span style={{ color: '#f59e0b', fontSize: '0.875rem', fontWeight: '500' }}>
+                    Alternatively, this tab could be removed to simplify the interface
+                  </span>
+                </div>
               </div>
             </div>
           )}
@@ -1359,7 +2199,459 @@ const UserDetailsPage: React.FC = () => {
 
         {renderDeleteModal()}
         {renderToast()}
+
+        {/* Add Outlet Modal */}
+        {showAddOutletModal && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}>
+            <div style={{
+              background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+              borderRadius: '20px',
+              padding: '2rem',
+              width: '90%',
+              maxWidth: '500px',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              boxShadow: '0 25px 50px rgba(0, 0, 0, 0.5)'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '2rem'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    background: 'rgba(34, 197, 94, 0.2)',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1px solid rgba(34, 197, 94, 0.3)'
+                  }}>
+                    <Building2 size={20} color="#22c55e" />
+                  </div>
+                  <h3 style={{ color: 'white', margin: 0, fontSize: '1.5rem' }}>Add New Outlet</h3>
+                </div>
+                <button
+                  onClick={() => setShowAddOutletModal(false)}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '0.5rem',
+                    color: 'rgba(255, 255, 255, 0.7)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+                    e.currentTarget.style.color = 'white';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                    e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)';
+                  }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{
+                  display: 'block',
+                  color: 'rgba(255, 255, 255, 0.8)',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  marginBottom: '0.5rem'
+                }}>
+                  Outlet Name *
+                </label>
+                <input
+                  type="text"
+                  value={outletFormData.name}
+                  onChange={(e) => setOutletFormData({ ...outletFormData, name: e.target.value })}
+                  placeholder="Enter outlet name"
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '12px',
+                    color: 'white',
+                    fontSize: '1rem',
+                    outline: 'none',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#22c55e';
+                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(34, 197, 94, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '2rem' }}>
+                <label style={{
+                  display: 'block',
+                  color: 'rgba(255, 255, 255, 0.8)',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  marginBottom: '0.5rem'
+                }}>
+                  Location (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={outletFormData.location}
+                  onChange={(e) => setOutletFormData({ ...outletFormData, location: e.target.value })}
+                  placeholder="Enter outlet location"
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '12px',
+                    color: 'white',
+                    fontSize: '1rem',
+                    outline: 'none',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#22c55e';
+                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(34, 197, 94, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                />
+              </div>
+
+              <div style={{
+                display: 'flex',
+                gap: '1rem',
+                justifyContent: 'flex-end'
+              }}>
+                <button
+                  onClick={() => setShowAddOutletModal(false)}
+                  disabled={addOutletLoading}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '12px',
+                    padding: '0.75rem 1.5rem',
+                    color: 'rgba(255, 255, 255, 0.8)',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    cursor: addOutletLoading ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s ease',
+                    opacity: addOutletLoading ? 0.5 : 1
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!addOutletLoading) {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+                      e.currentTarget.style.color = 'white';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!addOutletLoading) {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                      e.currentTarget.style.color = 'rgba(255, 255, 255, 0.8)';
+                    }
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveOutlet}
+                  disabled={addOutletLoading || !outletFormData.name.trim()}
+                  style={{
+                    background: addOutletLoading || !outletFormData.name.trim() 
+                      ? 'rgba(34, 197, 94, 0.3)' 
+                      : 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                    border: 'none',
+                    borderRadius: '12px',
+                    padding: '0.75rem 1.5rem',
+                    color: 'white',
+                    fontSize: '0.875rem',
+                    fontWeight: '600',
+                    cursor: addOutletLoading || !outletFormData.name.trim() ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    transition: 'all 0.2s ease',
+                    opacity: addOutletLoading || !outletFormData.name.trim() ? 0.5 : 1
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!addOutletLoading && outletFormData.name.trim()) {
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = '0 8px 20px rgba(34, 197, 94, 0.4)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!addOutletLoading && outletFormData.name.trim()) {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }
+                  }}
+                >
+                  {addOutletLoading ? (
+                    <>
+                      <div style={{
+                        width: '16px',
+                        height: '16px',
+                        border: '2px solid rgba(255, 255, 255, 0.3)',
+                        borderTop: '2px solid white',
+                        borderRadius: '50%',
+                        animation: 'spin 1s linear infinite'
+                      }} />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Building2 size={16} />
+                      Create Outlet
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Edit User Modal */}
+      {showEditModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          backdropFilter: 'blur(10px)'
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+            borderRadius: '20px',
+            padding: '2rem',
+            width: '90%',
+            maxWidth: '500px',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '2rem'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <Edit size={24} color="#3b82f6" />
+                <h3 style={{
+                  color: 'white',
+                  margin: 0,
+                  fontSize: '1.5rem',
+                  fontWeight: '600'
+                }}>
+                  Edit User
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowEditModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  cursor: 'pointer',
+                  padding: '0.5rem',
+                  borderRadius: '8px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                  e.currentTarget.style.color = 'white';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'none';
+                  e.currentTarget.style.color = 'rgba(255, 255, 255, 0.7)';
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{
+                display: 'block',
+                color: 'rgba(255, 255, 255, 0.8)',
+                fontSize: '0.875rem',
+                fontWeight: '500',
+                marginBottom: '0.5rem'
+              }}>
+                Display Name
+              </label>
+              <input
+                type="text"
+                value={editFormData.displayName}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, displayName: e.target.value }))}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem 1rem',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '12px',
+                  color: 'white',
+                  fontSize: '1rem',
+                  outline: 'none',
+                  transition: 'all 0.2s ease'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#3b82f6';
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                }}
+                placeholder="Enter display name"
+              />
+            </div>
+
+            <div style={{ marginBottom: '2rem' }}>
+              <label style={{
+                display: 'block',
+                color: 'rgba(255, 255, 255, 0.8)',
+                fontSize: '0.875rem',
+                fontWeight: '500',
+                marginBottom: '0.5rem'
+              }}>
+                Email Address
+              </label>
+              <input
+                type="email"
+                value={editFormData.email}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, email: e.target.value }))}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem 1rem',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '12px',
+                  color: 'white',
+                  fontSize: '1rem',
+                  outline: 'none',
+                  transition: 'all 0.2s ease'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#3b82f6';
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                }}
+                placeholder="Enter email address"
+              />
+            </div>
+
+            <div style={{
+              display: 'flex',
+              gap: '1rem',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={() => setShowEditModal(false)}
+                disabled={editLoading}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '12px',
+                  color: 'rgba(255, 255, 255, 0.8)',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  cursor: editLoading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  opacity: editLoading ? 0.6 : 1
+                }}
+                onMouseEnter={(e) => {
+                  if (!editLoading) {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!editLoading) {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                  }
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={editLoading || !editFormData.displayName.trim() || !editFormData.email.trim()}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: editLoading || !editFormData.displayName.trim() || !editFormData.email.trim() 
+                    ? 'rgba(59, 130, 246, 0.5)' 
+                    : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  color: 'white',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  cursor: editLoading || !editFormData.displayName.trim() || !editFormData.email.trim() 
+                    ? 'not-allowed' 
+                    : 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}
+                onMouseEnter={(e) => {
+                  if (!editLoading && editFormData.displayName.trim() && editFormData.email.trim()) {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 8px 25px rgba(59, 130, 246, 0.4)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!editLoading) {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }
+                }}
+              >
+                {editLoading && <Loader size={16} className="animate-spin" />}
+                {editLoading ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
