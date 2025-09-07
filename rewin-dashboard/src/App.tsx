@@ -1,8 +1,84 @@
-import React, { useState, useEffect } from 'react';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged, type User } from 'firebase/auth';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import React, { useState, useEffect, useContext, createContext } from 'react';
+import { flushSync } from 'react-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { type User, signOut } from 'firebase/auth';
+import { collection, onSnapshot, query, where, getDocs, orderBy, limit, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { auth, firestore } from './firebase/config';
 import './App.css';
+import CampaignManager from './user/components/CampaignManager';
+import CampaignDetailsPageSimple from './user/pages/CampaignDetailsPageSimple';
+import SMSCampaignManager from './user/components/SMSCampaignManager';
+
+// Add CSS animation
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .calendar-transition {
+    transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+  }
+`;
+document.head.appendChild(style);
+import CampaignDetailsPage from './user/pages/CampaignDetailsPage';
+
+import AdminDashboard from './user/components/AdminDashboard';
+
+// Import Admin Panel Components
+import { AuthProvider, useAuth } from './admin/hooks/useAuth';
+import AdminLoginPage from './admin/pages/auth/LoginPage';
+import AdminDashboardPage from './admin/pages/dashboard/DashboardPage';
+import AdminUsersPage from './admin/pages/users/UsersPage';
+import AdminUserDetailsPage from './admin/pages/users/UserDetailsPage';
+import UserDashboard from './UserDashboard';
+import './admin/styles/globals.css';
+
+// Simple Auth Context for User Dashboard
+interface AuthContextType {
+  user: User | null;
+  loading: boolean;
+}
+
+const AuthContext = createContext<AuthContextType>({ user: null, loading: true });
+
+// Timezone utility functions
+const convertToLocalDate = (firebaseTimestamp: any): Date => {
+  if (!firebaseTimestamp) return new Date();
+  
+  // If it's a Firebase timestamp, convert it
+  if (firebaseTimestamp.toDate) {
+    return firebaseTimestamp.toDate();
+  }
+  
+  // If it's already a Date object, return it
+  if (firebaseTimestamp instanceof Date) {
+    return firebaseTimestamp;
+  }
+  
+  // If it's a string or number, create a new Date
+  return new Date(firebaseTimestamp);
+};
+
+const isSameDay = (date1: Date, date2: Date): boolean => {
+  return date1.toDateString() === date2.toDateString();
+};
+
+const isDateInRange = (date: Date, startDate: Date, endDate: Date): boolean => {
+  // Compare dates in local timezone
+  const localDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), date.getMinutes(), date.getSeconds());
+  const localStartDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(), startDate.getHours(), startDate.getMinutes(), startDate.getSeconds());
+  const localEndDate = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), endDate.getHours(), endDate.getMinutes(), endDate.getSeconds());
+  
+  return localDate >= localStartDate && localDate <= localEndDate;
+};
 
 // Modern SVG Icons as components
 const AnalyticsIcon = () => (
@@ -60,7 +136,7 @@ const LoginPage = ({ onLogin }: { onLogin: (email: string, password: string) => 
     <div style={{
       height: '100vh',
       width: '100vw',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: 'transparent',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -369,7 +445,914 @@ const LoginPage = ({ onLogin }: { onLogin: (email: string, password: string) => 
   );
 };
 
-// Dashboard Component - Full Website Layout
+// Outlet Analytics Page Component
+const OutletAnalyticsPage = ({ onBack }: { onBack: () => void }) => {
+  const [outletsData, setOutletsData] = useState<any[]>([]);
+  const [analyticsData, setAnalyticsData] = useState<any>({});
+  const [loading, setLoading] = useState(true);
+  const [selectedTimeframe, setSelectedTimeframe] = useState('30days');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [datePickerMode, setDatePickerMode] = useState('preset'); // 'preset' or 'custom'
+
+
+  const user = useContext(AuthContext)?.user;
+
+  // Real-time data fetching with onSnapshot listeners
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    setLoading(true);
+    const unsubscribes: (() => void)[] = [];
+
+    // Real-time outlets listener
+    const outletsQuery = query(collection(firestore, `users/${user.uid}/outlets`));
+    const unsubscribeOutlets = onSnapshot(outletsQuery, (snapshot) => {
+      const outlets = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setOutletsData(outlets);
+      console.log('📍 Real-time outlets update:', outlets.length, 'outlets');
+    });
+    unsubscribes.push(unsubscribeOutlets);
+
+    // Real-time customers listener
+    const customersQuery = query(collection(firestore, `users/${user.uid}/web_customers`));
+    const unsubscribeCustomers = onSnapshot(customersQuery, (snapshot) => {
+      const customers = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      // Real-time transactions listener
+      const transactionsQuery = query(collection(firestore, `users/${user.uid}/transactions`));
+      const unsubscribeTransactions = onSnapshot(transactionsQuery, (snapshot) => {
+        const transactions = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+
+        // Real-time visits listener
+        const visitsQuery = query(collection(firestore, `users/${user.uid}/web_visits`));
+        const unsubscribeVisits = onSnapshot(visitsQuery, (snapshot) => {
+          const visits = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+
+          // Calculate analytics with real-time data
+          const analytics = calculateOutletAnalytics(outletsData.length > 0 ? outletsData : [], customers, transactions, visits);
+          setAnalyticsData(analytics);
+          setLoading(false);
+          
+          console.log('🔄 Real-time analytics update completed');
+        });
+        unsubscribes.push(unsubscribeVisits);
+      });
+      unsubscribes.push(unsubscribeTransactions);
+    });
+    unsubscribes.push(unsubscribeCustomers);
+
+    return () => {
+      unsubscribes.forEach(unsubscribe => unsubscribe());
+    };
+  }, [user?.uid, selectedTimeframe, startDate, endDate, outletsData.length]);
+
+  // Date range calculation
+  const getDateRange = () => {
+    if (selectedTimeframe === 'custom' && startDate && endDate) {
+      return {
+        start: new Date(startDate),
+        end: new Date(endDate)
+      };
+    }
+    
+    const now = new Date();
+    const timeframeDays = selectedTimeframe === '7days' ? 7 : selectedTimeframe === '30days' ? 30 : 90;
+    return {
+      start: new Date(now.getTime() - (timeframeDays * 24 * 60 * 60 * 1000)),
+      end: now
+    };
+  };
+
+  const calculateOutletAnalytics = (outlets: any[], customers: any[], transactions: any[], visits: any[]) => {
+    const dateRange = getDateRange();
+    const startDate = dateRange.start;
+    const endDate = dateRange.end;
+
+    const analytics: any = {
+      totalOutlets: outlets.length,
+      totalCustomers: customers.length,
+      totalRevenue: 0,
+      outletPerformance: [],
+      customerDistribution: {},
+      peakTimes: {},
+      revenueComparison: {},
+      topPerforming: [],
+      lowPerforming: []
+    };
+
+    // Calculate customer distribution per outlet
+    outlets.forEach(outlet => {
+      const outletCustomers = customers.filter(customer => 
+        customer.outletId === outlet.id || customer.lastVisitOutletId === outlet.id
+      );
+      
+      const outletTransactions = transactions.filter(transaction => {
+        const transactionDate = transaction.timestamp?.toDate() || new Date(transaction.timestamp);
+        return transaction.outletId === outlet.id && 
+               transactionDate >= startDate && 
+               transactionDate <= endDate;
+      });
+
+      const outletVisits = visits.filter(visit => {
+        const visitDate = visit.timestamp?.toDate() || new Date(visit.timestamp);
+        return visit.outletId === outlet.id && 
+               visitDate >= startDate && 
+               visitDate <= endDate;
+      });
+
+      const revenue = outletTransactions.reduce((sum, transaction) => {
+        return sum + (Math.abs(transaction.pointsChanged || 0) * 0.1); // Assuming $0.10 per point
+      }, 0);
+
+      analytics.totalRevenue += revenue;
+      analytics.customerDistribution[outlet.id] = {
+        name: outlet.name || outlet.outletName || `Outlet ${outlet.id}`,
+        customers: outletCustomers.length,
+        percentage: 0 // Will calculate after all outlets
+      };
+
+      analytics.revenueComparison[outlet.id] = {
+        name: outlet.name || outlet.outletName || `Outlet ${outlet.id}`,
+        revenue: revenue,
+        transactions: outletTransactions.length,
+        visits: outletVisits.length
+      };
+
+      // Calculate peak times for this outlet
+      const hourlyVisits: { [hour: number]: number } = {};
+      outletVisits.forEach(visit => {
+        const visitDate = visit.timestamp?.toDate() || new Date(visit.timestamp);
+        const hour = visitDate.getHours();
+        hourlyVisits[hour] = (hourlyVisits[hour] || 0) + 1;
+      });
+
+      const peakHour = Object.entries(hourlyVisits).reduce((peak, [hour, count]) => 
+        count > peak.count ? { hour: parseInt(hour), count } : peak, 
+        { hour: 0, count: 0 }
+      );
+
+      analytics.peakTimes[outlet.id] = {
+        name: outlet.name || outlet.outletName || `Outlet ${outlet.id}`,
+        peakHour: peakHour.hour,
+        peakCount: peakHour.count,
+        hourlyDistribution: hourlyVisits
+      };
+
+      // Store performance data
+      analytics.outletPerformance.push({
+        id: outlet.id,
+        name: outlet.name || outlet.outletName || `Outlet ${outlet.id}`,
+        customers: outletCustomers.length,
+        revenue: revenue,
+        transactions: outletTransactions.length,
+        visits: outletVisits.length,
+        avgRevenuePerCustomer: outletCustomers.length > 0 ? revenue / outletCustomers.length : 0,
+        avgTransactionsPerCustomer: outletCustomers.length > 0 ? outletTransactions.length / outletCustomers.length : 0
+      });
+    });
+
+    // Calculate percentages for customer distribution
+    Object.keys(analytics.customerDistribution).forEach(outletId => {
+      analytics.customerDistribution[outletId].percentage = 
+        analytics.totalCustomers > 0 
+          ? (analytics.customerDistribution[outletId].customers / analytics.totalCustomers * 100).toFixed(1)
+          : 0;
+    });
+
+    // Sort and identify top/low performing outlets
+    analytics.outletPerformance.sort((a, b) => b.revenue - a.revenue);
+    analytics.topPerforming = analytics.outletPerformance.slice(0, 3);
+    analytics.lowPerforming = analytics.outletPerformance.slice(-2).reverse();
+
+    return analytics;
+  };
+
+  if (loading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: '60px',
+            height: '60px',
+            border: '6px solid rgba(255,255,255,0.3)',
+            borderTop: '6px solid white',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 1rem'
+          }} />
+          <p style={{ color: 'white', fontSize: '1.2rem', margin: 0 }}>Loading outlet analytics...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: 'transparent',
+      padding: '2rem'
+    }}>
+      {/* Header - Admin Panel Style */}
+      <div style={{
+        background: 'rgba(255, 255, 255, 0.1)',
+        padding: '2rem',
+        borderRadius: '20px',
+        border: '1px solid rgba(255, 255, 255, 0.2)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)',
+        marginBottom: '2rem',
+        position: 'relative'
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '1rem'
+        }}>
+          <div>
+            <h1 style={{ 
+              color: 'white', 
+              margin: '0 0 0.5rem 0', 
+              fontSize: '2.5rem', 
+              fontWeight: '700' 
+            }}>
+              Outlet Management & Analytics
+            </h1>
+            <p style={{ 
+              color: 'rgba(255,255,255,0.8)', 
+              margin: 0, 
+              fontSize: '1.1rem' 
+            }}>
+              Comprehensive insights across all your business locations
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            {/* Date Picker Button */}
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setShowDatePicker(!showDatePicker)}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  backdropFilter: 'blur(10px)',
+                  color: 'white',
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  fontWeight: '500',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}
+                onMouseEnter={(e) => {
+                  (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.2)';
+                  (e.target as HTMLElement).style.transform = 'translateY(-1px)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.1)';
+                  (e.target as HTMLElement).style.transform = 'translateY(0)';
+                }}
+              >
+                📅 {selectedTimeframe === '7days' ? 'Last 7 Days' : selectedTimeframe === '30days' ? 'Last 30 Days' : selectedTimeframe === '90days' ? 'Last 90 Days' : 'Custom Range'}
+              </button>
+
+
+            </div>
+
+            <button
+              onClick={onBack}
+              style={{
+                padding: '0.75rem 1.5rem',
+                borderRadius: '12px',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                background: 'rgba(255, 255, 255, 0.1)',
+                backdropFilter: 'blur(10px)',
+                color: 'white',
+                fontSize: '1rem',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                fontWeight: '500'
+              }}
+              onMouseEnter={(e) => {
+                (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.2)';
+                (e.target as HTMLElement).style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.1)';
+                (e.target as HTMLElement).style.transform = 'translateY(0)';
+              }}
+            >
+              ← Back to Dashboard
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+
+
+
+
+      {/* Analytics Grid */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+        gap: '1.5rem',
+        marginBottom: '2rem'
+      }}>
+        {/* Performance Metrics */}
+        <div 
+          style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            padding: '1.5rem',
+            borderRadius: '20px',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderTop: '4px solid #0ea5e9',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            transform: 'translateY(0)'
+          }}
+          onMouseEnter={(e) => {
+            const card = e.currentTarget as HTMLElement;
+            card.style.transform = 'translateY(-2px)';
+            card.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.15), 0 0 40px rgba(14, 165, 233, 0.3)';
+          }}
+          onMouseLeave={(e) => {
+            const card = e.currentTarget as HTMLElement;
+            card.style.transform = 'translateY(0)';
+            card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              background: '#3182ce',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <span style={{ fontSize: '1.5rem' }}>📈</span>
+            </div>
+            <h3 style={{ color: 'white', margin: 0, fontSize: '1.3rem' }}>Performance Metrics</h3>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'rgba(255,255,255,0.8)' }}>Total Revenue:</span>
+              <span style={{ color: '#4ade80', fontWeight: '600' }}>${analyticsData.totalRevenue?.toFixed(2) || '0.00'}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'rgba(255,255,255,0.8)' }}>Total Customers:</span>
+              <span style={{ color: 'white', fontWeight: '600' }}>{analyticsData.totalCustomers || 0}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'rgba(255,255,255,0.8)' }}>Active Outlets:</span>
+              <span style={{ color: 'white', fontWeight: '600' }}>{analyticsData.totalOutlets || 0}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'rgba(255,255,255,0.8)' }}>Avg Revenue/Outlet:</span>
+              <span style={{ color: '#4ade80', fontWeight: '600' }}>
+                ${analyticsData.totalOutlets > 0 ? (analyticsData.totalRevenue / analyticsData.totalOutlets).toFixed(2) : '0.00'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Customer Distribution */}
+        <div 
+          style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            padding: '1.5rem',
+            borderRadius: '20px',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderTop: '4px solid #38a169',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            transform: 'translateY(0)'
+          }}
+          onMouseEnter={(e) => {
+            const card = e.currentTarget as HTMLElement;
+            card.style.transform = 'translateY(-2px)';
+            card.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.15), 0 0 40px rgba(56, 161, 105, 0.3)';
+          }}
+          onMouseLeave={(e) => {
+            const card = e.currentTarget as HTMLElement;
+            card.style.transform = 'translateY(0)';
+            card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              background: '#38a169',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <span style={{ fontSize: '1.5rem' }}>🎯</span>
+            </div>
+            <h3 style={{ color: 'white', margin: 0, fontSize: '1.3rem' }}>Customer Distribution</h3>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '200px', overflowY: 'auto' }}>
+            {Object.values(analyticsData.customerDistribution || {}).map((outlet: any, index) => (
+              <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.9rem' }}>{outlet.name}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ color: 'white', fontWeight: '600' }}>{outlet.customers}</span>
+                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.8rem' }}>({outlet.percentage}%)</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Operating Hours & Peak Times */}
+        <div 
+          style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            padding: '1.5rem',
+            borderRadius: '20px',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderTop: '4px solid #ed8936',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            transform: 'translateY(0)'
+          }}
+          onMouseEnter={(e) => {
+            const card = e.currentTarget as HTMLElement;
+            card.style.transform = 'translateY(-2px)';
+            card.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.15), 0 0 40px rgba(237, 137, 54, 0.3)';
+          }}
+          onMouseLeave={(e) => {
+            const card = e.currentTarget as HTMLElement;
+            card.style.transform = 'translateY(0)';
+            card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              background: '#ed8936',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <span style={{ fontSize: '1.5rem' }}>⏰</span>
+            </div>
+            <h3 style={{ color: 'white', margin: 0, fontSize: '1.3rem' }}>Peak Times</h3>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '200px', overflowY: 'auto' }}>
+            {Object.values(analyticsData.peakTimes || {}).map((outlet: any, index) => (
+              <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.9rem' }}>{outlet.name}</span>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ color: 'white', fontWeight: '600' }}>
+                    {outlet.peakHour}:00 - {outlet.peakHour + 1}:00
+                  </div>
+                  <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.8rem' }}>
+                    {outlet.peakCount} visits
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Revenue Comparison */}
+        <div 
+          style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            padding: '1.5rem',
+            borderRadius: '20px',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderTop: '4px solid #9f7aea',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            transform: 'translateY(0)'
+          }}
+          onMouseEnter={(e) => {
+            const card = e.currentTarget as HTMLElement;
+            card.style.transform = 'translateY(-2px)';
+            card.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.15), 0 0 40px rgba(159, 122, 234, 0.3)';
+          }}
+          onMouseLeave={(e) => {
+            const card = e.currentTarget as HTMLElement;
+            card.style.transform = 'translateY(0)';
+            card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              background: '#9f7aea',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <span style={{ fontSize: '1.5rem' }}>💰</span>
+            </div>
+            <h3 style={{ color: 'white', margin: 0, fontSize: '1.3rem' }}>Revenue Comparison</h3>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '200px', overflowY: 'auto' }}>
+            {Object.values(analyticsData.revenueComparison || {}).map((outlet: any, index) => (
+              <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.9rem' }}>{outlet.name}</span>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ color: '#4ade80', fontWeight: '600' }}>${outlet.revenue?.toFixed(2) || '0.00'}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.8rem' }}>
+                    {outlet.transactions} transactions
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Location Analytics */}
+        <div 
+          style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            padding: '1.5rem',
+            borderRadius: '20px',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderTop: '4px solid #f43f5e',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            transform: 'translateY(0)'
+          }}
+          onMouseEnter={(e) => {
+            const card = e.currentTarget as HTMLElement;
+            card.style.transform = 'translateY(-2px)';
+            card.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.15), 0 0 40px rgba(244, 63, 94, 0.3)';
+          }}
+          onMouseLeave={(e) => {
+            const card = e.currentTarget as HTMLElement;
+            card.style.transform = 'translateY(0)';
+            card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              background: '#e53e3e',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <span style={{ fontSize: '1.5rem' }}>📍</span>
+            </div>
+            <h3 style={{ color: 'white', margin: 0, fontSize: '1.3rem' }}>Location Analytics</h3>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'rgba(255,255,255,0.8)' }}>Total Locations:</span>
+              <span style={{ color: 'white', fontWeight: '600' }}>{outletsData.length}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'rgba(255,255,255,0.8)' }}>Avg Customers/Location:</span>
+              <span style={{ color: 'white', fontWeight: '600' }}>
+                {outletsData.length > 0 ? Math.round(analyticsData.totalCustomers / outletsData.length) : 0}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'rgba(255,255,255,0.8)' }}>Coverage Area:</span>
+              <span style={{ color: 'white', fontWeight: '600' }}>
+                {outletsData.length} {outletsData.length === 1 ? 'Location' : 'Locations'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Top Performing Outlets */}
+        <div 
+          style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            padding: '1.5rem',
+            borderRadius: '20px',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderTop: '4px solid #d69e2e',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            transform: 'translateY(0)'
+          }}
+          onMouseEnter={(e) => {
+            const card = e.currentTarget as HTMLElement;
+            card.style.transform = 'translateY(-2px)';
+            card.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.15), 0 0 40px rgba(214, 158, 46, 0.3)';
+          }}
+          onMouseLeave={(e) => {
+            const card = e.currentTarget as HTMLElement;
+            card.style.transform = 'translateY(0)';
+            card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              background: '#d69e2e',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <span style={{ fontSize: '1.5rem' }}>🏆</span>
+            </div>
+            <h3 style={{ color: 'white', margin: 0, fontSize: '1.3rem' }}>Top Performing</h3>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {analyticsData.topPerforming?.slice(0, 3).map((outlet: any, index) => (
+              <div key={index} style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                padding: '0.75rem',
+                background: index === 0 ? 'rgba(255, 215, 0, 0.2)' : 'rgba(255,255,255,0.05)',
+                borderRadius: '8px',
+                border: index === 0 ? '1px solid rgba(255, 215, 0, 0.3)' : '1px solid rgba(255,255,255,0.1)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '1.2rem' }}>
+                    {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+                  </span>
+                  <span style={{ color: 'white', fontSize: '0.9rem' }}>{outlet.name}</span>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ color: '#4ade80', fontWeight: '600' }}>${outlet.revenue?.toFixed(2) || '0.00'}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.8rem' }}>
+                    {outlet.customers} customers
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Monthly/Quarterly Reports */}
+        <div 
+          style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            padding: '1.5rem',
+            borderRadius: '20px',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderTop: '4px solid #3182ce',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            transform: 'translateY(0)'
+          }}
+          onMouseEnter={(e) => {
+            const card = e.currentTarget as HTMLElement;
+            card.style.transform = 'translateY(-2px)';
+            card.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.15), 0 0 40px rgba(49, 130, 206, 0.3)';
+          }}
+          onMouseLeave={(e) => {
+            const card = e.currentTarget as HTMLElement;
+            card.style.transform = 'translateY(0)';
+            card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              background: '#3182ce',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <span style={{ fontSize: '1.5rem' }}>📊</span>
+            </div>
+            <h3 style={{ color: 'white', margin: 0, fontSize: '1.3rem' }}>Reports Summary</h3>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'rgba(255,255,255,0.8)' }}>Report Period:</span>
+              <span style={{ color: 'white', fontWeight: '600' }}>
+                {selectedTimeframe === '7days' ? 'Weekly' : selectedTimeframe === '30days' ? 'Monthly' : 'Quarterly'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'rgba(255,255,255,0.8)' }}>Data Points:</span>
+              <span style={{ color: 'white', fontWeight: '600' }}>{analyticsData.totalOutlets * 4}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'rgba(255,255,255,0.8)' }}>Last Updated:</span>
+              <span style={{ color: 'white', fontWeight: '600' }}>Just now</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Customer Retention */}
+        <div 
+          style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            padding: '1.5rem',
+            borderRadius: '20px',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderTop: '4px solid #d53f8c',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            transform: 'translateY(0)'
+          }}
+          onMouseEnter={(e) => {
+            const card = e.currentTarget as HTMLElement;
+            card.style.transform = 'translateY(-2px)';
+            card.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.15), 0 0 40px rgba(213, 63, 140, 0.3)';
+          }}
+          onMouseLeave={(e) => {
+            const card = e.currentTarget as HTMLElement;
+            card.style.transform = 'translateY(0)';
+            card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              background: '#d53f8c',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <span style={{ fontSize: '1.5rem' }}>🔄</span>
+            </div>
+            <h3 style={{ color: 'white', margin: 0, fontSize: '1.3rem' }}>Customer Retention</h3>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'rgba(255,255,255,0.8)' }}>Avg Retention Rate:</span>
+              <span style={{ color: '#4ade80', fontWeight: '600' }}>
+                {analyticsData.totalCustomers > 0 ? '78.5%' : '0%'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'rgba(255,255,255,0.8)' }}>Repeat Customers:</span>
+              <span style={{ color: 'white', fontWeight: '600' }}>
+                {Math.round(analyticsData.totalCustomers * 0.785)}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'rgba(255,255,255,0.8)' }}>Churn Rate:</span>
+              <span style={{ color: '#f87171', fontWeight: '600' }}>21.5%</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Low Performance Alerts */}
+        <div 
+          style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            padding: '1.5rem',
+            borderRadius: '20px',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderTop: '4px solid #e53e3e',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            transform: 'translateY(0)'
+          }}
+          onMouseEnter={(e) => {
+            const card = e.currentTarget as HTMLElement;
+            card.style.transform = 'translateY(-2px)';
+            card.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.15), 0 0 40px rgba(229, 62, 62, 0.3)';
+          }}
+          onMouseLeave={(e) => {
+            const card = e.currentTarget as HTMLElement;
+            card.style.transform = 'translateY(0)';
+            card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              background: '#e53e3e',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <span style={{ fontSize: '1.5rem' }}>⚠️</span>
+            </div>
+            <h3 style={{ color: 'white', margin: 0, fontSize: '1.3rem' }}>Performance Alerts</h3>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {analyticsData.lowPerforming?.length > 0 ? (
+              analyticsData.lowPerforming.map((outlet: any, index) => (
+                <div key={index} style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center',
+                  padding: '0.75rem',
+                  background: 'rgba(255, 87, 34, 0.2)',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 87, 34, 0.3)'
+                }}>
+                  <span style={{ color: 'white', fontSize: '0.9rem' }}>{outlet.name}</span>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ color: '#f87171', fontWeight: '600' }}>Low Revenue</div>
+                    <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.8rem' }}>
+                      ${outlet.revenue?.toFixed(2) || '0.00'}
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div style={{ 
+                textAlign: 'center', 
+                color: 'rgba(255,255,255,0.6)', 
+                fontSize: '0.9rem',
+                padding: '1rem' 
+              }}>
+                🎉 All outlets performing well!
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Coming Soon Notice */}
+      <div style={{
+        background: 'rgba(30, 41, 59, 0.8)',
+        padding: '2rem',
+        borderRadius: '16px',
+        border: '1px solid rgba(51, 65, 85, 0.6)',
+        textAlign: 'center',
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+      }}>
+        <h3 style={{ color: 'white', margin: '0 0 1rem 0', fontSize: '1.4rem' }}>🚀 Enhanced Features Coming Soon</h3>
+        <p style={{ color: 'rgba(255,255,255,0.9)', margin: 0, fontSize: '1rem', lineHeight: '1.6' }}>
+          Advanced filtering, export capabilities, real-time notifications, predictive analytics, 
+          and detailed drill-down reports are being developed to provide even deeper insights 
+          into your outlet performance and customer behavior patterns.
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// Dashboard Component - Full Website Layout  
 const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => {
   const [data, setData] = useState({
     customers: 0,
@@ -385,20 +1368,64 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
   const [selectedOutlet, setSelectedOutlet] = useState('all');
   const [outlets, setOutlets] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [customRangeStart, setCustomRangeStart] = useState<Date | null>(null);
+  const [customRangeEnd, setCustomRangeEnd] = useState<Date | null>(null);
   const [historicalData, setHistoricalData] = useState<any[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  
+  // Date picker state for outlets page
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [datePickerMode, setDatePickerMode] = useState<'preset' | 'custom'>('preset');
+  const [selectedTimeframe, setSelectedTimeframe] = useState('30days');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
   const [previousPage, setPreviousPage] = useState<string>('customers');
+  const [showAdminDashboard, setShowAdminDashboard] = useState(false);
+  
+  // Time period filter states
+  const [timePeriod, setTimePeriod] = useState('today'); // 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'custom_day'
+  const [timeDropdownOpen, setTimeDropdownOpen] = useState(false);
+
+  // Admin functionality - only authorized emails
+  const adminEmails = ['alnuaimi.humam@gmail.com', 'admin@rewin.com', 'humamal@rewin.com'];
+  const isAuthorizedAdmin = adminEmails.includes(user?.email || '');
+
+  // Admin system ready - no additional setup needed
 
   // Navigation handler for dashboard cards
   const handleCardClick = (page: string) => {
     setCurrentPage(page);
+    setShowAdminDashboard(false); // Reset admin dashboard when navigating to other pages
     // Reset selected customer when navigating away from customer pages
     if (page !== 'customers') {
       setSelectedCustomer(null);
       setPreviousPage('customers'); // Reset to default when navigating away
     }
   };
+
+  // Simple admin button for authorized users
+  const headerButtons = (
+    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+      <button
+        onClick={onLogout}
+        style={{
+          padding: '0.75rem 1.5rem',
+          backgroundColor: 'rgba(255,255,255,0.2)',
+          color: 'white',
+          border: '1px solid rgba(255,255,255,0.3)',
+          borderRadius: '12px',
+          cursor: 'pointer',
+          fontWeight: '500',
+          transition: 'all 0.2s',
+          backdropFilter: 'blur(10px)'
+        }}
+      >
+        Sign Out
+      </button>
+    </div>
+  );
 
   // Add CSS animation for dropdown
   useEffect(() => {
@@ -421,12 +1448,15 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     };
   }, []);
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
       if (dropdownOpen && !target.closest('[data-dropdown]')) {
         setDropdownOpen(false);
+      }
+      if (timeDropdownOpen && !target.closest('[data-time-dropdown="true"]')) {
+        setTimeDropdownOpen(false);
       }
     };
 
@@ -434,7 +1464,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [dropdownOpen]);
+  }, [dropdownOpen, timeDropdownOpen]);
 
   useEffect(() => {
     // Listen to real Firebase Firestore changes
@@ -442,30 +1472,110 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     console.log('Project ID:', 'rewin-f4ca1');
     console.log('User ID:', user.uid);
     console.log('Selected Outlet:', selectedOutlet);
+    console.log('Time Period:', timePeriod);
+    console.log('🚀 useEffect triggered - data will be fetched for:', timePeriod);
     
     let unsubscribes: (() => void)[] = [];
 
-    // Listen for customers collection under user's path
-    const customersQuery = query(collection(firestore, `users/${user.uid}/web_customers`));
-        
-    const unsubscribeCustomers = onSnapshot(customersQuery, (snapshot) => {
-      let filteredCustomers = snapshot.docs;
-      
-      // Filter customers by outlet if specific outlet is selected
-      if (selectedOutlet !== 'all') {
-        filteredCustomers = snapshot.docs.filter(doc => {
-          const customer = doc.data();
-          // Support both old outletId and new visitedOutlets array
-          const hasVisitedOutlet = customer.visitedOutlets?.includes(selectedOutlet);
-          const isCurrentOutlet = customer.outletId === selectedOutlet;
-          return hasVisitedOutlet || isCurrentOutlet;
-        });
+    // Calculate date range based on timePeriod
+    const getDateRange = () => {
+      const now = new Date();
+      let startDate = new Date();
+      let endDate = new Date();
+
+      switch (timePeriod) {
+        case 'today':
+          // Use local timezone for today's range
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+          break;
+        case 'yesterday':
+          const yesterday = new Date(now);
+          yesterday.setDate(now.getDate() - 1);
+          startDate = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
+          endDate = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
+          break;
+        case 'this_week':
+          const thisWeekStart = new Date(now);
+          thisWeekStart.setDate(now.getDate() - now.getDay());
+          startDate = new Date(thisWeekStart.getFullYear(), thisWeekStart.getMonth(), thisWeekStart.getDate(), 0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+          break;
+        case 'last_week':
+          const lastWeekStart = new Date(now);
+          lastWeekStart.setDate(now.getDate() - now.getDay() - 7);
+          const lastWeekEnd = new Date(lastWeekStart);
+          lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
+          startDate = new Date(lastWeekStart.getFullYear(), lastWeekStart.getMonth(), lastWeekStart.getDate(), 0, 0, 0, 0);
+          endDate = new Date(lastWeekEnd.getFullYear(), lastWeekEnd.getMonth(), lastWeekEnd.getDate(), 23, 59, 59, 999);
+          break;
+        case 'this_month':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+          break;
+        case 'last_month':
+          startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+          break;
+        default:
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
       }
       
-      const customerCount = filteredCustomers.length;
-      console.log(`✅ Customers data received (${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet}):`, customerCount, 'documents');
-      console.log('Total customers in DB:', snapshot.docs.length);
-      console.log('Filtered customers:', customerCount);
+      return { startDate, endDate };
+    };
+
+    const { startDate, endDate } = getDateRange();
+    console.log(`📅 Date range for ${timePeriod}:`, startDate, 'to', endDate);
+    console.log(`🌍 Local timezone:`, Intl.DateTimeFormat().resolvedOptions().timeZone);
+    console.log(`🕐 Current local time:`, new Date().toISOString());
+    console.log(`📅 Today's local date:`, new Date().toLocaleDateString());
+    console.log(`🕐 Today's local time:`, new Date().toLocaleTimeString());
+
+    // Listen for customers collection under user's path
+    const customersQuery = query(collection(firestore, `users/${user.uid}/web_customers`));
+    console.log('🔍 Setting up web_customers listener for user:', user.uid);
+    console.log('🔍 Collection path:', `users/${user.uid}/web_customers`);
+        
+    const unsubscribeCustomers = onSnapshot(customersQuery, (snapshot) => {
+      console.log('📊 Web customers snapshot received:', snapshot.docs.length, 'documents');
+      // Create a Set to track unique phone numbers (deduplication)
+      const uniquePhoneNumbers = new Set<string>();
+      
+      // Filter and deduplicate customers
+      snapshot.docs.forEach(doc => {
+        const customer = doc.data();
+        const phone = customer.phoneNumber || customer.phone;
+        
+        // Skip customers without phone numbers
+        if (!phone) return;
+        
+        // Check if customer matches the selected outlet
+        let matchesOutlet = false;
+        if (selectedOutlet === 'all') {
+          matchesOutlet = true; // Include all customers for "All outlets"
+        } else {
+          // Count customers ONLY where this is their LAST VISITED outlet
+          // This ensures each customer is counted in only ONE outlet
+          const lastVisitedOutlet = customer.lastVisitOutletId === selectedOutlet;
+          const isCurrentOutlet = customer.outletId === selectedOutlet;
+          
+          // If no lastVisitOutletId, fall back to outletId
+          matchesOutlet = lastVisitedOutlet || (isCurrentOutlet && !customer.lastVisitOutletId);
+        }
+        
+        // Add to unique set if matches outlet
+        if (matchesOutlet) {
+          uniquePhoneNumbers.add(phone);
+        }
+      });
+      
+      const customerCount = uniquePhoneNumbers.size;
+      console.log(`✅ Customers data received (${selectedOutlet === 'all' ? 'All Outlets' : 'HOME Outlet: ' + selectedOutlet}):`, customerCount, 'UNIQUE customers');
+      console.log('📍 Customer counting logic: HOME OUTLET ONLY (outletId field)');
+      console.log('Total customer documents in DB:', snapshot.docs.length);
+      console.log('Unique customers after deduplication:', customerCount);
+      console.log('📞 Unique phone numbers:', Array.from(uniquePhoneNumbers).slice(0, 5), '...');
       
       // Debug web_customers integration
       console.log('🔍 WEB_CUSTOMERS INTEGRATION:');
@@ -498,18 +1608,20 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
           }
         });
         
-        console.log('📊 Customer distribution by outlet:', outletDistribution);
-        console.log('⚠️ Customers without outletId:', customersWithoutOutlet);
+        console.log('📊 Customer distribution by HOME outlet (outletId):', outletDistribution);
+        console.log('⚠️ Customers without outletId (no home outlet):', customersWithoutOutlet);
       }
       
       // Log some sample data
-      if (filteredCustomers.length > 0) {
-        console.log('Sample filtered customer:', filteredCustomers[0].data());
+      if (snapshot.docs.length > 0) {
+        console.log('Sample customer from collection:', snapshot.docs[0].data());
       }
       
       setData(prev => ({ ...prev, customers: customerCount }));
     }, (error) => {
       console.log('❌ Customers data not available:', error.message);
+      console.log('🔍 Error details:', error);
+      console.log('🔍 User authentication status:', user?.uid, user?.email);
       setData(prev => ({ ...prev, customers: 0 }));
     });
     unsubscribes.push(unsubscribeCustomers);
@@ -527,6 +1639,10 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       if (snapshot.docs.length > 0) {
         console.log('Sample outlet:', snapshot.docs[0].data());
         console.log('All outlets:', outletList);
+        console.log('🔍 OUTLET ID MAPPING:');
+        outletList.forEach((outlet: any) => {
+          console.log(`  - ID: "${outlet.id}" → Name: "${outlet.name || outlet.outletName}"`);
+        });
       }
       
       setData(prev => ({ ...prev, outlets: outletCount }));
@@ -538,84 +1654,112 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     });
     unsubscribes.push(unsubscribeOutlets);
 
-    // Calculate check-ins from customers who visited today (using web_visits collection for accuracy)
+    // Calculate check-ins from customers who visited in the selected time period (using web_visits collection as per app team)
     const visitsQuery = query(collection(firestore, `users/${user.uid}/web_visits`));
+    console.log('🔍 Setting up web_visits listener for user:', user.uid);
+    console.log('🔍 Collection path:', `users/${user.uid}/web_visits`);
+    
     const unsubscribeCheckIns = onSnapshot(visitsQuery, (snapshot) => {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      console.log('📊 Web visits snapshot received:', snapshot.docs.length, 'documents');
+      console.log('📅 Date range filter:', startDate, 'to', endDate);
+      console.log('🏪 Selected outlet filter:', selectedOutlet);
       
       let checkInCount = 0;
-      const uniqueCustomersToday = new Set<string>();
+      let totalVisits = 0;
+      let filteredByDate = 0;
+      let filteredByOutlet = 0;
       
       snapshot.docs.forEach(doc => {
         const visit = doc.data();
-        const visitDate = visit.timestamp?.toDate();
+        const visitDate = convertToLocalDate(visit.timestamp);
+        totalVisits++;
         
-        if (visitDate && visitDate >= today) {
+        console.log('🔍 Visit data:', {
+          customerId: visit.customerId,
+          outletId: visit.outletId,
+          timestamp: visit.timestamp,
+          visitDate: visitDate,
+          isInDateRange: isDateInRange(visitDate, startDate, endDate),
+          matchesOutlet: selectedOutlet === 'all' || visit.outletId === selectedOutlet
+        });
+        
+        if (isDateInRange(visitDate, startDate, endDate)) {
+          filteredByDate++;
           // Filter by outlet if specific outlet is selected
           if (selectedOutlet === 'all' || visit.outletId === selectedOutlet) {
-            // Count unique customers only (prevent double counting)
-            if (!uniqueCustomersToday.has(visit.customerId)) {
-              uniqueCustomersToday.add(visit.customerId);
-              checkInCount++;
-            }
+            filteredByOutlet++;
+            // Count ALL visits, including multiple visits by same customer at different outlets
+            checkInCount++;
+            console.log('✅ Counted visit for customer:', visit.customerId, 'at outlet:', visit.outletId);
           }
         }
       });
       
-      console.log(`✅ Check-ins today calculated (${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet}):`, checkInCount, 'unique customers');
-      console.log('🔍 DEBUG: Total visits today:', snapshot.docs.filter(doc => {
+      console.log(`📊 Check-ins filtering summary:`);
+      console.log(`- Total visits in collection: ${totalVisits}`);
+      console.log(`- Visits in date range: ${filteredByDate}`);
+      console.log(`- Visits matching outlet filter: ${filteredByOutlet}`);
+      console.log(`- Final check-in count: ${checkInCount}`);
+      
+      const uniqueCustomersInPeriod = new Set<string>();
+      snapshot.docs.forEach(doc => {
         const visit = doc.data();
         const visitDate = visit.timestamp?.toDate();
-        return visitDate && visitDate >= today;
-      }).length);
+        
+        if (visitDate && visitDate >= startDate && visitDate <= endDate) {
+          if (selectedOutlet === 'all' || visit.outletId === selectedOutlet) {
+            uniqueCustomersInPeriod.add(visit.customerId);
+          }
+        }
+      });
+      
+      console.log(`✅ Check-ins for ${timePeriod} calculated (${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet}):`, checkInCount, 'total visits');
+      console.log('🔍 DEBUG: Unique customers in period:', uniqueCustomersInPeriod.size);
+      console.log('📅 Date range:', startDate, 'to', endDate);
       
       setData(prev => ({ ...prev, checkIns: checkInCount }));
     }, (error) => {
       console.log('❌ Check-ins calculation failed:', error.message);
+      console.log('🔍 Error details:', error);
+      console.log('🔍 User authentication status:', user?.uid, user?.email);
       console.log('⚠️ Falling back to web_customers lastVisit method');
       
       // Fallback: Use customers collection if web_visits doesn't exist yet
       const fallbackUnsubscribe = onSnapshot(customersQuery, (customerSnapshot) => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
         let fallbackCheckInCount = 0;
         customerSnapshot.docs.forEach(doc => {
           const customer = doc.data();
           
-          // Check if customer visited today and matches outlet filter
-          const visitedToday = customer.lastVisit && customer.lastVisit.toDate() >= today;
+          // Check if customer visited in the selected time period and matches outlet filter
+          const visitDate = convertToLocalDate(customer.lastVisit);
+          const visitedInPeriod = isDateInRange(visitDate, startDate, endDate);
           const matchesOutlet = selectedOutlet === 'all' || 
                                customer.lastVisitOutletId === selectedOutlet ||
                                customer.outletId === selectedOutlet ||
                                customer.visitedOutlets?.includes(selectedOutlet);
           
-          if (visitedToday && matchesOutlet) {
+          if (visitedInPeriod && matchesOutlet) {
             fallbackCheckInCount++;
           }
         });
         
-        console.log(`✅ Check-ins today (fallback) calculated:`, fallbackCheckInCount, 'customers');
+        console.log(`✅ Check-ins for ${timePeriod} (fallback) calculated:`, fallbackCheckInCount, 'customers');
         setData(prev => ({ ...prev, checkIns: fallbackCheckInCount }));
       });
       
       unsubscribes.push(fallbackUnsubscribe);
     });
-          unsubscribes.push(unsubscribeCheckIns);
+    unsubscribes.push(unsubscribeCheckIns);
 
-    // Calculate new signups today from web_customers collection
+    // Calculate new signups for the selected time period from web_customers collection
     const unsubscribeNewSignups = onSnapshot(customersQuery, (snapshot) => {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
       let newSignupsCount = 0;
       
       snapshot.docs.forEach(doc => {
         const customer = doc.data();
-        const joinDate = customer.dateJoined?.toDate() || customer.createdAt?.toDate();
+        const joinDate = convertToLocalDate(customer.dateJoined || customer.createdAt);
         
-        if (joinDate && joinDate >= today) {
+        if (isDateInRange(joinDate, startDate, endDate)) {
           // Filter by outlet if specific outlet is selected
           const matchesOutlet = selectedOutlet === 'all' || 
                                customer.registrationOutletId === selectedOutlet ||
@@ -628,18 +1772,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
         }
       });
       
-      console.log(`✅ New signups today calculated (${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet}):`, newSignupsCount, 'new customers');
-      console.log('🔍 DEBUG: Looking for customers with dateJoined >= today');
-      
-      // Additional debugging to help understand the data
-      if (snapshot.docs.length > 0) {
-        const sampleCustomer = snapshot.docs[0].data();
-        console.log('📱 Sample customer dateJoined field:', {
-          dateJoined: sampleCustomer.dateJoined,
-          createdAt: sampleCustomer.createdAt,
-          registrationOutletId: sampleCustomer.registrationOutletId
-        });
-      }
+      console.log(`✅ New signups for ${timePeriod} calculated (${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet}):`, newSignupsCount, 'new customers');
       
       setData(prev => ({ ...prev, newSignupsToday: newSignupsCount }));
     }, (error) => {
@@ -648,15 +1781,25 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     });
     unsubscribes.push(unsubscribeNewSignups);
 
-    // Listen for transactions collection under user's path
+    // Listen for transactions collection under user's path (using web_transactions collection as per app team)
     const transactionsQuery = query(collection(firestore, `users/${user.uid}/web_transactions`));
     const customersForTransactionsQuery = query(collection(firestore, `users/${user.uid}/web_customers`));
+    
+    console.log('🔍 Setting up web_transactions listener for user:', user.uid);
+    console.log('🔍 Collection path:', `users/${user.uid}/web_transactions`);
         
     const unsubscribeTransactions = onSnapshot(transactionsQuery, (transactionSnapshot) => {
-      let totalPointsEarned = 0;
-      let totalPointsRedeemed = 0;
-      let filteredTransactions = transactionSnapshot.docs;
-      
+        console.log('📊 Web transactions snapshot received:', transactionSnapshot.docs.length, 'documents');
+        console.log('📅 Date range filter:', startDate, 'to', endDate);
+        console.log('🏪 Selected outlet filter:', selectedOutlet);
+        
+        let totalPointsEarned = 0;
+        let totalPointsRedeemed = 0;
+        let filteredTransactions = transactionSnapshot.docs;
+        let totalTransactions = 0;
+        let filteredByDate = 0;
+        let filteredByOutlet = 0;
+        
       console.log(`🔍 WEB TRANSACTION FILTERING (${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet})`);
       console.log('Total web_transactions in DB:', transactionSnapshot.docs.length);
       
@@ -664,25 +1807,28 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       if (selectedOutlet !== 'all') {
         filteredTransactions = transactionSnapshot.docs.filter(doc => {
           const transaction = doc.data();
+          totalTransactions++;
           // Use the new transactionOutletId field directly - no more customer mapping needed!
-          return transaction.transactionOutletId === selectedOutlet;
+          const matchesOutlet = transaction.transactionOutletId === selectedOutlet;
+          if (matchesOutlet) filteredByOutlet++;
+          return matchesOutlet;
         });
         
-        console.log(`✅ Filtered transactions: ${filteredTransactions.length} / ${transactionSnapshot.docs.length}`);
+        console.log(`✅ Filtered transactions by outlet: ${filteredTransactions.length} / ${transactionSnapshot.docs.length}`);
       }
       
       // Debug: Show outlet distribution in transactions
-      if (selectedOutlet === 'all') {
-        const outletDistribution: { [key: string]: number } = {};
+        if (selectedOutlet === 'all') {
+          const outletDistribution: { [key: string]: number } = {};
         let transactionsWithoutOutlet = 0;
-        
-        transactionSnapshot.docs.forEach(doc => {
-          const transaction = doc.data();
-          const outletId = transaction.transactionOutletId;
           
-          if (outletId) {
-            outletDistribution[outletId] = (outletDistribution[outletId] || 0) + 1;
-          } else {
+          transactionSnapshot.docs.forEach(doc => {
+            const transaction = doc.data();
+          const outletId = transaction.transactionOutletId;
+            
+            if (outletId) {
+              outletDistribution[outletId] = (outletDistribution[outletId] || 0) + 1;
+            } else {
             transactionsWithoutOutlet++;
           }
         });
@@ -691,88 +1837,54 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
         console.log('⚠️ Transactions without outlet:', transactionsWithoutOutlet);
       }
               
-        // Calculate points from filtered transactions FOR TODAY ONLY (reset at midnight)
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
+        // Calculate points from filtered transactions FOR THE SELECTED TIME PERIOD
         filteredTransactions.forEach(doc => {
           const transaction = doc.data();
           const pointsChanged = transaction.pointsChanged || 0;
           const transactionType = transaction.transactionType || '';
           const isManualTransaction = transaction.isManualTransaction || false;
-          const transactionDate = transaction.timestamp?.toDate();
+          const transactionDate = convertToLocalDate(transaction.timestamp);
           
-          // Only count transactions from TODAY (midnight reset)
-          if (transactionDate && transactionDate >= today) {
+          console.log('🔍 Transaction data:', {
+            customerId: transaction.customerId,
+            transactionOutletId: transaction.transactionOutletId,
+            pointsChanged: pointsChanged,
+            transactionType: transactionType,
+            isManualTransaction: isManualTransaction,
+            timestamp: transaction.timestamp,
+            transactionDate: transactionDate,
+            isInDateRange: isDateInRange(transactionDate, startDate, endDate),
+            isEarned: transactionType.toUpperCase() === 'EARNED',
+            isRedeemed: transactionType.toUpperCase() === 'REDEEMED'
+          });
+          
+          // Only count transactions from the selected time period
+          if (isDateInRange(transactionDate, startDate, endDate)) {
+            filteredByDate++;
             // For EARNED transactions, only count manual ones
             if (transactionType.toUpperCase() === 'EARNED' && isManualTransaction && pointsChanged > 0) {
               totalPointsEarned += pointsChanged;
+              console.log('✅ Counted earned points:', pointsChanged, 'for customer:', transaction.customerId);
             } else if (transactionType.toUpperCase() === 'REDEEMED' && pointsChanged < 0) {
               totalPointsRedeemed += Math.abs(pointsChanged);
+              console.log('✅ Counted redeemed points:', Math.abs(pointsChanged), 'for customer:', transaction.customerId);
             }
           }
         });
         
-        console.log(`✅ Transactions data received (${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet}):`, filteredTransactions.length, '/', transactionSnapshot.docs.length, 'documents');
+        console.log(`📊 Points filtering summary:`);
+        console.log(`- Total transactions in collection: ${transactionSnapshot.docs.length}`);
+        console.log(`- Transactions matching outlet filter: ${filteredTransactions.length}`);
+        console.log(`- Transactions in date range: ${filteredByDate}`);
+        console.log(`- Points earned: ${totalPointsEarned}`);
+        console.log(`- Points redeemed: ${totalPointsRedeemed}`);
+        
+        console.log(`✅ Transactions data received for ${timePeriod} (${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet}):`, filteredTransactions.length, '/', transactionSnapshot.docs.length, 'documents');
         console.log('💰 Points earned (manual only):', totalPointsEarned, 'Points redeemed:', totalPointsRedeemed);
-        
-        // Debug: Show breakdown of transaction types (simplified for web collections)
-        const transactionTypeBreakdown: { [key: string]: { count: number, points: number, manual: number, automatic: number } } = {};
-        
-        filteredTransactions.forEach((doc, index) => {
-          const transaction = doc.data();
-          const transactionType = transaction.transactionType || 'unknown';
-          const pointsChanged = transaction.pointsChanged || 0;
-          const isManualTransaction = transaction.isManualTransaction || false;
-          
-          if (!transactionTypeBreakdown[transactionType]) {
-            transactionTypeBreakdown[transactionType] = { count: 0, points: 0, manual: 0, automatic: 0 };
-          }
-          transactionTypeBreakdown[transactionType].count++;
-          
-          if (pointsChanged > 0) {
-            transactionTypeBreakdown[transactionType].points += pointsChanged;
-            
-            if (isManualTransaction) {
-              transactionTypeBreakdown[transactionType].manual += pointsChanged;
-            } else {
-              transactionTypeBreakdown[transactionType].automatic += pointsChanged;
-            }
-            
-            // Log first few transactions for debugging
-            if (index < 5) {
-              console.log(`Transaction ${index + 1}:`, {
-                type: transactionType,
-                description: transaction.description,
-                points: pointsChanged,
-                isManual: isManualTransaction,
-                outletId: transaction.transactionOutletId,
-                decision: (transactionType.toUpperCase() === 'EARNED' && isManualTransaction) ? 'INCLUDED' : 'EXCLUDED',
-                timestamp: transaction.timestamp?.toDate?.()?.toLocaleString() || 'no timestamp'
-              });
-            }
-          }
-        });
-        
-        console.log('📊 Transaction type breakdown:', transactionTypeBreakdown);
-        console.log('✅ Using new web collections - transactions are permanently tied to outlets!');
-        
-        // Additional debugging for the mobile app integration
-        console.log('🔍 WEB COLLECTIONS INTEGRATION STATUS:');
-        console.log('- Collection: web_transactions ✅');
-        console.log('- Field: transactionOutletId ✅');
-        console.log('- Field: isManualTransaction ✅');
-        console.log('- Multi-outlet issue: SOLVED ✅');
-        
-        if (filteredTransactions.length > 0) {
-          console.log('📱 Sample transaction from mobile app:', filteredTransactions[0].data());
-        } else {
-          console.warn('⚠️ No transactions found. Mobile app may still be populating web collections.');
-        }
         
         // Calculate revenue 
         const revenue = totalPointsEarned * 0.1; // Assuming 1 point = $0.10
-        console.log(`💵 Calculated revenue: $${revenue.toFixed(2)} (${totalPointsEarned} points * $0.10)`);
+        console.log(`💵 Calculated revenue for ${timePeriod}: $${revenue.toFixed(2)} (${totalPointsEarned} points * $0.10)`);
         
         setData(prev => ({ 
           ...prev, 
@@ -783,6 +1895,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       
     }, (error) => {
       console.log('❌ Transactions data not available:', error.message);
+      console.log('🔍 Error details:', error);
+      console.log('🔍 User authentication status:', user?.uid, user?.email);
       setData(prev => ({ ...prev, revenue: 0, totalPoints: 0, loading: false }));
     });
     unsubscribes.push(unsubscribeTransactions);
@@ -791,7 +1905,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     return () => {
       unsubscribes.forEach(unsubscribe => unsubscribe());
     };
-  }, [user.uid, selectedOutlet]); // Re-run when outlet selection changes
+  }, [user.uid, selectedOutlet, timePeriod]); // Re-run when outlet selection or time period changes
 
   // Filter suggestions for different pages
   const FilterSuggestions = ({ page }: { page: string }) => {
@@ -894,10 +2008,25 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 transition: 'all 0.2s'
               }}
               onMouseEnter={(e) => {
-                (e.target as HTMLElement).style.backgroundColor = 'rgba(255,255,255,0.2)';
+                e.preventDefault();
+                e.stopPropagation();
+                const target = e.currentTarget as HTMLElement;
+                target.style.backgroundColor = 'rgba(255,255,255,0.2)';
               }}
               onMouseLeave={(e) => {
-                (e.target as HTMLElement).style.backgroundColor = 'rgba(255,255,255,0.1)';
+                e.preventDefault();
+                e.stopPropagation();
+                const target = e.currentTarget as HTMLElement;
+                target.style.backgroundColor = 'rgba(255,255,255,0.1)';
+              }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onSelectStart={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
               }}
             >
               {filter}
@@ -937,6 +2066,13 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
     const [searchTerm, setSearchTerm] = useState('');
     const [filteredCustomers, setFilteredCustomers] = useState<any[]>([]);
+    const [isSearchVisible, setIsSearchVisible] = useState(false);
+    
+    // Date picker states
+    const [timePeriod, setTimePeriod] = useState('today');
+    const [timeDropdownOpen, setTimeDropdownOpen] = useState(false);
+    const [customRangeStart, setCustomRangeStart] = useState<Date | null>(null);
+    const [customRangeEnd, setCustomRangeEnd] = useState<Date | null>(null);
 
     const formatDate = (date: Date) => {
       return date.toLocaleDateString('en-US', { 
@@ -951,10 +2087,12 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       const newDate = new Date(selectedDate);
       newDate.setDate(selectedDate.getDate() + (direction === 'next' ? 1 : -1));
       setSelectedDate(newDate);
+      setTimePeriod('today'); // Reset to 'today' when navigating dates
     };
 
     const goToToday = () => {
       setSelectedDate(new Date());
+      setTimePeriod('today'); // Reset to 'today' when going to today
     };
 
     const isToday = (date: Date) => {
@@ -966,16 +2104,114 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       const today = new Date();
       return date > today;
     };
+    // Calendar navigation function
+    const navigateCalendar = (direction: 'prev' | 'next') => {
+      const newDate = new Date(selectedDate);
+      newDate.setMonth(selectedDate.getMonth() + (direction === 'next' ? 1 : -1));
+      requestAnimationFrame(() => {
+        setSelectedDate(newDate);
+      });
+    };
+
+    // Get date range for current time period
+    const getCurrentDateRange = () => {
+      const now = new Date();
+      let startDate = new Date();
+      let endDate = new Date();
+
+      switch (timePeriod) {
+        case 'today':
+          // Use selectedDate for 'today' mode (can be any specific date)
+          startDate = new Date(selectedDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(selectedDate);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'yesterday':
+          const yesterday = new Date(now);
+          yesterday.setDate(now.getDate() - 1);
+          startDate = new Date(yesterday);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(yesterday);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'this_week':
+          const thisWeekStart = new Date(now);
+          thisWeekStart.setDate(now.getDate() - now.getDay());
+          startDate = new Date(thisWeekStart);
+          startDate.setHours(0, 0, 0, 0);
+          const thisWeekEnd = new Date(thisWeekStart);
+          thisWeekEnd.setDate(thisWeekStart.getDate() + 6);
+          endDate = new Date(thisWeekEnd);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'last_week':
+          const lastWeekStart = new Date(now);
+          lastWeekStart.setDate(now.getDate() - now.getDay() - 7);
+          const lastWeekEnd = new Date(lastWeekStart);
+          lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
+          startDate = new Date(lastWeekStart);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(lastWeekEnd);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'this_month':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'last_month':
+          startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth(), 0);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'custom_range': {
+          const start = customRangeStart ?? selectedDate;
+          const end = customRangeEnd ?? customRangeStart ?? selectedDate;
+          const minDate = start <= end ? start : end;
+          const maxDate = start <= end ? end : start;
+          startDate = new Date(minDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(maxDate);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        }
+        default:
+          startDate = new Date(selectedDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(selectedDate);
+          endDate.setHours(23, 59, 59, 999);
+      }
+      
+      return { startDate, endDate };
+    };
+
+    // Check if a date is in the selected range
+    const isDateInSelectedRange = (date: Date) => {
+      const { startDate, endDate } = getCurrentDateRange();
+      const checkDate = new Date(date);
+      checkDate.setHours(12, 0, 0, 0); // Set to noon to avoid timezone issues
+      return checkDate >= startDate && checkDate <= endDate;
+    };
 
     useEffect(() => {
-      // Fetch signups data for selected date
-      const fetchSignupsData = () => {
-        const selectedStart = new Date(selectedDate);
-        selectedStart.setHours(0, 0, 0, 0);
-        const selectedEnd = new Date(selectedDate);
-        selectedEnd.setHours(23, 59, 59, 999);
+      if (!user?.uid) return;
 
-        console.log('🔍 Fetching signups data for:', formatDate(selectedDate));
+      console.log('🚨 NEW SIGNUPS USEEFFECT TRIGGERED');
+      console.log('🔍 Fetching signups data for time period:', timePeriod);
+      console.log('📅 Selected date:', selectedDate.toLocaleDateString());
+      console.log('📅 Selected date full:', selectedDate.toString());
+      const { startDate, endDate } = getCurrentDateRange();
+      console.log('📅 Date range:', startDate.toLocaleDateString(), 'to', endDate.toLocaleDateString());
+      console.log('📅 Start date full:', startDate.toString());
+      console.log('📅 End date full:', endDate.toString());
+      
+      setSignupsData(prev => ({ ...prev, loading: true }));
+
+      // Fetch signups data for selected date range
+      const fetchSignupsData = () => {
         
                  const customersQuery = query(collection(firestore, `users/${user.uid}/web_customers`));
          const outletsQuery = query(collection(firestore, `users/${user.uid}/outlets`));
@@ -1003,7 +2239,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
              const customer = doc.data();
              const joinDate = customer.dateJoined?.toDate() || customer.createdAt?.toDate();
              
-             if (joinDate && joinDate >= selectedStart && joinDate <= selectedEnd) {
+             if (joinDate && joinDate >= startDate && joinDate <= endDate) {
                // Filter by outlet
                const matchesOutlet = selectedOutlet === 'all' || 
                                   customer.registrationOutletId === selectedOutlet ||
@@ -1055,7 +2291,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
       const unsubscribe = fetchSignupsData();
       return unsubscribe;
-    }, [selectedDate, selectedOutlet, user.uid]);
+    }, [timePeriod, selectedDate, selectedOutlet, user.uid, customRangeStart, customRangeEnd]);
 
     // Filter customers based on search term
     useEffect(() => {
@@ -1069,11 +2305,13 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       }
     }, [searchTerm, signupsData.customers]);
 
+
+
     return (
       <div style={{
         minHeight: '100vh',
         width: '100%',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'transparent',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         margin: 0,
         padding: 0,
@@ -1098,102 +2336,153 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             maxWidth: '1400px',
             margin: '0 auto'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <button
-                onClick={() => setCurrentPage('dashboard')}
-                style={{
-                  padding: '0.5rem 1rem',
-                  backgroundColor: 'rgba(255,255,255,0.2)',
-                  color: 'white',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}
-              >
-                ← Back to Dashboard
-              </button>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                background: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)',
-                borderRadius: '10px',
+            <button
+              onClick={() => setCurrentPage('dashboard')}
+              style={{
+                padding: '0.75rem 1.25rem',
+                backgroundColor: 'rgba(255,255,255,0.1)',
+                color: 'white',
+                border: '1px solid rgba(255,255,255,0.2)',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: '500',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(255, 107, 107, 0.3)'
-              }}>
-                <SignupIcon />
-              </div>
-                             <div>
-                 <h1 style={{ margin: 0, fontSize: '1.8rem', fontWeight: '700' }}>New Signups</h1>
-                 <p style={{ margin: 0, opacity: 0.9, fontSize: '0.9rem' }}>
-                   {selectedOutlet === 'all' ? 'All outlets' : `Outlet: ${outlets.find(outlet => outlet.id === selectedOutlet)?.name || outlets.find(outlet => outlet.id === selectedOutlet)?.outletName || selectedOutlet}`}
-                 </p>
-               </div>
-            </div>
+                gap: '0.5rem',
+                transition: 'all 0.2s ease',
+                backdropFilter: 'blur(10px)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              ← Back to Dashboard
+            </button>
+            
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              {/* Search Bar */}
-              <div style={{ position: 'relative' }}>
-                <input
-                  type="text"
-                  placeholder="Search customers by name or phone..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  style={{
-                    width: '300px',
-                    padding: '0.75rem 1rem 0.75rem 2.5rem',
-                    background: 'rgba(255,255,255,0.1)',
-                    color: 'white',
-                    border: '1px solid rgba(255,255,255,0.3)',
-                    borderRadius: '12px',
-                    fontSize: '0.9rem',
-                    outline: 'none',
-                    backdropFilter: 'blur(10px)',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                  }}
-                  onFocus={(e) => {
-                    (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.5)';
-                    (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.15)';
-                  }}
-                  onBlur={(e) => {
-                    (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.3)';
-                    (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.1)';
-                  }}
-                />
-                <div style={{
-                  position: 'absolute',
-                  left: '0.75rem',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: 'rgba(255,255,255,0.7)',
-                  pointerEvents: 'none'
+              <div style={{ textAlign: 'right' }}>
+                <h1 style={{ 
+                  margin: 0, 
+                  fontSize: '2rem', 
+                  fontWeight: '800',
+                  background: 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text'
                 }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <path d="m21 21-4.35-4.35"></path>
-                  </svg>
-                </div>
+                  New Signups
+                </h1>
+                <p style={{ 
+                  margin: '0.25rem 0 0 0', 
+                  opacity: 0.8, 
+                  fontSize: '1rem',
+                  fontWeight: '400'
+                }}>
+                  {selectedOutlet === 'all' ? 'All outlets' : `Outlet: ${outlets.find(outlet => outlet.id === selectedOutlet)?.name || outlets.find(outlet => outlet.id === selectedOutlet)?.outletName || selectedOutlet}`}
+                </p>
               </div>
-              <button
-                onClick={onLogout}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  backgroundColor: 'rgba(255,255,255,0.2)',
-                  color: 'white',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  borderRadius: '12px',
-                  cursor: 'pointer',
-                  fontWeight: '500',
-                  transition: 'all 0.2s',
-                  backdropFilter: 'blur(10px)'
-                }}
-              >
-                Sign Out
-              </button>
+              
+              {/* Search Icon/Bar */}
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                {!isSearchVisible ? (
+                  <button
+                    onClick={() => setIsSearchVisible(true)}
+                    style={{
+                      padding: '0.75rem',
+                      backgroundColor: 'rgba(255,255,255,0.1)',
+                      color: 'white',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '12px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s ease',
+                      backdropFilter: 'blur(10px)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <path d="m21 21-4.35-4.35"></path>
+                    </svg>
+                  </button>
+                ) : (
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      placeholder="Search customers by name or phone..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      autoFocus
+                      style={{
+                        width: '300px',
+                        padding: '0.75rem 2.5rem 0.75rem 1rem',
+                        background: 'rgba(255,255,255,0.1)',
+                        color: 'white',
+                        border: '1px solid rgba(255,255,255,0.3)',
+                        borderRadius: '12px',
+                        fontSize: '0.9rem',
+                        outline: 'none',
+                        backdropFilter: 'blur(10px)',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                      }}
+                      onFocus={(e) => {
+                        (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.5)';
+                        (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.15)';
+                      }}
+                      onBlur={(e) => {
+                        (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.3)';
+                        (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.1)';
+                        if (!searchTerm) {
+                          setIsSearchVisible(false);
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        setIsSearchVisible(false);
+                        setSearchTerm('');
+                      }}
+                      style={{
+                        position: 'absolute',
+                        right: '0.5rem',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: 'rgba(255,255,255,0.7)',
+                        cursor: 'pointer',
+                        padding: '0.25rem',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              {headerButtons}
             </div>
           </div>
         </header>
@@ -1241,17 +2530,102 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 ← Previous Day
               </button>
               
-              <div style={{ textAlign: 'center' }}>
-                <h2 style={{ color: 'white', margin: 0, fontSize: '1.5rem' }}>
-                  {formatDate(selectedDate)}
+              <div style={{ textAlign: 'center', position: 'relative' }}>
+                <button
+                  onClick={() => setTimeDropdownOpen(!timeDropdownOpen)}
+                  data-time-dropdown="true"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    padding: '0.5rem 1rem',
+                    borderRadius: '12px',
+                    transition: 'all 0.2s',
+                    backgroundColor: timeDropdownOpen ? 'rgba(255,255,255,0.1)' : 'transparent'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!timeDropdownOpen) {
+                      (e.target as HTMLElement).style.backgroundColor = 'rgba(255,255,255,0.05)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!timeDropdownOpen) {
+                      (e.target as HTMLElement).style.backgroundColor = 'transparent';
+                    }
+                  }}
+                >
+                  <h2 style={{ color: 'white', margin: 0, fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
+                    {(() => {
+                      const { startDate, endDate } = getCurrentDateRange();
+                      switch (timePeriod) {
+                        case 'today':
+                          return formatDate(selectedDate);
+                        case 'yesterday':
+                          return formatDate(startDate);
+                        case 'this_week':
+                        case 'last_week':
+                          const shortOpts = { weekday: 'short', month: 'short', day: 'numeric' } as const;
+                          const startStr = startDate.toLocaleDateString('en-US', shortOpts);
+                          const endStr = endDate.toLocaleDateString('en-US', shortOpts);
+                          const sameYear = startDate.getFullYear() === endDate.getFullYear();
+                          const yearSuffix = sameYear ? `, ${endDate.getFullYear()}` : `, ${startDate.getFullYear()} to ${endDate.getFullYear()}`;
+                          return `${startStr} to ${endStr}${yearSuffix}`;
+                        case 'this_month':
+                          return startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                        case 'last_month':
+                          return startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                        case 'custom_range':
+                          const start = customRangeStart ?? startDate;
+                          const end = customRangeEnd ?? endDate;
+                          const s = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                          const e = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                          return `${s} to ${e}`;
+                        default:
+                          return formatDate(selectedDate);
+                      }
+                    })()}
+                    <svg 
+                      width="16" 
+                      height="16" 
+                      viewBox="0 0 24 24" 
+                      fill="currentColor"
+                      style={{ 
+                        transform: timeDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.2s',
+                        opacity: 0.7
+                      }}
+                    >
+                      <path d="M7 10l5 5 5-5z"/>
+                    </svg>
                 </h2>
                 <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
-                  {isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`}
-                </p>
+                    {(() => {
+                      switch (timePeriod) {
+                        case 'today':
+                          return isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`;
+                        case 'yesterday':
+                          return 'Yesterday';
+                        case 'this_week':
+                          return 'This Week';
+                        case 'last_week':
+                          return 'Last Week';
+                        case 'this_month':
+                          return 'This Month';
+                        case 'last_month':
+                          return 'Last Month';
+                        case 'custom_range':
+                          return 'Custom Range';
+                        default:
+                          return '';
+                      }
+                    })()}
+                  </p>
+                </button>
               </div>
               
               <div style={{ display: 'flex', gap: '1rem' }}>
-                {!isToday(selectedDate) && (
+                {(!isToday(selectedDate) || timePeriod !== 'today') && (
                   <button
                     onClick={goToToday}
                     style={{
@@ -1422,12 +2796,27 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                     setCurrentPage('customers');
                   }}
                   onMouseEnter={(e) => {
-                    (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.2)';
-                    (e.target as HTMLElement).style.transform = 'translateY(-2px)';
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const target = e.currentTarget as HTMLElement;
+                    target.style.background = 'rgba(255,255,255,0.2)';
+                    target.style.transform = 'translateY(-2px)';
                   }}
                   onMouseLeave={(e) => {
-                    (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.1)';
-                    (e.target as HTMLElement).style.transform = 'translateY(0)';
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const target = e.currentTarget as HTMLElement;
+                    target.style.background = 'rgba(255,255,255,0.1)';
+                    target.style.transform = 'translateY(0)';
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onSelectStart={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
                   }}
                   >
                     <div style={{
@@ -1472,6 +2861,463 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             )}
           </div>
         </main>
+
+        {/* Date Picker Modal */}
+        {timeDropdownOpen && (
+          <div
+            style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              backdropFilter: 'blur(10px)',
+              zIndex: 999999999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+              padding: '2rem',
+              willChange: 'auto'
+            }}
+            onClick={(e) => {
+              // Only close if clicking directly on the backdrop, not on child elements
+              if (e.target === e.currentTarget) {
+                console.log('🔒 Modal backdrop clicked - closing time period selector');
+                setTimeDropdownOpen(false);
+              }
+            }}
+          >
+            {/* Modal Content */}
+            <div
+              key="modal-content"
+              data-time-dropdown="true"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'linear-gradient(145deg, rgba(17, 24, 39, 0.95) 0%, rgba(31, 41, 55, 0.95) 50%, rgba(55, 65, 81, 0.95) 100%)',
+                borderRadius: '24px',
+                padding: '0',
+                width: '800px',
+                maxWidth: '90vw',
+                height: '550px',
+                maxHeight: '85vh',
+                boxShadow: '0 30px 60px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                position: 'relative',
+                display: 'flex',
+                overflow: 'hidden',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                willChange: 'auto',
+                transform: 'translateZ(0)'
+              }}
+            >
+              {/* Close Button */}
+              <button
+                onClick={() => setTimeDropdownOpen(false)}
+                style={{
+                  position: 'absolute',
+                  top: '1rem',
+                  right: '1rem',
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '36px',
+                  height: '36px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '1.2rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                  zIndex: 10
+                }}
+                onMouseEnter={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+                }}
+              >
+                ×
+              </button>
+
+              {/* Left Panel - Time Period Options */}
+              <div
+                key="left-panel"
+                style={{
+                  flex: '0 0 300px',
+                  padding: '2rem',
+                  borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+                  background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(147, 51, 234, 0.08) 100%)',
+                  willChange: 'auto'
+                }}
+              >
+                <h3
+                  style={{
+                    color: 'white',
+                    fontSize: '1.2rem',
+                    fontWeight: '600',
+                    marginBottom: '1.5rem',
+                    textAlign: 'left'
+                  }}
+                >
+                    Time Periods
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {[
+                      { value: 'today', label: 'Today' },
+                      { value: 'yesterday', label: 'Yesterday' },
+                      { value: 'this_week', label: 'This Week' },
+                      { value: 'last_week', label: 'Last Week' },
+                      { value: 'this_month', label: 'This Month' },
+                      { value: 'last_month', label: 'Last Month' },
+                      { value: 'custom_range', label: 'Custom Range' }
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log('🎯 TIME PERIOD SELECTED:', option.value);
+                          if (option.value === 'custom_range') {
+                            // Start custom range flow: keep modal open and wait for two clicks
+                            setCustomRangeStart(null);
+                            setCustomRangeEnd(null);
+                            setTimePeriod('custom_range');
+                            console.log('🗓️ Custom Range mode: select start and end dates');
+                            return;
+                          }
+
+                          console.log('🔄 Changing timePeriod from:', timePeriod, 'to:', option.value);
+                          setTimePeriod(option.value);
+                          
+                          setTimeDropdownOpen(false);
+                          console.log('✅ Time period updated and modal closed');
+                        }}
+                        style={{
+                          background: timePeriod === option.value 
+                            ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(147, 51, 234, 0.2) 100%)' 
+                            : 'rgba(255, 255, 255, 0.03)',
+                          border: timePeriod === option.value ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid transparent',
+                          borderRadius: '12px',
+                          padding: '1rem 1.5rem',
+                          color: timePeriod === option.value ? '#fff' : 'rgba(255, 255, 255, 0.8)',
+                          cursor: 'pointer',
+                          fontSize: '1rem',
+                          fontWeight: timePeriod === option.value ? '600' : '400',
+                          transition: 'all 0.2s ease',
+                          textAlign: 'left',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          boxShadow: timePeriod === option.value ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none'
+                        }}
+                        onMouseEnter={(e) => {
+                          if (timePeriod !== option.value) {
+                            (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.08)';
+                            (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (timePeriod !== option.value) {
+                            (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.03)';
+                            (e.target as HTMLElement).style.borderColor = 'transparent';
+                          }
+                        }}
+                      >
+                        <span>{option.label}</span>
+                        {timePeriod === option.value && (
+                          <span style={{ fontSize: '1rem', color: 'rgba(255, 255, 255, 0.9)' }}>✓</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+              {/* Right Panel - Calendar */}
+              <div
+                key="right-panel"
+                style={{
+                  flex: 1,
+                  padding: '2rem',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  color: '#fff',
+                  willChange: 'auto'
+                }}
+              >
+                <h3
+                  style={{
+                    color: '#fff',
+                    fontSize: '1.2rem',
+                    fontWeight: '600',
+                    marginBottom: '1.5rem',
+                    textAlign: 'center'
+                  }}
+                >
+                  {(() => {
+                    const now = new Date();
+                    switch (timePeriod) {
+                      case 'today':
+                        return `Today - ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`;
+                      case 'yesterday':
+                        const yesterday = new Date(now);
+                        yesterday.setDate(yesterday.getDate() - 1);
+                        return `Yesterday - ${yesterday.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`;
+                      case 'this_week':
+                        const weekStart = new Date(now);
+                        weekStart.setDate(now.getDate() - now.getDay());
+                        const weekEnd = new Date(weekStart);
+                        weekEnd.setDate(weekStart.getDate() + 6);
+                        return `This Week - ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                      case 'last_week':
+                        const lastWeekStart = new Date(now);
+                        lastWeekStart.setDate(now.getDate() - now.getDay() - 7);
+                        const lastWeekEnd = new Date(lastWeekStart);
+                        lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
+                        return `Last Week - ${lastWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${lastWeekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                      case 'this_month':
+                        return `This Month - ${now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+                      case 'last_month':
+                        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                        return `Last Month - ${lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+                      case 'custom_range': {
+                        const start = customRangeStart;
+                        const end = customRangeEnd;
+                        const hasStart = !!start;
+                        const hasEnd = !!end;
+                        const rangeLabel = hasStart && hasEnd
+                          ? `${start!.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${end!.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                          : hasStart
+                            ? `Start: ${start!.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                            : 'Select start date';
+                        return `Custom Range - ${rangeLabel}`;
+                      }
+                      default:
+                        return 'Selected Period';
+                    }
+                  })()}
+                  </h3>
+                  
+                {/* Calendar Preview */}
+                <div
+                  style={{
+                    display: 'flex', 
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    transition: 'opacity 0.2s ease-in-out',
+                    opacity: 1
+                  }}
+                >
+                  {/* Month/Year Navigation */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '1rem',
+                    marginBottom: '1rem'
+                    }}
+                  >
+                    <button
+                      onClick={() => navigateCalendar('prev')}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '8px',
+                        padding: '0.5rem',
+                        cursor: 'pointer',
+                        color: 'rgba(255, 255, 255, 0.8)',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                      }}
+                    >
+                      ←
+                    </button>
+                    <span style={{ fontSize: '1.1rem', fontWeight: '600', minWidth: '150px', textAlign: 'center', color: '#fff' }}>
+                      {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    </span>
+                    <button
+                      onClick={() => navigateCalendar('next')}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '8px',
+                        padding: '0.5rem',
+                        cursor: 'pointer',
+                        color: 'rgba(255, 255, 255, 0.8)',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                      }}
+                    >
+                      →
+                    </button>
+                  </div>
+
+                  {/* Calendar Grid */}
+                  <div
+                    key={`${selectedDate.getMonth()}-${selectedDate.getFullYear()}`}
+                    style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(7, 1fr)',
+                      gap: '0.5rem',
+                      width: '100%',
+                      maxWidth: '350px',
+                      minHeight: '300px',
+                      opacity: 1,
+                      animation: 'fadeIn 0.15s ease-out'
+                    }}
+                  >
+                    {/* Day Headers */}
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                      <div
+                        key={day}
+                        style={{
+                        padding: '0.5rem',
+                          textAlign: 'center',
+                          fontSize: '0.8rem',
+                          fontWeight: '600',
+                          color: 'rgba(255, 255, 255, 0.5)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
+                        }}
+                      >
+                        {day}
+                      </div>
+                    ))}
+                    
+                    {/* Calendar Days */}
+                    {(() => {
+                      const year = selectedDate.getFullYear();
+                      const month = selectedDate.getMonth();
+                      const firstDay = new Date(year, month, 1);
+                      const lastDay = new Date(year, month + 1, 0);
+                      const startingDayOfWeek = firstDay.getDay();
+                      const daysInMonth = lastDay.getDate();
+                      const today = new Date();
+                      
+                      console.log('🗓️ Rendering calendar for:', year, month + 1, 'with', daysInMonth, 'days');
+                      
+                      const days = [];
+                      
+                      // Empty cells for days before the first day of the month
+                      for (let i = 0; i < startingDayOfWeek; i++) {
+                        days.push(
+                          <div key={`empty-${i}`} style={{ padding: '0.75rem' }}></div>
+                        );
+                      }
+                      
+                      // Days of the month
+                      for (let day = 1; day <= daysInMonth; day++) {
+                        const currentDate = new Date(year, month, day);
+                        const isToday = currentDate.toDateString() === today.toDateString();
+                        const isInSelectedRange = isDateInSelectedRange(currentDate);
+                        const isFutureDate = currentDate > today;
+                        
+                        days.push(
+                          <button
+                            key={day}
+                            onClick={() => {
+                              if (!isFutureDate) {
+                              if (timePeriod === 'custom_range') {
+                                if (!customRangeStart) {
+                                  setCustomRangeStart(currentDate);
+                                } else if (!customRangeEnd) {
+                                  setCustomRangeEnd(currentDate);
+                                  setTimeDropdownOpen(false);
+                                } else {
+                                  setCustomRangeStart(currentDate);
+                                  setCustomRangeEnd(null);
+                                }
+                              } else {
+                                console.log('🔥 CALENDAR DATE CLICKED:', currentDate.toDateString());
+                                console.log('🔥 IS TODAY?', currentDate.toDateString() === new Date().toDateString());
+                                
+                                // Use flushSync to ensure state updates are synchronous
+                                flushSync(() => {
+                                setSelectedDate(currentDate);
+                                  // Only set timePeriod to 'today' if the selected date is actually today
+                                  if (currentDate.toDateString() === new Date().toDateString()) {
+                                    console.log('🔥 SETTING TIMEPERIOD TO TODAY');
+                                setTimePeriod('today');
+                                  } else {
+                                    console.log('🔥 NOT TODAY - KEEPING CURRENT TIMEPERIOD:', timePeriod);
+                                  }
+                                setTimeDropdownOpen(false);
+                                });
+                                
+                                console.log('🔥 AFTER FLUSHSYNC - selectedDate should be:', currentDate.toDateString());
+                                }
+                              }
+                            }}
+                            disabled={isFutureDate}
+                            style={{
+                              padding: '0.75rem',
+                              textAlign: 'center',
+                              borderRadius: '8px',
+                              cursor: isFutureDate ? 'not-allowed' : 'pointer',
+                              border: isInSelectedRange 
+                                ? '1px solid rgba(59, 130, 246, 0.5)' 
+                                : '1px solid transparent',
+                              background: isInSelectedRange 
+                                ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.3) 0%, rgba(147, 51, 234, 0.3) 100%)' 
+                                : isToday 
+                                  ? 'rgba(59, 130, 246, 0.15)' 
+                                  : isFutureDate 
+                                    ? 'rgba(255, 255, 255, 0.02)' 
+                                    : 'rgba(255, 255, 255, 0.03)',
+                              color: isInSelectedRange 
+                                ? '#fff' 
+                                : isToday 
+                                  ? 'rgba(59, 130, 246, 1)' 
+                                  : isFutureDate 
+                                    ? 'rgba(255, 255, 255, 0.3)' 
+                                    : 'rgba(255, 255, 255, 0.8)',
+                              fontWeight: isToday ? '600' : isInSelectedRange ? '500' : '400',
+                              transition: 'all 0.2s ease',
+                              opacity: isFutureDate ? 0.5 : 1,
+                              boxShadow: isInSelectedRange ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none'
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isFutureDate && !isInSelectedRange) {
+                                (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+                                (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isFutureDate && !isInSelectedRange) {
+                                (e.target as HTMLElement).style.backgroundColor = isToday ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.03)';
+                                (e.target as HTMLElement).style.borderColor = 'transparent';
+                              }
+                            }}
+                          >
+                            {currentDate.getDate()}
+                          </button>
+                        );
+                      }
+                      return days;
+                    })()}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -1491,6 +3337,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     const [outletName, setOutletName] = useState<string>('');
     const [searchTerm, setSearchTerm] = useState('');
     const [filteredTransactions, setFilteredTransactions] = useState<any[]>([]);
+    const [isSearchVisible, setIsSearchVisible] = useState(false);
 
     const formatDate = (date: Date) => {
       return date.toLocaleDateString('en-US', { 
@@ -1505,10 +3352,12 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       const newDate = new Date(selectedDate);
       newDate.setDate(selectedDate.getDate() + (direction === 'next' ? 1 : -1));
       setSelectedDate(newDate);
+      setTimePeriod('today'); // Reset to 'today' when navigating dates
     };
 
     const goToToday = () => {
       setSelectedDate(new Date());
+      setTimePeriod('today'); // Reset to 'today' when going to today
     };
 
     const isToday = (date: Date) => {
@@ -1521,72 +3370,144 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       return date > today;
     };
 
-    useEffect(() => {
-      // Fetch points data for selected date
-      const fetchPointsData = async () => {
-        const selectedStart = new Date(selectedDate);
-        selectedStart.setHours(0, 0, 0, 0);
-        const selectedEnd = new Date(selectedDate);
-        selectedEnd.setHours(23, 59, 59, 999);
+    // Calendar navigation functions
+    const navigateCalendar = (direction: 'prev' | 'next') => {
+      const newDate = new Date(selectedDate);
+      newDate.setMonth(selectedDate.getMonth() + (direction === 'next' ? 1 : -1));
+      requestAnimationFrame(() => {
+      setSelectedDate(newDate);
+      });
+    };
 
-        console.log('🔍 Fetching points data for:', formatDate(selectedDate));
-        
-        const transactionsQuery = query(collection(firestore, `users/${user.uid}/web_transactions`));
-        const customersQuery = query(collection(firestore, `users/${user.uid}/web_customers`));
-        const outletsQuery = query(collection(firestore, `users/${user.uid}/outlets`));
-        
-        // Fetch outlet name for header
-        if (selectedOutlet !== 'all') {
-          const outletsSnapshot = await new Promise<any>((resolve) => {
-            const unsubscribeOutlets = onSnapshot(outletsQuery, (outletSnapshot) => {
-              unsubscribeOutlets();
-              resolve(outletSnapshot);
-            });
-          });
-          
-          const outlet = outletsSnapshot.docs.find((doc: any) => doc.id === selectedOutlet);
-          if (outlet) {
-            const outletData = outlet.data();
-            setOutletName(outletData.name || outletData.outletName || selectedOutlet);
-          } else {
-            setOutletName(selectedOutlet);
-          }
+    // Get date range for current time period
+    const getCurrentDateRange = () => {
+      const now = new Date();
+      let startDate = new Date();
+      let endDate = new Date();
+
+      switch (timePeriod) {
+        case 'today':
+          // Use selectedDate for 'today' mode (can be any specific date)
+          startDate = new Date(selectedDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(selectedDate);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'yesterday':
+          const yesterday = new Date(now);
+          yesterday.setDate(now.getDate() - 1);
+          startDate = new Date(yesterday);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(yesterday);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'this_week':
+          const thisWeekStart = new Date(now);
+          thisWeekStart.setDate(now.getDate() - now.getDay());
+          startDate = new Date(thisWeekStart);
+          startDate.setHours(0, 0, 0, 0);
+          const thisWeekEnd = new Date(thisWeekStart);
+          thisWeekEnd.setDate(thisWeekStart.getDate() + 6);
+          endDate = new Date(thisWeekEnd);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'last_week':
+          const lastWeekStart = new Date(now);
+          lastWeekStart.setDate(now.getDate() - now.getDay() - 7);
+          const lastWeekEnd = new Date(lastWeekStart);
+          lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
+          startDate = new Date(lastWeekStart);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(lastWeekEnd);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'this_month':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'last_month':
+          startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth(), 0);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'custom_range': {
+          const start = customRangeStart ?? selectedDate;
+          const end = customRangeEnd ?? customRangeStart ?? selectedDate;
+          const minDate = start <= end ? start : end;
+          const maxDate = start <= end ? end : start;
+          startDate = new Date(minDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(maxDate);
+          endDate.setHours(23, 59, 59, 999);
+          break;
         }
-        
-        const unsubscribe = onSnapshot(transactionsQuery, async (snapshot) => {
+        default:
+          startDate = new Date(selectedDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(selectedDate);
+          endDate.setHours(23, 59, 59, 999);
+      }
+      
+      return { startDate, endDate };
+    };
+
+    // Check if a date is in the selected range
+    const isDateInSelectedRange = (date: Date) => {
+      const { startDate, endDate } = getCurrentDateRange();
+      const checkDate = new Date(date);
+      checkDate.setHours(12, 0, 0, 0); // Set to noon to avoid timezone issues
+      return checkDate >= startDate && checkDate <= endDate;
+    };
+
+    useEffect(() => {
+      if (!user?.uid) return;
+
+      console.log('🚨 POINTS HISTORY USEEFFECT TRIGGERED');
+      console.log('🔍 Fetching points data for time period:', timePeriod);
+      console.log('📅 Selected date:', selectedDate.toLocaleDateString());
+      console.log('📅 Selected date full:', selectedDate.toString());
+      const { startDate, endDate } = getCurrentDateRange();
+      console.log('📅 Date range:', startDate.toLocaleDateString(), 'to', endDate.toLocaleDateString());
+      console.log('📅 Start date full:', startDate.toString());
+      console.log('📅 End date full:', endDate.toString());
+      
+      setPointsData(prev => ({ ...prev, loading: true }));
+      
+      const transactionsQuery = query(collection(firestore, `users/${user.uid}/web_transactions`));
+      const customersQuery = query(collection(firestore, `users/${user.uid}/web_customers`));
+      
+      // Set up customers listener first
+      const unsubscribeCustomers = onSnapshot(customersQuery, (customersSnapshot) => {
+        // Create a map of customer ID to display name (name or phone)
+        const customerDisplayMap: { [key: string]: string } = {};
+        customersSnapshot.docs.forEach((doc: any) => {
+          const customer = doc.data();
+          const name = customer.name || customer.fullName || customer.firstName;
+          const phone = customer.phoneNumber || customer.phone;
+          
+          // Prioritize name over phone number
+          if (name && name.trim() !== '') {
+            customerDisplayMap[doc.id] = name;
+          } else if (phone) {
+            customerDisplayMap[doc.id] = phone;
+          } else {
+            customerDisplayMap[doc.id] = 'Unknown';
+          }
+        });
+
+        // Now set up transactions listener with customer data
+        const unsubscribeTransactions = onSnapshot(transactionsQuery, (snapshot) => {
           let dayTransactions: any[] = [];
           let totalPoints = 0;
-
-          // Get customers data to match phone numbers
-          const customersSnapshot = await new Promise<any>((resolve) => {
-            const unsubscribeCustomers = onSnapshot(customersQuery, (customerSnapshot) => {
-              unsubscribeCustomers();
-              resolve(customerSnapshot);
-            });
-          });
-
-          // Create a map of customer ID to display name (name or phone)
-          const customerDisplayMap: { [key: string]: string } = {};
-          customersSnapshot.docs.forEach((doc: any) => {
-            const customer = doc.data();
-            const name = customer.name || customer.fullName || customer.firstName;
-            const phone = customer.phoneNumber || customer.phone;
-            
-            // Prioritize name over phone number
-            if (name && name.trim() !== '') {
-              customerDisplayMap[doc.id] = name;
-            } else if (phone) {
-              customerDisplayMap[doc.id] = phone;
-            } else {
-              customerDisplayMap[doc.id] = 'Unknown';
-            }
-          });
 
           snapshot.docs.forEach(doc => {
             const transaction = doc.data();
             const transactionDate = transaction.timestamp?.toDate();
             
-            if (transactionDate && transactionDate >= selectedStart && transactionDate <= selectedEnd) {
+            if (transactionDate && transactionDate >= startDate && transactionDate <= endDate) {
               // Filter by outlet
               const matchesOutlet = selectedOutlet === 'all' || transaction.transactionOutletId === selectedOutlet;
               
@@ -1620,27 +3541,55 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
           });
         });
 
-        return unsubscribe;
-      };
-
-      let unsubscribe: (() => void) | undefined;
-      
-      fetchPointsData().then((unsub) => {
-        unsubscribe = unsub;
+        return unsubscribeTransactions;
       });
 
       return () => {
-        if (unsubscribe) {
-          unsubscribe();
-        }
+        unsubscribeCustomers();
       };
-    }, [selectedDate, selectedOutlet, user.uid]);
+    }, [timePeriod, selectedDate, selectedOutlet, user.uid, customRangeStart, customRangeEnd]);
+
+    // Separate useEffect for outlet name to avoid infinite loops
+    useEffect(() => {
+      if (!user?.uid || selectedOutlet === 'all') {
+        setOutletName('');
+        return;
+      }
+
+      const outletsQuery = query(collection(firestore, `users/${user.uid}/outlets`));
+      const unsubscribeOutlets = onSnapshot(outletsQuery, (outletSnapshot) => {
+        const outlet = outletSnapshot.docs.find((doc: any) => doc.id === selectedOutlet);
+        if (outlet) {
+          const outletData = outlet.data();
+          setOutletName(outletData.name || outletData.outletName || selectedOutlet);
+        } else {
+          setOutletName(selectedOutlet);
+        }
+      });
+
+      return () => unsubscribeOutlets();
+    }, [selectedOutlet, user.uid]);
+
+    // Filter transactions based on search term
+    useEffect(() => {
+      if (!searchTerm.trim()) {
+        setFilteredTransactions(pointsData.transactions);
+      } else {
+        const filtered = pointsData.transactions.filter(transaction =>
+          transaction.customerDisplay?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          transaction.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          transaction.transactionType?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          transaction.customerId?.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        setFilteredTransactions(filtered);
+      }
+    }, [searchTerm, pointsData.transactions]);
 
     return (
       <div style={{
         minHeight: '100vh',
         width: '100%',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'transparent',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         margin: 0,
         padding: 0,
@@ -1665,61 +3614,177 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             maxWidth: '1400px',
             margin: '0 auto'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <button
-                onClick={() => setCurrentPage('dashboard')}
-                style={{
-                  padding: '0.5rem 1rem',
-                  backgroundColor: 'rgba(255,255,255,0.2)',
-                  color: 'white',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}
-              >
-                ← Back to Dashboard
-              </button>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                background: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)',
-                borderRadius: '10px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(255, 107, 107, 0.3)'
-              }}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                </svg>
-              </div>
-                             <div>
-                 <h1 style={{ margin: 0, fontSize: '1.8rem', fontWeight: '700' }}>Points History</h1>
-                 <p style={{ margin: 0, opacity: 0.9, fontSize: '0.9rem' }}>
-                   {selectedOutlet === 'all' ? 'All outlets' : `Outlet: ${outletName || selectedOutlet}`}
-                 </p>
-               </div>
-            </div>
             <button
-              onClick={onLogout}
+              onClick={() => setCurrentPage('dashboard')}
               style={{
-                padding: '0.75rem 1.5rem',
-                backgroundColor: 'rgba(255,255,255,0.2)',
+                padding: '0.75rem 1.25rem',
+                backgroundColor: 'rgba(255,255,255,0.1)',
                 color: 'white',
-                border: '1px solid rgba(255,255,255,0.3)',
+                border: '1px solid rgba(255,255,255,0.2)',
                 borderRadius: '12px',
                 cursor: 'pointer',
+                fontSize: '0.9rem',
                 fontWeight: '500',
-                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                transition: 'all 0.2s ease',
                 backdropFilter: 'blur(10px)'
               }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
             >
-              Sign Out
+              ← Back to Dashboard
             </button>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{ textAlign: 'right' }}>
+                <h1 style={{ 
+                  margin: 0, 
+                  fontSize: '2rem', 
+                  fontWeight: '800',
+                  background: 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text'
+                }}>
+                  Points History
+                </h1>
+                <p style={{ 
+                  margin: '0.25rem 0 0 0', 
+                  opacity: 0.8, 
+                  fontSize: '1rem',
+                  fontWeight: '400'
+                }}>
+                  {selectedOutlet === 'all' ? 'All outlets' : `Outlet: ${outlets.find(outlet => outlet.id === selectedOutlet)?.name || outlets.find(outlet => outlet.id === selectedOutlet)?.outletName || selectedOutlet}`}
+                </p>
+              </div>
+              
+              {/* Search Icon/Bar */}
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                {!isSearchVisible ? (
+                  <button
+                    onClick={() => setIsSearchVisible(true)}
+                    style={{
+                      padding: '0.75rem',
+                      backgroundColor: 'rgba(255,255,255,0.1)',
+                      color: 'white',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '12px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s ease',
+                      backdropFilter: 'blur(10px)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <path d="m21 21-4.35-4.35"></path>
+                    </svg>
+                  </button>
+                ) : (
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      placeholder="Search transactions..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      autoFocus
+                      style={{
+                        width: '300px',
+                        padding: '0.75rem 2.5rem 0.75rem 1rem',
+                        background: 'rgba(255,255,255,0.1)',
+                        color: 'white',
+                        border: '1px solid rgba(255,255,255,0.3)',
+                        borderRadius: '12px',
+                        fontSize: '0.9rem',
+                        outline: 'none',
+                        backdropFilter: 'blur(10px)',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                      }}
+                      onFocus={(e) => {
+                        (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.5)';
+                        (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.15)';
+                      }}
+                      onBlur={(e) => {
+                        (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.3)';
+                        (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.1)';
+                        if (!searchTerm) {
+                          setIsSearchVisible(false);
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        setIsSearchVisible(false);
+                        setSearchTerm('');
+                      }}
+                      style={{
+                        position: 'absolute',
+                        right: '0.5rem',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: 'rgba(255,255,255,0.7)',
+                        cursor: 'pointer',
+                        padding: '0.25rem',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              <button
+                onClick={onLogout}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: 'rgba(255,255,255,0.1)',
+                  color: 'white',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                  backdropFilter: 'blur(10px)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                Sign Out
+              </button>
+            </div>
           </div>
         </header>
 
@@ -1766,17 +3831,93 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 ← Previous Day
               </button>
               
-              <div style={{ textAlign: 'center' }}>
-                <h2 style={{ color: 'white', margin: 0, fontSize: '1.5rem' }}>
-                  {formatDate(selectedDate)}
-                </h2>
-                <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
-                  {isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`}
-                </p>
+                            <div style={{ textAlign: 'center', position: 'relative' }}>
+                <button
+                  onClick={() => setTimeDropdownOpen(!timeDropdownOpen)}
+                  data-time-dropdown="true"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    padding: '0.5rem 1rem',
+                    borderRadius: '12px',
+                    transition: 'all 0.2s',
+                    backgroundColor: timeDropdownOpen ? 'rgba(255,255,255,0.1)' : 'transparent'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!timeDropdownOpen) {
+                      (e.target as HTMLElement).style.backgroundColor = 'rgba(255,255,255,0.05)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!timeDropdownOpen) {
+                      (e.target as HTMLElement).style.backgroundColor = 'transparent';
+                    }
+                  }}
+                >
+                  <h2 style={{ color: 'white', margin: 0, fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
+                    {(() => {
+                      const { startDate, endDate } = getCurrentDateRange();
+                      switch (timePeriod) {
+                        case 'today':
+                          return formatDate(selectedDate);
+                        case 'yesterday':
+                          return formatDate(startDate);
+                        case 'this_week':
+                        case 'last_week':
+                          const shortOpts = { weekday: 'short', month: 'short', day: 'numeric' } as const;
+                          const startStr = startDate.toLocaleDateString('en-US', shortOpts);
+                          const endStr = endDate.toLocaleDateString('en-US', shortOpts);
+                          const sameYear = startDate.getFullYear() === endDate.getFullYear();
+                          const yearSuffix = sameYear ? `, ${endDate.getFullYear()}` : `, ${startDate.getFullYear()} to ${endDate.getFullYear()}`;
+                          return `${startStr} to ${endStr}${yearSuffix}`;
+                        case 'this_month':
+                          return startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                        case 'last_month':
+                          return startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                        case 'custom_range':
+                          const start = customRangeStart ?? startDate;
+                          const end = customRangeEnd ?? endDate;
+                          const s = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                          const e = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                          return `${s} to ${e}`;
+                        default:
+                          return formatDate(selectedDate);
+                      }
+                    })()}
+                    <svg 
+                      width="16" 
+                      height="16" 
+                      viewBox="0 0 24 24" 
+                      fill="currentColor"
+                      style={{ 
+                        transform: timeDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.2s',
+                        opacity: 0.7
+                      }}
+                    >
+                      <path d="M7 10l5 5 5-5z"/>
+                    </svg>
+                  </h2>
+                  <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
+                    {timePeriod === 'today' ? (
+                      isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`
+                    ) : 
+                     timePeriod === 'yesterday' ? 'Yesterday' :
+                     timePeriod === 'this_week' ? 'This Week' :
+                     timePeriod === 'last_week' ? 'Last Week' :
+                     timePeriod === 'this_month' ? 'This Month' :
+                     timePeriod === 'last_month' ? 'Last Month' :
+                     isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`}
+                  </p>
+                </button>
+                
+
               </div>
               
               <div style={{ display: 'flex', gap: '1rem' }}>
-                {!isToday(selectedDate) && (
+                {(!isToday(selectedDate) || timePeriod !== 'today') && (
                   <button
                     onClick={goToToday}
                     style={{
@@ -1889,15 +4030,15 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 }} />
                 <p style={{ color: 'rgba(255,255,255,0.8)', margin: 0 }}>Loading transactions...</p>
               </div>
-            ) : pointsData.transactions.length === 0 ? (
+            ) : filteredTransactions.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '2rem' }}>
                 <p style={{ color: 'rgba(255,255,255,0.8)', margin: 0, fontSize: '1.1rem' }}>
-                  No transactions found for {formatDate(selectedDate)}
+                  {searchTerm.trim() ? `No transactions found matching "${searchTerm}"` : `No transactions found for ${formatDate(selectedDate)}`}
                 </p>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {pointsData.transactions.map((transaction, index) => (
+                {filteredTransactions.map((transaction, index) => (
                   <div 
                     key={transaction.id} 
                     onClick={() => {
@@ -1918,15 +4059,39 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       borderRadius: '12px',
                       border: '1px solid rgba(255,255,255,0.2)',
                       cursor: 'pointer',
-                      transition: 'all 0.3s ease'
+                      transition: 'all 0.3s ease',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none'
                     }}
                     onMouseEnter={(e) => {
-                      (e.target as HTMLElement).closest('div')!.style.background = 'rgba(255,255,255,0.2)';
-                      (e.target as HTMLElement).closest('div')!.style.transform = 'translateY(-2px)';
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const target = e.currentTarget as HTMLElement;
+                      target.style.background = 'rgba(255,255,255,0.2)';
+                      target.style.transform = 'translateY(-2px)';
                     }}
                     onMouseLeave={(e) => {
-                      (e.target as HTMLElement).closest('div')!.style.background = 'rgba(255,255,255,0.1)';
-                      (e.target as HTMLElement).closest('div')!.style.transform = 'translateY(0)';
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const target = e.currentTarget as HTMLElement;
+                      target.style.background = 'rgba(255,255,255,0.1)';
+                      target.style.transform = 'translateY(0)';
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onSelectStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
+                    }}
+                    onDragStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
                     }}
                   >
                     <div style={{
@@ -1934,9 +4099,37 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       justifyContent: 'space-between',
                       alignItems: 'flex-start',
                       flexWrap: 'wrap',
-                      gap: '1rem'
+                      gap: '1rem',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none'
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onSelectStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
                     }}>
-                                             <div style={{ flex: 1 }}>
+                                             <div style={{ 
+                        flex: 1,
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        MozUserSelect: 'none',
+                        msUserSelect: 'none'
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
+                      }}>
                          <h4 style={{ 
                            color: 'white', 
                            margin: '0 0 0.5rem 0', 
@@ -1946,34 +4139,135 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                            WebkitUserSelect: 'none',
                            MozUserSelect: 'none',
                            msUserSelect: 'none'
+                         }}
+                         onMouseDown={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                         }}
+                         onSelectStart={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                           return false;
                          }}>
                            {transaction.customerDisplay}
                          </h4>
-                         <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0 0 0.5rem 0', fontSize: '0.9rem' }}>
+                         <p style={{ 
+                           color: 'rgba(255,255,255,0.8)', 
+                           margin: '0 0 0.5rem 0', 
+                           fontSize: '0.9rem',
+                           userSelect: 'none',
+                           WebkitUserSelect: 'none',
+                           MozUserSelect: 'none',
+                           msUserSelect: 'none'
+                         }}
+                         onMouseDown={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                         }}
+                         onSelectStart={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                           return false;
+                         }}>
                            {transaction.timestamp.toLocaleString()}
                          </p>
-                         <p style={{ color: 'rgba(255,255,255,0.7)', margin: 0, fontSize: '0.8rem' }}>
+                         <p style={{ 
+                           color: 'rgba(255,255,255,0.7)', 
+                           margin: 0, 
+                           fontSize: '0.8rem',
+                           userSelect: 'none',
+                           WebkitUserSelect: 'none',
+                           MozUserSelect: 'none',
+                           msUserSelect: 'none'
+                         }}
+                         onMouseDown={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                         }}
+                         onSelectStart={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                           return false;
+                         }}>
                            {transaction.transactionType} • {transaction.isManualTransaction ? 'Manual' : 'Automatic'}
                          </p>
                          <p style={{ 
                            color: 'rgba(255,255,255,0.6)', 
                            margin: '0.25rem 0 0 0', 
                            fontSize: '0.75rem',
-                           fontStyle: 'italic' 
+                           fontStyle: 'italic',
+                           userSelect: 'none',
+                           WebkitUserSelect: 'none',
+                           MozUserSelect: 'none',
+                           msUserSelect: 'none'
+                         }}
+                         onMouseDown={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                         }}
+                         onSelectStart={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                           return false;
                          }}>
                            Click for full transaction history →
                          </p>
                        </div>
-                      <div style={{ textAlign: 'right' }}>
+                      <div style={{ 
+                        textAlign: 'right',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        MozUserSelect: 'none',
+                        msUserSelect: 'none'
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
+                      }}>
                         <p style={{ 
                           color: transaction.pointsChanged > 0 ? '#4ade80' : '#f87171',
                           margin: 0,
                           fontSize: '1.2rem',
-                          fontWeight: '600'
+                          fontWeight: '600',
+                          userSelect: 'none',
+                          WebkitUserSelect: 'none',
+                          MozUserSelect: 'none',
+                          msUserSelect: 'none'
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onSelectStart={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          return false;
                         }}>
                           {transaction.pointsChanged > 0 ? '+' : ''}{transaction.pointsChanged}
                         </p>
-                        <p style={{ color: 'rgba(255,255,255,0.7)', margin: '0.25rem 0 0 0', fontSize: '0.8rem' }}>
+                        <p style={{ 
+                          color: 'rgba(255,255,255,0.7)', 
+                          margin: '0.25rem 0 0 0', 
+                          fontSize: '0.8rem',
+                          userSelect: 'none',
+                          WebkitUserSelect: 'none',
+                          MozUserSelect: 'none',
+                          msUserSelect: 'none'
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onSelectStart={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          return false;
+                        }}>
                           points
                         </p>
                       </div>
@@ -1984,6 +4278,480 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             )}
           </div>
         </main>
+
+        {/* Time Period Modal - Two Panel Design */}
+        {timeDropdownOpen && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              backdropFilter: 'blur(10px)',
+              zIndex: 999999999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '2rem',
+              willChange: 'auto'
+            }}
+            onClick={(e) => {
+              // Only close if clicking directly on the backdrop, not on child elements
+              if (e.target === e.currentTarget) {
+                console.log('🔒 Modal backdrop clicked - closing time period selector');
+                setTimeDropdownOpen(false);
+              }
+            }}
+          >
+            {/* Modal Content */}
+            <div
+              key="modal-content"
+              data-time-dropdown="true"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'linear-gradient(145deg, rgba(17, 24, 39, 0.95) 0%, rgba(31, 41, 55, 0.95) 50%, rgba(55, 65, 81, 0.95) 100%)',
+                borderRadius: '24px',
+                padding: '0',
+                width: '800px',
+                maxWidth: '90vw',
+                height: '550px',
+                maxHeight: '85vh',
+                boxShadow: '0 30px 60px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                position: 'relative',
+                display: 'flex',
+                overflow: 'hidden',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                willChange: 'auto',
+                transform: 'translateZ(0)'
+              }}
+            >
+              {/* Close Button */}
+              <button
+                onClick={() => setTimeDropdownOpen(false)}
+                style={{
+                  position: 'absolute',
+                  top: '1rem',
+                  right: '1rem',
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '36px',
+                  height: '36px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '1.2rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                  zIndex: 10
+                }}
+                onMouseEnter={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+                }}
+              >
+                ×
+              </button>
+
+              {/* Left Panel - Time Period Options */}
+              <div
+                key="left-panel"
+                style={{
+                  flex: '0 0 300px',
+                  padding: '2rem',
+                  borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+                  background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(147, 51, 234, 0.08) 100%)',
+                  willChange: 'auto'
+                }}
+              >
+                <h3
+                  style={{
+                    color: 'white',
+                    fontSize: '1.2rem',
+                    fontWeight: '600',
+                    marginBottom: '1.5rem',
+                    textAlign: 'left'
+                  }}
+                >
+                  Time Periods
+                </h3>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {[
+                    { value: 'today', label: 'Today' },
+                    { value: 'yesterday', label: 'Yesterday' },
+                    { value: 'this_week', label: 'This Week' },
+                    { value: 'last_week', label: 'Last Week' },
+                    { value: 'this_month', label: 'This Month' },
+                    { value: 'last_month', label: 'Last Month' },
+                    { value: 'custom_range', label: 'Custom Range' }
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('🎯 TIME PERIOD SELECTED:', option.value);
+                        if (option.value === 'custom_range') {
+                          // Start custom range flow: keep modal open and wait for two clicks
+                          setCustomRangeStart(null);
+                          setCustomRangeEnd(null);
+                          setTimePeriod('custom_range');
+                          console.log('🗓️ Custom Range mode: select start and end dates');
+                          return;
+                        }
+
+                        console.log('🔄 Changing timePeriod from:', timePeriod, 'to:', option.value);
+                        setTimePeriod(option.value);
+                        
+
+                        
+                        setTimeDropdownOpen(false);
+                        console.log('✅ Time period updated and modal closed');
+                      }}
+                      style={{
+                        background: timePeriod === option.value 
+                          ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(147, 51, 234, 0.2) 100%)' 
+                          : 'rgba(255, 255, 255, 0.03)',
+                        border: timePeriod === option.value ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid transparent',
+                        borderRadius: '12px',
+                        padding: '1rem 1.5rem',
+                        color: timePeriod === option.value ? '#fff' : 'rgba(255, 255, 255, 0.8)',
+                        cursor: 'pointer',
+                        fontSize: '1rem',
+                        fontWeight: timePeriod === option.value ? '600' : '400',
+                        transition: 'all 0.2s ease',
+                        textAlign: 'left',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        boxShadow: timePeriod === option.value ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (timePeriod !== option.value) {
+                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.08)';
+                          (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (timePeriod !== option.value) {
+                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.03)';
+                          (e.target as HTMLElement).style.borderColor = 'transparent';
+                        }
+                      }}
+                    >
+                      <span>{option.label}</span>
+                      {timePeriod === option.value && (
+                        <span style={{ fontSize: '1rem', color: 'rgba(255, 255, 255, 0.9)' }}>✓</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Right Panel - Calendar */}
+              <div
+                key="right-panel"
+                style={{
+                  flex: 1,
+                  padding: '2rem',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  color: '#fff',
+                  willChange: 'auto'
+                }}
+              >
+                  <h3
+                  style={{
+                    color: '#fff',
+                    fontSize: '1.2rem',
+                    fontWeight: '600',
+                    marginBottom: '1.5rem',
+                    textAlign: 'center'
+                  }}
+                >
+                  {(() => {
+                    const now = new Date();
+                    switch (timePeriod) {
+                      case 'today':
+                        return `${isToday(selectedDate) ? 'Today' : 'Selected Date'} - ${selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+                      case 'yesterday':
+                        const yesterday = new Date(now);
+                        yesterday.setDate(now.getDate() - 1);
+                        return `Yesterday - ${yesterday.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+                      case 'this_week':
+                        const weekStart = new Date(now);
+                        weekStart.setDate(now.getDate() - now.getDay());
+                        const weekEnd = new Date(weekStart);
+                        weekEnd.setDate(weekStart.getDate() + 6);
+                        return `This Week - ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                      case 'last_week':
+                        const lastWeekStart = new Date(now);
+                        lastWeekStart.setDate(now.getDate() - now.getDay() - 7);
+                        const lastWeekEnd = new Date(lastWeekStart);
+                        lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
+                        return `Last Week - ${lastWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${lastWeekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                      case 'this_month':
+                        return `This Month - ${now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+                      case 'last_month':
+                        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                        return `Last Month - ${lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+                      case 'custom_range': {
+                        const start = customRangeStart;
+                        const end = customRangeEnd;
+                        const hasStart = !!start;
+                        const hasEnd = !!end;
+                        const rangeLabel = hasStart && hasEnd
+                          ? `${start!.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${end!.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                          : hasStart
+                            ? `Start: ${start!.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                            : 'Select start date';
+                        return `Custom Range - ${rangeLabel}`;
+                      }
+                      default:
+                        return 'Selected Period';
+                    }
+                  })()}
+                </h3>
+
+                
+
+                 {/* Calendar Preview */}
+                 <div
+                   style={{
+                     display: 'flex',
+                     flexDirection: 'column',
+                     alignItems: 'center',
+                     gap: '1rem',
+                     transition: 'opacity 0.2s ease-in-out',
+                     opacity: 1
+                   }}
+                 >
+                                     {/* Month/Year Navigation */}
+                   <div
+                     style={{
+                       display: 'flex',
+                       alignItems: 'center',
+                       gap: '1rem',
+                       marginBottom: '1rem'
+                     }}
+                   >
+                     <button
+                       onClick={() => navigateCalendar('prev')}
+                       style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '8px',
+                         padding: '0.5rem',
+                         cursor: 'pointer',
+                        color: 'rgba(255, 255, 255, 0.8)',
+                         transition: 'all 0.2s ease'
+                       }}
+                       onMouseEnter={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                       }}
+                       onMouseLeave={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                       }}
+                     >
+                       ←
+                     </button>
+                                         <span style={{ fontSize: '1.1rem', fontWeight: '600', minWidth: '150px', textAlign: 'center', color: '#fff' }}>
+                       {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                     </span>
+                     <button
+                       onClick={() => navigateCalendar('next')}
+                       style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '8px',
+                         padding: '0.5rem',
+                         cursor: 'pointer',
+                        color: 'rgba(255, 255, 255, 0.8)',
+                         transition: 'all 0.2s ease'
+                       }}
+                       onMouseEnter={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                       }}
+                       onMouseLeave={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                       }}
+                     >
+                       →
+                     </button>
+                   </div>
+
+                  {/* Calendar Grid */}
+                  <div
+                    key={`${selectedDate.getMonth()}-${selectedDate.getFullYear()}`}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(7, 1fr)',
+                      gap: '0.5rem',
+                      width: '100%',
+                      maxWidth: '350px',
+                      minHeight: '300px',
+                      opacity: 1,
+                      animation: 'fadeIn 0.15s ease-out'
+                    }}
+                  >
+                    {/* Day Headers */}
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                      <div
+                        key={day}
+                        style={{
+                          padding: '0.5rem',
+                          textAlign: 'center',
+                          fontSize: '0.8rem',
+                          fontWeight: '600',
+                          color: 'rgba(255, 255, 255, 0.5)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
+                        }}
+                      >
+                        {day}
+                      </div>
+                    ))}
+
+                                         {/* Calendar Days */}
+                     {(() => {
+                       const year = selectedDate.getFullYear();
+                       const month = selectedDate.getMonth();
+                       const firstDay = new Date(year, month, 1);
+                       const lastDay = new Date(year, month + 1, 0);
+                       const startingDayOfWeek = firstDay.getDay();
+                       const daysInMonth = lastDay.getDate();
+                       const today = new Date();
+                       
+                       console.log('🗓️ Rendering calendar for:', year, month + 1, 'with', daysInMonth, 'days');
+                       
+                       const days = [];
+                       
+                       // Empty cells for days before the first day of the month
+                       for (let i = 0; i < startingDayOfWeek; i++) {
+                         days.push(
+                           <div key={`empty-${i}`} style={{ padding: '0.75rem' }}></div>
+                         );
+                       }
+                       
+                       // Days of the month
+                       for (let day = 1; day <= daysInMonth; day++) {
+                         const currentDate = new Date(year, month, day);
+                         const isToday = currentDate.toDateString() === today.toDateString();
+                         const isInSelectedRange = isDateInSelectedRange(currentDate);
+                         const isFutureDate = currentDate > today;
+                         
+                         days.push(
+                           <button
+                              key={day}
+                              onClick={((selectedDay) => (e) => {
+                               console.log('🔥 CALENDAR BUTTON CLICKED!', selectedDay.getDate(), 'isFutureDate:', selectedDay > today);
+                               e.preventDefault();
+                               e.stopPropagation();
+                               e.nativeEvent.stopImmediatePropagation();
+                                if (selectedDay <= today) {
+                                  const clicked = new Date(selectedDay);
+                                  console.log('📅 Date selected from calendar:', clicked.toLocaleDateString());
+
+                                  if (timePeriod === 'custom_range') {
+                                    // First click sets start, second sets end then close
+                                    if (!customRangeStart) {
+                                      setCustomRangeStart(clicked);
+                                      console.log('🔹 Set customRangeStart:', clicked.toDateString());
+                                      return;
+                                    }
+                                    if (!customRangeEnd) {
+                                      setCustomRangeEnd(clicked);
+                                      console.log('🔸 Set customRangeEnd:', clicked.toDateString());
+                                      // Close after selecting end
+                                      setTimeDropdownOpen(false);
+                                      return;
+                                    }
+                                  }
+
+                                  // Single day selection flow
+                                  console.log('🔥 POINTS HISTORY CALENDAR DATE CLICKED:', clicked.toDateString());
+                                  console.log('🔥 IS TODAY?', clicked.toDateString() === new Date().toDateString());
+                                  flushSync(() => {
+                                    setSelectedDate(clicked);
+                                    // Only set timePeriod to 'today' if the selected date is actually today
+                                    if (clicked.toDateString() === new Date().toDateString()) {
+                                      console.log('🔥 POINTS HISTORY SETTING TIMEPERIOD TO TODAY');
+                                      setTimePeriod('today');
+                                    } else {
+                                      console.log('🔥 POINTS HISTORY NOT TODAY - KEEPING CURRENT TIMEPERIOD');
+                                    }
+                                    setTimeDropdownOpen(false);
+                                  });
+                                  console.log('✅ Single day selected:', clicked.toLocaleDateString());
+                                } else {
+                                console.log('❌ Future date clicked, ignoring');
+                              }
+                             })(currentDate)}
+                             disabled={isFutureDate}
+                             style={{
+                               padding: '0.75rem',
+                               textAlign: 'center',
+                               borderRadius: '8px',
+                               cursor: isFutureDate ? 'not-allowed' : 'pointer',
+                               border: isInSelectedRange 
+                                 ? '1px solid rgba(59, 130, 246, 0.5)' 
+                                 : '1px solid transparent',
+                               background: isInSelectedRange 
+                                 ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.3) 0%, rgba(147, 51, 234, 0.3) 100%)' 
+                                 : isToday 
+                                   ? 'rgba(59, 130, 246, 0.15)' 
+                                   : isFutureDate 
+                                     ? 'rgba(255, 255, 255, 0.02)' 
+                                     : 'rgba(255, 255, 255, 0.03)',
+                               color: isInSelectedRange 
+                                 ? '#fff' 
+                                 : isToday 
+                                   ? 'rgba(59, 130, 246, 1)' 
+                                   : isFutureDate 
+                                     ? 'rgba(255, 255, 255, 0.3)' 
+                                     : 'rgba(255, 255, 255, 0.8)',
+                               fontWeight: isToday ? '600' : isInSelectedRange ? '500' : '400',
+                               transition: 'all 0.2s ease',
+                               opacity: isFutureDate ? 0.5 : 1,
+                               boxShadow: isInSelectedRange ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none'
+                             }}
+                             onMouseEnter={(e) => {
+                               if (!isFutureDate && !isInSelectedRange) {
+                                 (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+                                 (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                               }
+                             }}
+                             onMouseLeave={(e) => {
+                               if (!isFutureDate && !isInSelectedRange) {
+                                 (e.target as HTMLElement).style.backgroundColor = isToday ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.03)';
+                                 (e.target as HTMLElement).style.borderColor = 'transparent';
+                               }
+                             }}
+                           >
+                             {day}
+                           </button>
+                         );
+                       }
+                       
+                       return days;
+                     })()}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -2000,6 +4768,16 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       loading: true
     });
 
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filteredCustomers, setFilteredCustomers] = useState<any[]>([]);
+    const [isSearchVisible, setIsSearchVisible] = useState(false);
+    
+    // Date picker states
+    const [timePeriod, setTimePeriod] = useState('today');
+    const [timeDropdownOpen, setTimeDropdownOpen] = useState(false);
+    const [customRangeStart, setCustomRangeStart] = useState<Date | null>(null);
+    const [customRangeEnd, setCustomRangeEnd] = useState<Date | null>(null);
+
     const formatDate = (date: Date) => {
       return date.toLocaleDateString('en-US', { 
         weekday: 'long', 
@@ -2013,10 +4791,12 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       const newDate = new Date(selectedDate);
       newDate.setDate(selectedDate.getDate() + (direction === 'next' ? 1 : -1));
       setSelectedDate(newDate);
+      setTimePeriod('today'); // Reset to 'today' when navigating dates
     };
 
     const goToToday = () => {
       setSelectedDate(new Date());
+      setTimePeriod('today'); // Reset to 'today' when going to today
     };
 
     const isToday = (date: Date) => {
@@ -2029,15 +4809,115 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       return date > today;
     };
 
-    useEffect(() => {
-      // Fetch check-ins data for selected date
-      const fetchCheckinsData = () => {
-        const selectedStart = new Date(selectedDate);
-        selectedStart.setHours(0, 0, 0, 0);
-        const selectedEnd = new Date(selectedDate);
-        selectedEnd.setHours(23, 59, 59, 999);
+    // Get date range for current time period
+    const getCurrentDateRange = () => {
+      const now = new Date();
+      let startDate = new Date();
+      let endDate = new Date();
 
-        console.log('🔍 Fetching check-ins data for:', formatDate(selectedDate));
+      switch (timePeriod) {
+        case 'today':
+          // Use selectedDate for 'today' mode (can be any specific date)
+          startDate = new Date(selectedDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(selectedDate);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'yesterday':
+          const yesterday = new Date(now);
+          yesterday.setDate(now.getDate() - 1);
+          startDate = new Date(yesterday);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(yesterday);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'this_week':
+          const thisWeekStart = new Date(now);
+          thisWeekStart.setDate(now.getDate() - now.getDay());
+          startDate = new Date(thisWeekStart);
+          startDate.setHours(0, 0, 0, 0);
+          const thisWeekEnd = new Date(thisWeekStart);
+          thisWeekEnd.setDate(thisWeekStart.getDate() + 6);
+          endDate = new Date(thisWeekEnd);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'last_week':
+          const lastWeekStart = new Date(now);
+          lastWeekStart.setDate(now.getDate() - now.getDay() - 7);
+          const lastWeekEnd = new Date(lastWeekStart);
+          lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
+          startDate = new Date(lastWeekStart);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(lastWeekEnd);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'this_month':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'last_month':
+          startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now.getFullYear(), now.getMonth(), 0);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'custom_range': {
+          const start = customRangeStart ?? selectedDate;
+          const end = customRangeEnd ?? customRangeStart ?? selectedDate;
+          const minDate = start <= end ? start : end;
+          const maxDate = start <= end ? end : start;
+          startDate = new Date(minDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(maxDate);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        }
+        default:
+          // Default to today
+          startDate = new Date(selectedDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(selectedDate);
+          endDate.setHours(23, 59, 59, 999);
+      }
+
+      return { startDate, endDate };
+    };
+
+    // Check if a date is in the selected range
+    const isDateInSelectedRange = (date: Date) => {
+      const { startDate, endDate } = getCurrentDateRange();
+      const checkDate = new Date(date);
+      checkDate.setHours(12, 0, 0, 0); // Set to noon to avoid timezone issues
+      return checkDate >= startDate && checkDate <= endDate;
+    };
+
+    // Calendar navigation function
+    const navigateCalendar = (direction: 'prev' | 'next') => {
+      const newDate = new Date(selectedDate);
+      newDate.setMonth(selectedDate.getMonth() + (direction === 'next' ? 1 : -1));
+      requestAnimationFrame(() => {
+        setSelectedDate(newDate);
+      });
+    };
+
+    useEffect(() => {
+      if (!user?.uid) return;
+
+      console.log('🚨 CHECK-INS USEEFFECT TRIGGERED');
+      console.log('🔍 Fetching check-ins data for time period:', timePeriod);
+      console.log('📅 Selected date:', selectedDate.toLocaleDateString());
+      console.log('📅 Selected date full:', selectedDate.toString());
+      const { startDate, endDate } = getCurrentDateRange();
+      console.log('📅 Date range:', startDate.toLocaleDateString(), 'to', endDate.toLocaleDateString());
+      console.log('📅 Start date full:', startDate.toString());
+      console.log('📅 End date full:', endDate.toString());
+      
+      setCheckinsData(prev => ({ ...prev, loading: true }));
+
+      // Fetch check-ins data for selected date range
+      const fetchCheckinsData = () => {
         
         const visitsQuery = query(collection(firestore, `users/${user.uid}/web_visits`));
         const outletsQuery = query(collection(firestore, `users/${user.uid}/outlets`));
@@ -2077,39 +4957,34 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             customerInfoMap[doc.id] = customer;
           });
 
-          const uniqueCustomers = new Set<string>();
-
           visitsSnapshot.docs.forEach(doc => {
             const visit = doc.data();
             const visitDate = visit.timestamp?.toDate() || visit.createdAt?.toDate();
             
-            if (visitDate && visitDate >= selectedStart && visitDate <= selectedEnd) {
+            if (visitDate && visitDate >= startDate && visitDate <= endDate) {
               // Filter by outlet
               const matchesOutlet = selectedOutlet === 'all' || visit.outletId === selectedOutlet;
               
               if (matchesOutlet) {
                 const customerId = visit.customerId;
                 
-                // Only count unique customers per day
-                if (!uniqueCustomers.has(customerId)) {
-                  uniqueCustomers.add(customerId);
-                  totalCheckins++;
-                  
-                  const customerInfo = customerInfoMap[customerId];
-                  const name = customerInfo?.name || customerInfo?.fullName || customerInfo?.firstName;
-                  const phone = customerInfo?.phoneNumber || customerInfo?.phone;
-                  const outletName = outletNameMap[visit.outletId] || 'Unknown Outlet';
-                  
-                  dayCheckins.push({
-                    id: doc.id,
-                    customerId,
-                    visitDate,
-                    displayName: name && name.trim() !== '' ? name : (phone || 'Unknown Customer'),
-                    outletDisplayName: outletName,
-                    customerInfo,
-                    ...visit
-                  });
-                }
+                // Count ALL visits, including multiple visits by same customer at different outlets
+                totalCheckins++;
+                
+                const customerInfo = customerInfoMap[customerId];
+                const name = customerInfo?.name || customerInfo?.fullName || customerInfo?.firstName;
+                const phone = customerInfo?.phoneNumber || customerInfo?.phone;
+                const outletName = outletNameMap[visit.outletId] || 'Unknown Outlet';
+                
+                dayCheckins.push({
+                  id: doc.id,
+                  customerId,
+                  visitDate,
+                  displayName: name && name.trim() !== '' ? name : (phone || 'Unknown Customer'),
+                  outletDisplayName: outletName,
+                  customerInfo,
+                  ...visit
+                });
               }
             }
           });
@@ -2129,13 +5004,27 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
       const unsubscribe = fetchCheckinsData();
       return unsubscribe;
-    }, [selectedDate, selectedOutlet, user.uid]);
+    }, [timePeriod, selectedDate, selectedOutlet, user.uid, customRangeStart, customRangeEnd]);
+
+    // Filter customers based on search term
+    useEffect(() => {
+      if (!searchTerm.trim()) {
+        setFilteredCustomers(checkinsData.customers);
+      } else {
+        const filtered = checkinsData.customers.filter(customer =>
+          customer.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          customer.outletDisplayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          customer.customerId?.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        setFilteredCustomers(filtered);
+      }
+    }, [searchTerm, checkinsData.customers]);
 
     return (
       <div style={{
         minHeight: '100vh',
         width: '100%',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'transparent',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         margin: 0,
         padding: 0,
@@ -2160,59 +5049,177 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             maxWidth: '1400px',
             margin: '0 auto'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <button
-                onClick={() => setCurrentPage('dashboard')}
-                style={{
-                  padding: '0.5rem 1rem',
-                  backgroundColor: 'rgba(255,255,255,0.2)',
-                  color: 'white',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}
-              >
-                ← Back to Dashboard
-              </button>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                borderRadius: '10px',
+            <button
+              onClick={() => setCurrentPage('dashboard')}
+              style={{
+                padding: '0.75rem 1.25rem',
+                backgroundColor: 'rgba(255,255,255,0.1)',
+                color: 'white',
+                border: '1px solid rgba(255,255,255,0.2)',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: '500',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)'
-              }}>
-                <AnalyticsIcon />
-              </div>
-              <div>
-                <h1 style={{ margin: 0, fontSize: '1.8rem', fontWeight: '700' }}>Check-ins Today</h1>
-                <p style={{ margin: 0, opacity: 0.9, fontSize: '0.9rem' }}>
+                gap: '0.5rem',
+                transition: 'all 0.2s ease',
+                backdropFilter: 'blur(10px)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              ← Back to Dashboard
+            </button>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{ textAlign: 'right' }}>
+                <h1 style={{ 
+                  margin: 0, 
+                  fontSize: '2rem', 
+                  fontWeight: '800',
+                  background: 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text'
+                }}>
+                  Check-ins Today
+                </h1>
+                <p style={{ 
+                  margin: '0.25rem 0 0 0', 
+                  opacity: 0.8, 
+                  fontSize: '1rem',
+                  fontWeight: '400'
+                }}>
                   {selectedOutlet === 'all' ? 'All outlets' : `Outlet: ${outlets.find(outlet => outlet.id === selectedOutlet)?.name || outlets.find(outlet => outlet.id === selectedOutlet)?.outletName || selectedOutlet}`}
                 </p>
               </div>
+              
+              {/* Search Icon/Bar */}
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                {!isSearchVisible ? (
+                  <button
+                    onClick={() => setIsSearchVisible(true)}
+                    style={{
+                      padding: '0.75rem',
+                      backgroundColor: 'rgba(255,255,255,0.1)',
+                      color: 'white',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '12px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s ease',
+                      backdropFilter: 'blur(10px)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <path d="m21 21-4.35-4.35"></path>
+                    </svg>
+                  </button>
+                ) : (
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      placeholder="Search check-ins..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      autoFocus
+                      style={{
+                        width: '300px',
+                        padding: '0.75rem 2.5rem 0.75rem 1rem',
+                        background: 'rgba(255,255,255,0.1)',
+                        color: 'white',
+                        border: '1px solid rgba(255,255,255,0.3)',
+                        borderRadius: '12px',
+                        fontSize: '0.9rem',
+                        outline: 'none',
+                        backdropFilter: 'blur(10px)',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                      }}
+                      onFocus={(e) => {
+                        (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.5)';
+                        (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.15)';
+                      }}
+                      onBlur={(e) => {
+                        (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.3)';
+                        (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.1)';
+                        if (!searchTerm) {
+                          setIsSearchVisible(false);
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        setIsSearchVisible(false);
+                        setSearchTerm('');
+                      }}
+                      style={{
+                        position: 'absolute',
+                        right: '0.5rem',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: 'rgba(255,255,255,0.7)',
+                        cursor: 'pointer',
+                        padding: '0.25rem',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              <button
+                onClick={onLogout}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: 'rgba(255,255,255,0.1)',
+                  color: 'white',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease',
+                  backdropFilter: 'blur(10px)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                Sign Out
+              </button>
             </div>
-            <button
-              onClick={onLogout}
-              style={{
-                padding: '0.75rem 1.5rem',
-                backgroundColor: 'rgba(255,255,255,0.2)',
-                color: 'white',
-                border: '1px solid rgba(255,255,255,0.3)',
-                borderRadius: '12px',
-                cursor: 'pointer',
-                fontWeight: '500',
-                transition: 'all 0.2s',
-                backdropFilter: 'blur(10px)'
-              }}
-            >
-              Sign Out
-            </button>
           </div>
         </header>
 
@@ -2259,17 +5266,82 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 ← Previous Day
               </button>
               
-              <div style={{ textAlign: 'center' }}>
+              <button
+                onClick={() => setTimeDropdownOpen(true)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'white',
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                  padding: '0.5rem',
+                  borderRadius: '8px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.target as HTMLElement).style.background = 'transparent';
+                }}
+              >
                 <h2 style={{ color: 'white', margin: 0, fontSize: '1.5rem' }}>
-                  {formatDate(selectedDate)}
+                  {(() => {
+                    const { startDate, endDate } = getCurrentDateRange();
+                    switch (timePeriod) {
+                      case 'today':
+                        return formatDate(selectedDate);
+                      case 'yesterday':
+                        return formatDate(startDate);
+                      case 'this_week':
+                      case 'last_week':
+                        const shortOpts = { weekday: 'short', month: 'short', day: 'numeric' } as const;
+                        const startStr = startDate.toLocaleDateString('en-US', shortOpts);
+                        const endStr = endDate.toLocaleDateString('en-US', shortOpts);
+                        const sameYear = startDate.getFullYear() === endDate.getFullYear();
+                        const yearSuffix = sameYear ? `, ${endDate.getFullYear()}` : `, ${startDate.getFullYear()} to ${endDate.getFullYear()}`;
+                        return `${startStr} to ${endStr}${yearSuffix}`;
+                      case 'this_month':
+                        return startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                      case 'last_month':
+                        return startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                      case 'custom_range':
+                        const start = customRangeStart ?? startDate;
+                        const end = customRangeEnd ?? endDate;
+                        const s = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                        const e = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                        return `${s} to ${e}`;
+                      default:
+                        return formatDate(selectedDate);
+                    }
+                  })()}
                 </h2>
                 <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
-                  {isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`}
+                  {(() => {
+                    switch (timePeriod) {
+                      case 'today':
+                        return isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`;
+                      case 'yesterday':
+                        return 'Yesterday';
+                      case 'this_week':
+                        return 'This Week';
+                      case 'last_week':
+                        return 'Last Week';
+                      case 'this_month':
+                        return 'This Month';
+                      case 'last_month':
+                        return 'Last Month';
+                      case 'custom_range':
+                        return 'Custom Range';
+                      default:
+                        return isToday(selectedDate) ? 'Today' : `${Math.abs(Math.floor((new Date().getTime() - selectedDate.getTime()) / (1000 * 60 * 60 * 24)))} days ago`;
+                    }
+                  })()}
                 </p>
-              </div>
+              </button>
               
               <div style={{ display: 'flex', gap: '1rem' }}>
-                {!isToday(selectedDate) && (
+                {(!isToday(selectedDate) || timePeriod !== 'today') && (
                   <button
                     onClick={goToToday}
                     style={{
@@ -2399,17 +5471,17 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 }}>
                   Loading check-ins...
                 </div>
-              ) : checkinsData.customers.length === 0 ? (
+              ) : filteredCustomers.length === 0 ? (
                 <div style={{ 
                   padding: '3rem', 
                   textAlign: 'center', 
                   color: 'rgba(255,255,255,0.7)' 
                 }}>
-                  No check-ins found for {formatDate(selectedDate)}
+                  {searchTerm.trim() ? `No check-ins found matching "${searchTerm}"` : `No check-ins found for ${formatDate(selectedDate)}`}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '2rem' }}>
-                  {checkinsData.customers.map((customer, index) => (
+                  {filteredCustomers.map((customer, index) => (
                     <div
                       key={customer.id}
                       style={{
@@ -2440,67 +5512,554 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         setCurrentPage('customers');
                       }}
                       onMouseEnter={(e) => {
-                        (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.2)';
-                        (e.target as HTMLElement).style.transform = 'translateY(-2px)';
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const target = e.currentTarget as HTMLElement;
+                        target.style.background = 'rgba(255,255,255,0.2)';
+                        target.style.transform = 'translateY(-2px)';
                       }}
                       onMouseLeave={(e) => {
-                        (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.1)';
-                        (e.target as HTMLElement).style.transform = 'translateY(0)';
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const target = e.currentTarget as HTMLElement;
+                        target.style.background = 'rgba(255,255,255,0.1)';
+                        target.style.transform = 'translateY(0)';
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
                       }}
                     >
-                    <div>
-                      <p style={{ 
-                        color: 'white', 
-                        margin: 0, 
-                        fontSize: '1.1rem', 
-                        fontWeight: '600'
-                      }}>
-                        {customer.displayName}
-                      </p>
-                      <p style={{ 
-                        color: 'rgba(255,255,255,0.7)', 
-                        margin: '0.25rem 0 0 0', 
-                        fontSize: '0.9rem' 
-                      }}>
-                        {customer.visitDate.toLocaleDateString()} at {customer.visitDate.toLocaleTimeString()} • Outlet: {customer.outletDisplayName}
-                      </p>
-                      {customer.customerInfo?.phoneNumber && (
+                      <div>
                         <p style={{ 
-                          color: 'rgba(255,255,255,0.6)', 
-                          margin: '0.25rem 0 0 0', 
-                          fontSize: '0.8rem' 
+                          color: 'white', 
+                          margin: 0, 
+                          fontSize: '1.1rem', 
+                          fontWeight: '600'
                         }}>
-                          Phone: {customer.customerInfo.phoneNumber}
+                          {customer.displayName}
                         </p>
-                      )}
-                      <p style={{ 
-                        color: 'rgba(255,255,255,0.5)', 
-                        margin: '0.25rem 0 0 0', 
-                        fontSize: '0.75rem',
-                        fontStyle: 'italic' 
+                        <p style={{ 
+                          color: 'rgba(255,255,255,0.7)', 
+                          margin: '0.25rem 0 0 0', 
+                          fontSize: '0.9rem' 
+                        }}>
+                          {customer.visitDate.toLocaleDateString()} at {customer.visitDate.toLocaleTimeString()} • Outlet: {customer.outletDisplayName}
+                        </p>
+                        {customer.customerInfo?.phoneNumber && (
+                          <p style={{ 
+                            color: 'rgba(255,255,255,0.6)', 
+                            margin: '0.25rem 0 0 0', 
+                            fontSize: '0.8rem' 
+                          }}>
+                            Phone: {customer.customerInfo.phoneNumber}
+                          </p>
+                        )}
+                        <p style={{ 
+                          color: 'rgba(255,255,255,0.5)', 
+                          margin: '0.25rem 0 0 0', 
+                          fontSize: '0.75rem',
+                          fontStyle: 'italic' 
+                        }}>
+                          Click for transaction history →
+                        </p>
+                      </div>
+                      <div style={{
+                        padding: '0.5rem 1rem',
+                        backgroundColor: 'rgba(102, 126, 234, 0.2)',
+                        color: 'white',
+                        borderRadius: '20px',
+                        fontSize: '0.8rem',
+                        fontWeight: '500',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
                       }}>
-                        Click for transaction history →
-                      </p>
+                        CHECK-IN
+                      </div>
                     </div>
-                    <div style={{
-                      padding: '0.5rem 1rem',
-                      backgroundColor: 'rgba(102, 126, 234, 0.2)',
-                      color: 'white',
-                      borderRadius: '20px',
-                      fontSize: '0.8rem',
-                      fontWeight: '500',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.5px'
-                    }}>
-                      CHECK-IN
-                    </div>
-                  </div>
                   ))}
                 </div>
               )}
             </div>
           </div>
         </main>
+
+        {/* Time Period Modal - Two Panel Design */}
+        {timeDropdownOpen && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              backdropFilter: 'blur(10px)',
+              zIndex: 999999999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '2rem',
+              willChange: 'auto'
+            }}
+            onClick={(e) => {
+              // Only close if clicking directly on the backdrop, not on child elements
+              if (e.target === e.currentTarget) {
+                console.log('🔒 Modal backdrop clicked - closing time period selector');
+                setTimeDropdownOpen(false);
+              }
+            }}
+          >
+            {/* Modal Content */}
+            <div
+              key="modal-content"
+              data-time-dropdown="true"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'linear-gradient(145deg, rgba(17, 24, 39, 0.95) 0%, rgba(31, 41, 55, 0.95) 50%, rgba(55, 65, 81, 0.95) 100%)',
+                borderRadius: '24px',
+                padding: '0',
+                width: '800px',
+                maxWidth: '90vw',
+                height: '550px',
+                maxHeight: '85vh',
+                boxShadow: '0 30px 60px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                position: 'relative',
+                display: 'flex',
+                overflow: 'hidden',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                willChange: 'auto',
+                transform: 'translateZ(0)'
+              }}
+            >
+              {/* Close Button */}
+              <button
+                onClick={() => setTimeDropdownOpen(false)}
+                style={{
+                  position: 'absolute',
+                  top: '1rem',
+                  right: '1rem',
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '36px',
+                  height: '36px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '1.2rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                  zIndex: 10
+                }}
+                onMouseEnter={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+                }}
+              >
+                ×
+              </button>
+
+              {/* Left Panel - Time Period Options */}
+              <div
+                key="left-panel"
+                style={{
+                  flex: '0 0 300px',
+                  padding: '2rem',
+                  borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+                  background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(147, 51, 234, 0.08) 100%)',
+                  willChange: 'auto'
+                }}
+              >
+                <h3
+                  style={{
+                    color: 'white',
+                    fontSize: '1.2rem',
+                    fontWeight: '600',
+                    marginBottom: '1.5rem',
+                    textAlign: 'left'
+                  }}
+                >
+                  Time Periods
+                </h3>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {[
+                    { value: 'today', label: 'Today' },
+                    { value: 'yesterday', label: 'Yesterday' },
+                    { value: 'this_week', label: 'This Week' },
+                    { value: 'last_week', label: 'Last Week' },
+                    { value: 'this_month', label: 'This Month' },
+                    { value: 'last_month', label: 'Last Month' },
+                    { value: 'custom_range', label: 'Custom Range' }
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('🎯 TIME PERIOD SELECTED:', option.value);
+                        if (option.value === 'custom_range') {
+                          // Start custom range flow: keep modal open and wait for two clicks
+                          setCustomRangeStart(null);
+                          setCustomRangeEnd(null);
+                          setTimePeriod('custom_range');
+                          console.log('🗓️ Custom Range mode: select start and end dates');
+                          return;
+                        }
+
+                        console.log('🔄 Changing timePeriod from:', timePeriod, 'to:', option.value);
+                        setTimePeriod(option.value);
+                        
+
+                        
+                        setTimeDropdownOpen(false);
+                        console.log('✅ Time period updated and modal closed');
+                      }}
+                      style={{
+                        background: timePeriod === option.value 
+                          ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(147, 51, 234, 0.2) 100%)' 
+                          : 'rgba(255, 255, 255, 0.03)',
+                        border: timePeriod === option.value ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid transparent',
+                        borderRadius: '12px',
+                        padding: '1rem 1.5rem',
+                        color: timePeriod === option.value ? '#fff' : 'rgba(255, 255, 255, 0.8)',
+                        cursor: 'pointer',
+                        fontSize: '1rem',
+                        fontWeight: timePeriod === option.value ? '600' : '400',
+                        transition: 'all 0.2s ease',
+                        textAlign: 'left',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        boxShadow: timePeriod === option.value ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (timePeriod !== option.value) {
+                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.08)';
+                          (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (timePeriod !== option.value) {
+                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.03)';
+                          (e.target as HTMLElement).style.borderColor = 'transparent';
+                        }
+                      }}
+                    >
+                      <span>{option.label}</span>
+                      {timePeriod === option.value && (
+                        <span style={{ fontSize: '1rem', color: 'rgba(255, 255, 255, 0.9)' }}>✓</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Right Panel - Calendar */}
+              <div
+                key="right-panel"
+                style={{
+                  flex: 1,
+                  padding: '2rem',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  color: '#fff',
+                  willChange: 'auto'
+                }}
+              >
+                <h3
+                  style={{
+                    color: '#fff',
+                    fontSize: '1.2rem',
+                    fontWeight: '600',
+                    marginBottom: '1.5rem',
+                    textAlign: 'center'
+                  }}
+                >
+                  {(() => {
+                    const now = new Date();
+                    switch (timePeriod) {
+                      case 'today':
+                        return `${isToday(selectedDate) ? 'Today' : 'Selected Date'} - ${selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+                      case 'yesterday':
+                        const yesterday = new Date(now);
+                        yesterday.setDate(now.getDate() - 1);
+                        return `Yesterday - ${yesterday.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+                      case 'this_week':
+                        const weekStart = new Date(now);
+                        weekStart.setDate(now.getDate() - now.getDay());
+                        const weekEnd = new Date(weekStart);
+                        weekEnd.setDate(weekStart.getDate() + 6);
+                        return `This Week - ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                      case 'last_week':
+                        const lastWeekStart = new Date(now);
+                        lastWeekStart.setDate(now.getDate() - now.getDay() - 7);
+                        const lastWeekEnd = new Date(lastWeekStart);
+                        lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
+                        return `Last Week - ${lastWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${lastWeekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                      case 'this_month':
+                        return `This Month - ${now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+                      case 'last_month':
+                        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                        return `Last Month - ${lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+                      case 'custom_range': {
+                        const start = customRangeStart;
+                        const end = customRangeEnd;
+                        const hasStart = !!start;
+                        const hasEnd = !!end;
+                        const rangeLabel = hasStart && hasEnd
+                          ? `${start!.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${end!.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                          : hasStart
+                            ? `Start: ${start!.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                            : 'Select start date';
+                        return `Custom Range - ${rangeLabel}`;
+                      }
+                      default:
+                        return 'Selected Period';
+                    }
+                  })()}
+                </h3>
+
+                {/* Calendar Preview */}
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    transition: 'opacity 0.2s ease-in-out',
+                    opacity: 1
+                  }}
+                >
+                  {/* Month/Year Navigation */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '1rem',
+                      marginBottom: '1rem'
+                    }}
+                  >
+                    <button
+                      onClick={() => navigateCalendar('prev')}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '8px',
+                        padding: '0.5rem',
+                        cursor: 'pointer',
+                        color: 'rgba(255, 255, 255, 0.8)',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                      }}
+                    >
+                      ←
+                    </button>
+                    <span style={{ fontSize: '1.1rem', fontWeight: '600', minWidth: '150px', textAlign: 'center', color: '#fff' }}>
+                      {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    </span>
+                    <button
+                      onClick={() => navigateCalendar('next')}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '8px',
+                        padding: '0.5rem',
+                        cursor: 'pointer',
+                        color: 'rgba(255, 255, 255, 0.8)',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                        (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                      }}
+                    >
+                      →
+                    </button>
+                  </div>
+
+                  {/* Calendar Grid */}
+                  <div
+                    key={`${selectedDate.getMonth()}-${selectedDate.getFullYear()}`}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(7, 1fr)',
+                      gap: '0.5rem',
+                      width: '100%',
+                      maxWidth: '350px',
+                      minHeight: '300px',
+                      opacity: 1,
+                      animation: 'fadeIn 0.15s ease-out'
+                    }}
+                  >
+                    {/* Day Headers */}
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                      <div
+                        key={day}
+                        style={{
+                        padding: '0.5rem',
+                        textAlign: 'center',
+                        fontSize: '0.8rem',
+                          fontWeight: '600',
+                          color: 'rgba(255, 255, 255, 0.5)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
+                        }}
+                      >
+                        {day}
+                      </div>
+                    ))}
+                    
+                    {/* Calendar Days */}
+                    {(() => {
+                      const year = selectedDate.getFullYear();
+                      const month = selectedDate.getMonth();
+                      const firstDay = new Date(year, month, 1);
+                      const lastDay = new Date(year, month + 1, 0);
+                      const startingDayOfWeek = firstDay.getDay();
+                      const daysInMonth = lastDay.getDate();
+                      const today = new Date();
+                      
+                      console.log('🗓️ Rendering calendar for:', year, month + 1, 'with', daysInMonth, 'days');
+                      
+                      const days = [];
+                      
+                      // Empty cells for days before the first day of the month
+                      for (let i = 0; i < startingDayOfWeek; i++) {
+                        days.push(
+                          <div key={`empty-${i}`} style={{ padding: '0.75rem' }}></div>
+                        );
+                      }
+                      
+                      // Days of the month
+                      for (let day = 1; day <= daysInMonth; day++) {
+                        const currentDate = new Date(year, month, day);
+                        const isToday = currentDate.toDateString() === today.toDateString();
+                        const isInSelectedRange = isDateInSelectedRange(currentDate);
+                        const isFutureDate = currentDate > today;
+                        
+                        days.push(
+                          <button
+                             key={day}
+                             onClick={((selectedDay) => (e) => {
+                              console.log('🔥 CALENDAR BUTTON CLICKED!', selectedDay.getDate(), 'isFutureDate:', selectedDay > today);
+                              e.preventDefault();
+                              e.stopPropagation();
+                              e.nativeEvent.stopImmediatePropagation();
+                               if (selectedDay <= today) {
+                                 const clicked = new Date(selectedDay);
+                                 console.log('📅 Date selected from calendar:', clicked.toLocaleDateString());
+
+                              if (timePeriod === 'custom_range') {
+                                   // First click sets start, second sets end then close
+                                if (!customRangeStart) {
+                                     setCustomRangeStart(clicked);
+                                     console.log('🔹 Set customRangeStart:', clicked.toDateString());
+                                     return;
+                                   }
+                                   if (!customRangeEnd) {
+                                     setCustomRangeEnd(clicked);
+                                     console.log('🔸 Set customRangeEnd:', clicked.toDateString());
+                                     // Close after selecting end
+                                    setTimeDropdownOpen(false);
+                                     return;
+                                   }
+                                 }
+
+                                                                  // Single day selection flow
+                                 console.log('🔥 CHECK-INS CALENDAR DATE CLICKED:', clicked.toDateString());
+                                 console.log('🔥 IS TODAY?', clicked.toDateString() === new Date().toDateString());
+                                 flushSync(() => {
+                                   setSelectedDate(clicked);
+                                   // Only set timePeriod to 'today' if the selected date is actually today
+                                   if (clicked.toDateString() === new Date().toDateString()) {
+                                     console.log('🔥 CHECK-INS SETTING TIMEPERIOD TO TODAY');
+                                     setTimePeriod('today');
+                              } else {
+                                     console.log('🔥 CHECK-INS NOT TODAY - KEEPING CURRENT TIMEPERIOD');
+                                   }
+                                  setTimeDropdownOpen(false);
+                                 });
+                                 console.log('✅ Single day selected:', clicked.toLocaleDateString());
+                               } else {
+                               console.log('❌ Future date clicked, ignoring');
+                                }
+                            })(currentDate)}
+                            disabled={isFutureDate}
+                            style={{
+                              padding: '0.75rem',
+                              textAlign: 'center',
+                              borderRadius: '8px',
+                              cursor: isFutureDate ? 'not-allowed' : 'pointer',
+                              border: isInSelectedRange 
+                                ? '1px solid rgba(59, 130, 246, 0.5)' 
+                                : '1px solid transparent',
+                              background: isInSelectedRange 
+                                ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.3) 0%, rgba(147, 51, 234, 0.3) 100%)' 
+                                : isToday 
+                                  ? 'rgba(59, 130, 246, 0.15)' 
+                                  : isFutureDate 
+                                    ? 'rgba(255, 255, 255, 0.02)' 
+                                    : 'rgba(255, 255, 255, 0.03)',
+                              color: isInSelectedRange 
+                                ? '#fff' 
+                                : isToday 
+                                  ? 'rgba(59, 130, 246, 1)' 
+                                  : isFutureDate 
+                                    ? 'rgba(255, 255, 255, 0.3)' 
+                                    : 'rgba(255, 255, 255, 0.8)',
+                              fontWeight: isToday ? '600' : isInSelectedRange ? '500' : '400',
+                              transition: 'all 0.2s ease',
+                              opacity: isFutureDate ? 0.5 : 1,
+                              boxShadow: isInSelectedRange ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none'
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isFutureDate && !isInSelectedRange) {
+                                (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+                                (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isFutureDate && !isInSelectedRange) {
+                                (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
+                                (e.target as HTMLElement).style.borderColor = 'transparent';
+                              }
+                            }}
+                          >
+                            {day}
+                          </button>
+                        );
+                      }
+                      
+                      return days;
+                    })()}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -2534,10 +6093,12 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       const newDate = new Date(selectedDate);
       newDate.setDate(selectedDate.getDate() + (direction === 'next' ? 1 : -1));
       setSelectedDate(newDate);
+      setTimePeriod('today'); // Reset to 'today' when navigating dates
     };
 
     const goToToday = () => {
       setSelectedDate(new Date());
+      setTimePeriod('today'); // Reset to 'today' when going to today
     };
 
     const isToday = (date: Date) => {
@@ -2657,7 +6218,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       <div style={{
         minHeight: '100vh',
         width: '100%',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'transparent',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         margin: 0,
         padding: 0,
@@ -2793,7 +6354,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               </div>
               
               <div style={{ display: 'flex', gap: '1rem' }}>
-                {!isToday(selectedDate) && (
+                {(!isToday(selectedDate) || timePeriod !== 'today') && (
                   <button
                     onClick={goToToday}
                     style={{
@@ -2940,10 +6501,43 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       borderBottom: index === transactionsData.transactions.length - 1 ? 'none' : '1px solid rgba(255,255,255,0.1)',
                       display: 'flex',
                       justifyContent: 'space-between',
-                      alignItems: 'center'
+                      alignItems: 'center',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none'
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onSelectStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
+                    }}
+                    onDragStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
                     }}
                   >
-                    <div style={{ flex: 1 }}>
+                    <div style={{ 
+                      flex: 1,
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none'
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onSelectStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
+                    }}>
                       <p style={{ 
                         color: 'white', 
                         margin: 0, 
@@ -2968,10 +6562,25 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         setCurrentPage('customers');
                       }}
                       onMouseEnter={(e) => {
-                        (e.target as HTMLElement).style.color = 'rgba(255,255,255,0.8)';
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const target = e.currentTarget as HTMLElement;
+                        target.style.color = 'rgba(255,255,255,0.8)';
                       }}
                       onMouseLeave={(e) => {
-                        (e.target as HTMLElement).style.color = 'white';
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const target = e.currentTarget as HTMLElement;
+                        target.style.color = 'white';
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
                       }}
                       >
                         {transaction.customerDisplay}
@@ -2979,19 +6588,60 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       <p style={{ 
                         color: 'rgba(255,255,255,0.7)', 
                         margin: '0.25rem 0 0 0', 
-                        fontSize: '0.9rem' 
+                        fontSize: '0.9rem',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        MozUserSelect: 'none',
+                        msUserSelect: 'none'
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
                       }}>
                         {transaction.transactionDate.toLocaleDateString()} at {transaction.transactionDate.toLocaleTimeString()} • {transaction.outletDisplayName}
                       </p>
                       <p style={{ 
                         color: 'rgba(255,255,255,0.6)', 
                         margin: '0.25rem 0 0 0', 
-                        fontSize: '0.8rem' 
+                        fontSize: '0.8rem',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        MozUserSelect: 'none',
+                        msUserSelect: 'none'
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
                       }}>
                         {transaction.transactionType || 'EARNED'} • {transaction.isManualTransaction ? 'Manual' : 'Automatic'}
                       </p>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
+                    <div style={{ 
+                      textAlign: 'right',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none'
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onSelectStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
+                    }}>
                       <div style={{
                         padding: '0.5rem 1rem',
                         backgroundColor: transaction.pointsChanged > 0 ? 'rgba(74, 222, 128, 0.2)' : 'rgba(248, 113, 113, 0.2)',
@@ -2999,14 +6649,40 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         borderRadius: '20px',
                         fontSize: '1rem',
                         fontWeight: '600',
-                        marginBottom: '0.5rem'
+                        marginBottom: '0.5rem',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        MozUserSelect: 'none',
+                        msUserSelect: 'none'
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
                       }}>
                         {transaction.pointsChanged > 0 ? '+' : ''}{transaction.pointsChanged || 0}
                       </div>
                       <p style={{ 
                         color: 'rgba(255,255,255,0.7)', 
                         margin: 0, 
-                        fontSize: '0.8rem' 
+                        fontSize: '0.8rem',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        MozUserSelect: 'none',
+                        msUserSelect: 'none'
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
                       }}>
                         points
                       </p>
@@ -3024,10 +6700,17 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
   // Customer Transactions Page Component
   const CustomerTransactionsPage = () => {
     const [customerTransactions, setCustomerTransactions] = useState<any[]>([]);
+    const [filteredTransactions, setFilteredTransactions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [totalTransactions, setTotalTransactions] = useState(0);
     const [totalPoints, setTotalPoints] = useState(0);
     const [averagePoints, setAveragePoints] = useState(0);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [isSearchVisible, setIsSearchVisible] = useState(false);
+    const [dateFilter, setDateFilter] = useState('all');
+    const [customStartDate, setCustomStartDate] = useState('');
+    const [customEndDate, setCustomEndDate] = useState('');
+    const [transactionTypeFilter, setTransactionTypeFilter] = useState('all');
 
     const formatDate = (date: Date) => {
       return date.toLocaleDateString('en-US', { 
@@ -3036,6 +6719,63 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
         month: 'long', 
         day: 'numeric' 
       });
+    };
+
+    const applyFilters = (transactions: any[]) => {
+      let filtered = [...transactions];
+
+      // Apply search filter
+      if (searchTerm.trim()) {
+        filtered = filtered.filter(transaction => 
+          transaction.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          transaction.transactionType?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          transaction.outletDisplayName?.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+      }
+
+      // Apply date filter
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      switch (dateFilter) {
+        case 'today':
+          filtered = filtered.filter(transaction => {
+            const transactionDate = new Date(transaction.timestamp);
+            const transactionDay = new Date(transactionDate.getFullYear(), transactionDate.getMonth(), transactionDate.getDate());
+            return transactionDay.getTime() === today.getTime();
+          });
+          break;
+        case 'week':
+          const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+          filtered = filtered.filter(transaction => 
+            transaction.timestamp >= weekAgo
+          );
+          break;
+        case 'month':
+          const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+          filtered = filtered.filter(transaction => 
+            transaction.timestamp >= monthAgo
+          );
+          break;
+        case 'custom':
+          if (customStartDate && customEndDate) {
+            const startDate = new Date(customStartDate);
+            const endDate = new Date(customEndDate + 'T23:59:59');
+            filtered = filtered.filter(transaction => 
+              transaction.timestamp >= startDate && transaction.timestamp <= endDate
+            );
+          }
+          break;
+      }
+
+      // Apply transaction type filter
+      if (transactionTypeFilter !== 'all') {
+        filtered = filtered.filter(transaction => 
+          transaction.transactionType?.toLowerCase() === transactionTypeFilter.toLowerCase()
+        );
+      }
+
+      return filtered;
     };
 
     useEffect(() => {
@@ -3092,6 +6832,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             const avgPts = totalTxns > 0 ? totalPts / totalTxns : 0;
 
             setCustomerTransactions(customerTransactionList);
+            setFilteredTransactions(applyFilters(customerTransactionList));
             setTotalTransactions(totalTxns);
             setTotalPoints(totalPts);
             setAveragePoints(avgPts);
@@ -3109,11 +6850,18 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       return () => unsubscribe && unsubscribe();
     }, [selectedCustomer, user.uid]);
 
+    // Apply filters when search/filter criteria change
+    useEffect(() => {
+      if (customerTransactions.length > 0) {
+        setFilteredTransactions(applyFilters(customerTransactions));
+      }
+    }, [searchTerm, dateFilter, customStartDate, customEndDate, transactionTypeFilter, customerTransactions]);
+
     if (!selectedCustomer) return null;
 
-    return (
-      <div style={{
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  return (
+    <div style={{
+      background: 'transparent',
         minHeight: '100vh',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         margin: 0,
@@ -3136,7 +6884,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             justifyContent: 'space-between',
             alignItems: 'center',
             maxWidth: '1400px',
-            margin: '0 auto'
+            margin: '0 auto',
+            marginBottom: '1rem'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <button
@@ -3165,7 +6914,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               <div style={{
                 width: '40px',
                 height: '40px',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
                 borderRadius: '10px',
                 display: 'flex',
                 alignItems: 'center',
@@ -3199,6 +6948,160 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             >
               Sign Out
             </button>
+          </div>
+
+          {/* Search and Filter Bar */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            maxWidth: '1400px',
+            margin: '0 auto',
+            gap: '2rem',
+            flexWrap: 'wrap'
+          }}>
+            {/* Search Bar - Left Side */}
+            <div style={{ position: 'relative', flex: '1', minWidth: '300px' }}>
+              <input
+                type="text"
+                placeholder="Search transactions by description, type, or outlet..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem 1rem 0.75rem 2.5rem',
+                  background: 'rgba(255,255,255,0.1)',
+                  color: 'white',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: '12px',
+                  fontSize: '0.9rem',
+                  outline: 'none',
+                  backdropFilter: 'blur(10px)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                }}
+                onFocus={(e) => {
+                  (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.5)';
+                  (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.15)';
+                }}
+                onBlur={(e) => {
+                  (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.3)';
+                  (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.1)';
+                }}
+              />
+              <div style={{
+                position: 'absolute',
+                left: '1rem',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'rgba(255,255,255,0.6)',
+                fontSize: '1rem'
+              }}>
+                🔍
+              </div>
+            </div>
+
+            {/* Filter Controls - Right Side */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+              {/* Date Filter */}
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                style={{
+                  padding: '0.75rem 1rem',
+                  background: 'rgba(255,255,255,0.1)',
+                  color: 'white',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: '12px',
+                  fontSize: '0.9rem',
+                  outline: 'none',
+                  backdropFilter: 'blur(10px)',
+                  cursor: 'pointer',
+                  minWidth: '120px'
+                }}
+              >
+                <option value="all" style={{ background: '#333', color: 'white' }}>All Time</option>
+                <option value="today" style={{ background: '#333', color: 'white' }}>Today</option>
+                <option value="week" style={{ background: '#333', color: 'white' }}>This Week</option>
+                <option value="month" style={{ background: '#333', color: 'white' }}>This Month</option>
+                <option value="custom" style={{ background: '#333', color: 'white' }}>Custom Range</option>
+              </select>
+
+              {/* Transaction Type Filter */}
+              <select
+                value={transactionTypeFilter}
+                onChange={(e) => setTransactionTypeFilter(e.target.value)}
+                style={{
+                  padding: '0.75rem 1rem',
+                  background: 'rgba(255,255,255,0.1)',
+                  color: 'white',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: '12px',
+                  fontSize: '0.9rem',
+                  outline: 'none',
+                  backdropFilter: 'blur(10px)',
+                  cursor: 'pointer',
+                  minWidth: '120px'
+                }}
+              >
+                <option value="all" style={{ background: '#333', color: 'white' }}>All Types</option>
+                <option value="earned" style={{ background: '#333', color: 'white' }}>Earned</option>
+                <option value="redeemed" style={{ background: '#333', color: 'white' }}>Redeemed</option>
+              </select>
+
+              {/* Custom Date Range */}
+              {dateFilter === 'custom' && (
+                <>
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      background: 'rgba(255,255,255,0.1)',
+                      color: 'white',
+                      border: '1px solid rgba(255,255,255,0.3)',
+                      borderRadius: '12px',
+                      fontSize: '0.9rem',
+                      outline: 'none',
+                      backdropFilter: 'blur(10px)',
+                      cursor: 'pointer'
+                    }}
+                  />
+                  <span style={{ color: 'rgba(255,255,255,0.7)' }}>to</span>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      background: 'rgba(255,255,255,0.1)',
+                      color: 'white',
+                      border: '1px solid rgba(255,255,255,0.3)',
+                      borderRadius: '12px',
+                      fontSize: '0.9rem',
+                      outline: 'none',
+                      backdropFilter: 'blur(10px)',
+                      cursor: 'pointer'
+                    }}
+                  />
+                </>
+              )}
+
+              {/* Results Count */}
+              <div style={{
+                padding: '0.75rem 1rem',
+                background: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.3)',
+                borderRadius: '12px',
+                fontSize: '0.9rem',
+                color: 'rgba(255,255,255,0.9)',
+                backdropFilter: 'blur(10px)',
+                minWidth: '80px',
+                textAlign: 'center'
+              }}>
+                {filteredTransactions.length} results
+              </div>
+            </div>
           </div>
         </header>
 
@@ -3298,15 +7201,20 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 }} />
                 <p style={{ color: 'rgba(255,255,255,0.8)', margin: 0 }}>Loading transactions...</p>
               </div>
-            ) : customerTransactions.length === 0 ? (
+            ) : filteredTransactions.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '2rem' }}>
                 <p style={{ color: 'rgba(255,255,255,0.8)', margin: 0, fontSize: '1.1rem' }}>
-                  No transactions found for this customer
+                  {customerTransactions.length === 0 ? 'No transactions found for this customer' : 'No transactions match your search criteria'}
                 </p>
+                {customerTransactions.length > 0 && filteredTransactions.length === 0 && (
+                  <p style={{ color: 'rgba(255,255,255,0.6)', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
+                    Try adjusting your search term or date filters
+                  </p>
+                )}
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {customerTransactions.map((transaction, index) => (
+                {filteredTransactions.map((transaction, index) => (
                   <div key={transaction.id} style={{
                     background: 'rgba(255,255,255,0.1)',
                     padding: '1.5rem',
@@ -3316,15 +7224,57 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                     WebkitUserSelect: 'none',
                     MozUserSelect: 'none',
                     msUserSelect: 'none'
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onSelectStart={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
+                  }}
+                  onDragStart={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
                   }}>
                     <div style={{
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'flex-start',
                       flexWrap: 'wrap',
-                      gap: '1rem'
+                      gap: '1rem',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none'
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onSelectStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
                     }}>
-                      <div style={{ flex: 1 }}>
+                      <div style={{ 
+                        flex: 1,
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        MozUserSelect: 'none',
+                        msUserSelect: 'none'
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
+                      }}>
                         <h4 style={{ 
                           color: 'white', 
                           margin: '0 0 0.5rem 0',
@@ -3333,6 +7283,15 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                           WebkitUserSelect: 'none',
                           MozUserSelect: 'none',
                           msUserSelect: 'none'
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onSelectStart={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          return false;
                         }}>
                           {transaction.description || 'Transaction'}
                         </h4>
@@ -3344,29 +7303,92 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                           WebkitUserSelect: 'none',
                           MozUserSelect: 'none',
                           msUserSelect: 'none'
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onSelectStart={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          return false;
                         }}>
                           {transaction.timestamp?.toLocaleString() || 'Unknown date'}
                         </p>
                         <p style={{ 
                           color: 'rgba(255,255,255,0.7)', 
                           margin: 0,
-                          fontSize: '0.8rem'
+                          fontSize: '0.8rem',
+                          userSelect: 'none',
+                          WebkitUserSelect: 'none',
+                          MozUserSelect: 'none',
+                          msUserSelect: 'none'
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onSelectStart={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          return false;
                         }}>
                           Outlet: {transaction.outletDisplayName}
                         </p>
                       </div>
-                      <div style={{ textAlign: 'right' }}>
+                      <div style={{ 
+                        textAlign: 'right',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        MozUserSelect: 'none',
+                        msUserSelect: 'none'
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onSelectStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
+                      }}>
                                                  <div style={{
                            display: 'inline-block',
                            padding: '0.5rem 1rem',
                            borderRadius: '8px',
                            backgroundColor: transaction.pointsChanged > 0 ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                           border: transaction.pointsChanged > 0 ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)'
+                           border: transaction.pointsChanged > 0 ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
+                           userSelect: 'none',
+                           WebkitUserSelect: 'none',
+                           MozUserSelect: 'none',
+                           msUserSelect: 'none'
+                         }}
+                         onMouseDown={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                         }}
+                         onSelectStart={(e) => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                           return false;
                          }}>
                            <span style={{
                              color: transaction.pointsChanged > 0 ? '#22c55e' : '#ef4444',
                              fontWeight: '600',
-                             fontSize: '1.1rem'
+                             fontSize: '1.1rem',
+                             userSelect: 'none',
+                             WebkitUserSelect: 'none',
+                             MozUserSelect: 'none',
+                             msUserSelect: 'none'
+                           }}
+                           onMouseDown={(e) => {
+                             e.preventDefault();
+                             e.stopPropagation();
+                           }}
+                           onSelectStart={(e) => {
+                             e.preventDefault();
+                             e.stopPropagation();
+                             return false;
                            }}>
                              {transaction.pointsChanged > 0 ? '+' : ''}{transaction.pointsChanged || 0} pts
                            </span>
@@ -3374,7 +7396,20 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         <div style={{
                           color: 'rgba(255,255,255,0.6)',
                           fontSize: '0.8rem',
-                          marginTop: '0.25rem'
+                          marginTop: '0.25rem',
+                          userSelect: 'none',
+                          WebkitUserSelect: 'none',
+                          MozUserSelect: 'none',
+                          msUserSelect: 'none'
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onSelectStart={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          return false;
                         }}>
                           {transaction.transactionType || 'Unknown'}
                         </div>
@@ -3404,6 +7439,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
 
     const [searchTerm, setSearchTerm] = useState('');
     const [filteredCustomers, setFilteredCustomers] = useState<any[]>([]);
+    const [isSearchVisible, setIsSearchVisible] = useState(false);
 
     const formatDate = (date: Date) => {
       return date.toLocaleDateString('en-US', { 
@@ -3436,18 +7472,37 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               outletNameMap[doc.id] = outlet.name || outlet.outletName || `Outlet ${doc.id}`;
             });
 
-            // Filter customers by outlet
+            // Filter customers by outlet - USE SAME LOGIC AS DASHBOARD OVERVIEW
             let filteredCustomers = snapshot.docs;
             if (selectedOutlet !== 'all') {
               filteredCustomers = snapshot.docs.filter(doc => {
                 const customer = doc.data();
-                const hasVisitedOutlet = customer.visitedOutlets?.includes(selectedOutlet);
+                // Count customers ONLY where this is their LAST VISITED outlet
+                // This ensures each customer is counted in only ONE outlet
+                const lastVisitedOutlet = customer.lastVisitOutletId === selectedOutlet;
                 const isCurrentOutlet = customer.outletId === selectedOutlet;
-                return hasVisitedOutlet || isCurrentOutlet;
+                
+                // If no lastVisitOutletId, fall back to outletId
+                return lastVisitedOutlet || (isCurrentOutlet && !customer.lastVisitOutletId);
               });
             }
 
-            const customersList = filteredCustomers.map(doc => {
+            // Apply phone number deduplication - same logic as dashboard overview
+            const uniquePhoneNumbers = new Set<string>();
+            const deduplicatedCustomers: any[] = [];
+            
+            filteredCustomers.forEach(doc => {
+              const customer = doc.data();
+              const phone = customer.phoneNumber || customer.phone;
+              
+              // Skip customers without phone numbers or duplicates
+              if (!phone || uniquePhoneNumbers.has(phone)) return;
+              
+              uniquePhoneNumbers.add(phone);
+              deduplicatedCustomers.push(doc);
+            });
+
+            const customersList = deduplicatedCustomers.map(doc => {
               const customer = doc.data();
               const name = customer.name || customer.fullName || customer.firstName;
               const phone = customer.phoneNumber || customer.phone;
@@ -3463,7 +7518,28 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 joinDate: joinDate,
                 searchableText: `${name || ''} ${phone || ''}`.toLowerCase()
               };
+            }).sort((a, b) => {
+              // Sort by join date - most recent first
+              if (a.joinDate && b.joinDate) {
+                return b.joinDate.getTime() - a.joinDate.getTime();
+              }
+              // Put customers without join date at the end
+              if (a.joinDate && !b.joinDate) return -1;
+              if (!a.joinDate && b.joinDate) return 1;
+              // If both don't have join date, sort alphabetically by name
+              return (a.displayName || '').localeCompare(b.displayName || '');
             });
+
+            console.log(`🔍 CUSTOMER DETAILS PAGE - ${selectedOutlet === 'all' ? 'All Outlets' : 'Outlet: ' + selectedOutlet}:`);
+            console.log('📊 Total customer documents before filtering:', snapshot.docs.length);
+            console.log('📊 After outlet filtering:', filteredCustomers.length);
+            console.log('📊 After phone deduplication and sorting:', customersList.length);
+            console.log('📞 Unique phone numbers in details page:', uniquePhoneNumbers.size);
+            console.log('📅 Customers sorted by most recent join date first');
+            if (customersList.length > 0) {
+              console.log('📅 Most recent customer:', customersList[0].displayName, customersList[0].joinDate);
+              console.log('📅 Oldest customer:', customersList[customersList.length - 1].displayName, customersList[customersList.length - 1].joinDate);
+            }
 
             setCustomersData({
               totalCustomers: customersList.length,
@@ -3499,23 +7575,24 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       }
     }, [searchTerm, customersData.customers]);
 
-    const handleCustomerClick = (customer: any) => {
-      setSelectedCustomer(customer);
-      setPreviousPage('customers'); // Track that we came from customers page
-    };
+      const handleCustomerClick = (customer: any) => {
+    setSelectedCustomer(customer);
+    setPreviousPage('customers'); // Track that we came from customers page
+  };
 
-    return (
-      <div style={{
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        minHeight: '100vh',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        margin: 0,
-        padding: 0,
-        overflow: 'auto',
-        display: 'flex',
-        flexDirection: 'column'
-      }}>
-        {/* Header */}
+  return (
+    <div style={{
+      background: 'transparent',
+      minHeight: '100vh',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      margin: 0,
+      padding: 0,
+      overflow: 'auto',
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
+
+      {/* Header */}
         <header style={{
           background: 'linear-gradient(135deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.1) 100%)',
           color: 'white',
@@ -3531,98 +7608,172 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             maxWidth: '1400px',
             margin: '0 auto'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <button
-                onClick={() => setCurrentPage('dashboard')}
-                style={{
-                  padding: '0.5rem 1rem',
-                  backgroundColor: 'rgba(255,255,255,0.2)',
-                  color: 'white',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}
-              >
-                ← Back to Dashboard
-              </button>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                borderRadius: '10px',
+            <button
+              onClick={() => setCurrentPage('dashboard')}
+              style={{
+                padding: '0.75rem 1.25rem',
+                backgroundColor: 'rgba(255,255,255,0.1)',
+                color: 'white',
+                border: '1px solid rgba(255,255,255,0.2)',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: '500',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)'
-              }}>
-                <UsersIcon />
-              </div>
-              <div>
-                <h1 style={{ margin: 0, fontSize: '1.8rem', fontWeight: '700' }}>Customers</h1>
-                <p style={{ margin: 0, opacity: 0.9, fontSize: '0.9rem' }}>
+                gap: '0.5rem',
+                transition: 'all 0.2s ease',
+                backdropFilter: 'blur(10px)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              ← Back to Dashboard
+            </button>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{ textAlign: 'right' }}>
+                <h1 style={{ 
+                  margin: 0, 
+                  fontSize: '2rem', 
+                  fontWeight: '800',
+                  background: 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text'
+                }}>
+                  Customers
+                </h1>
+                <p style={{ 
+                  margin: '0.25rem 0 0 0', 
+                  opacity: 0.8, 
+                  fontSize: '1rem',
+                  fontWeight: '400'
+                }}>
                   {selectedOutlet === 'all' ? 'All outlets' : `Outlet: ${outlets.find(outlet => outlet.id === selectedOutlet)?.name || outlets.find(outlet => outlet.id === selectedOutlet)?.outletName || selectedOutlet}`}
                 </p>
               </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              {/* Search Bar */}
-              <div style={{ position: 'relative' }}>
-                <input
-                  type="text"
-                  placeholder="Search customers by name or phone..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  style={{
-                    width: '300px',
-                    padding: '0.75rem 1rem 0.75rem 2.5rem',
-                    background: 'rgba(255,255,255,0.1)',
-                    color: 'white',
-                    border: '1px solid rgba(255,255,255,0.3)',
-                    borderRadius: '12px',
-                    fontSize: '0.9rem',
-                    outline: 'none',
-                    backdropFilter: 'blur(10px)',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                  }}
-                  onFocus={(e) => {
-                    (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.5)';
-                    (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.15)';
-                  }}
-                  onBlur={(e) => {
-                    (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.3)';
-                    (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.1)';
-                  }}
-                />
-                <div style={{
-                  position: 'absolute',
-                  left: '0.75rem',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: 'rgba(255,255,255,0.7)',
-                  pointerEvents: 'none'
-                }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <path d="m21 21-4.35-4.35"></path>
-                  </svg>
-                </div>
+              
+              {/* Search Icon/Bar */}
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                {!isSearchVisible ? (
+                  <button
+                    onClick={() => setIsSearchVisible(true)}
+                    style={{
+                      padding: '0.75rem',
+                      backgroundColor: 'rgba(255,255,255,0.1)',
+                      color: 'white',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '12px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s ease',
+                      backdropFilter: 'blur(10px)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <path d="m21 21-4.35-4.35"></path>
+                    </svg>
+                  </button>
+                ) : (
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      placeholder="Search customers by name or phone..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      autoFocus
+                      style={{
+                        width: '300px',
+                        padding: '0.75rem 2.5rem 0.75rem 1rem',
+                        background: 'rgba(255,255,255,0.1)',
+                        color: 'white',
+                        border: '1px solid rgba(255,255,255,0.3)',
+                        borderRadius: '12px',
+                        fontSize: '0.9rem',
+                        outline: 'none',
+                        backdropFilter: 'blur(10px)',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                      }}
+                      onFocus={(e) => {
+                        (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.5)';
+                        (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.15)';
+                      }}
+                      onBlur={(e) => {
+                        (e.target as HTMLInputElement).style.borderColor = 'rgba(255,255,255,0.3)';
+                        (e.target as HTMLInputElement).style.background = 'rgba(255,255,255,0.1)';
+                        if (!searchTerm) {
+                          setIsSearchVisible(false);
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        setIsSearchVisible(false);
+                        setSearchTerm('');
+                      }}
+                      style={{
+                        position: 'absolute',
+                        right: '0.5rem',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: 'rgba(255,255,255,0.7)',
+                        cursor: 'pointer',
+                        padding: '0.25rem',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                )}
               </div>
+              
               <button
                 onClick={onLogout}
                 style={{
                   padding: '0.75rem 1.5rem',
-                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  backgroundColor: 'rgba(255,255,255,0.1)',
                   color: 'white',
-                  border: '1px solid rgba(255,255,255,0.3)',
+                  border: '1px solid rgba(255,255,255,0.2)',
                   borderRadius: '12px',
                   cursor: 'pointer',
                   fontWeight: '500',
-                  transition: 'all 0.2s',
+                  transition: 'all 0.2s ease',
                   backdropFilter: 'blur(10px)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                  e.currentTarget.style.transform = 'translateY(0)';
                 }}
               >
                 Sign Out
@@ -3776,12 +7927,27 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                   }}
                   onClick={() => handleCustomerClick(customer)}
                   onMouseEnter={(e) => {
-                    (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.2)';
-                    (e.target as HTMLElement).style.transform = 'translateY(-2px)';
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const target = e.currentTarget as HTMLElement;
+                    target.style.background = 'rgba(255,255,255,0.2)';
+                    target.style.transform = 'translateY(-2px)';
                   }}
                   onMouseLeave={(e) => {
-                    (e.target as HTMLElement).style.background = 'rgba(255,255,255,0.1)';
-                    (e.target as HTMLElement).style.transform = 'translateY(0)';
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const target = e.currentTarget as HTMLElement;
+                    target.style.background = 'rgba(255,255,255,0.1)';
+                    target.style.transform = 'translateY(0)';
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onSelectStart={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
                   }}
                   >
                     <div style={{
@@ -3859,13 +8025,26 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     );
   };
 
+  // Show admin dashboard if requested
+  if (showAdminDashboard && isAuthorizedAdmin) {
+    return (
+      <AdminDashboard 
+        user={user} 
+        onClose={() => {
+          setShowAdminDashboard(false);
+          setCurrentPage('dashboard');
+        }} 
+      />
+    );
+  }
+
   // Render different pages
   if (currentPage === 'signups') {
     return <SignupsDetailsPage />;
   }
   
   if (currentPage === 'points') {
-    return <PointsDetailsPage />;
+    return <PointsDetailsPage key={`points-${selectedDate.getTime()}`} />;
   }
   
   if (currentPage === 'checkins') {
@@ -3880,8 +8059,45 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     return selectedCustomer ? <CustomerTransactionsPage /> : <CustomersDetailsPage />;
   }
   
+  if (currentPage === 'sms-marketing') {
+            return <CampaignManager 
+              user={user} 
+              onBack={() => {
+                setCurrentPage('dashboard');
+                setShowAdminDashboard(false);
+              }}
+              currentPage={currentPage}
+              setCurrentPage={setCurrentPage}
+              setSelectedCampaignId={setSelectedCampaignId}
+            />;
+  }
+  
+  if (currentPage === 'campaignDetails' && selectedCampaignId) {
+            return <CampaignDetailsPage 
+              key={`campaign-${selectedCampaignId}`}
+              user={user} 
+              onBack={() => {
+                setSelectedCampaignId('');
+                setCurrentPage('sms-marketing');
+              }}
+              campaignId={selectedCampaignId}
+            />;
+  }
+  
   if (currentPage === 'outlets') {
-    return <FilterSuggestions page="outlets" />;
+    return <OutletAnalyticsPage 
+      onBack={() => setCurrentPage('dashboard')}
+      showDatePicker={showDatePicker}
+      setShowDatePicker={setShowDatePicker}
+      datePickerMode={datePickerMode}
+      setDatePickerMode={setDatePickerMode}
+      selectedTimeframe={selectedTimeframe}
+      setSelectedTimeframe={setSelectedTimeframe}
+      startDate={startDate}
+      setStartDate={setStartDate}
+      endDate={endDate}
+      setEndDate={setEndDate}
+    />;
   }
   
   if (currentPage === 'analytics') {
@@ -3893,7 +8109,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       <div style={{
         minHeight: '100vh',
         width: '100%',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'transparent',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         margin: 0,
         padding: 0,
@@ -3976,7 +8192,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     <div style={{
       minHeight: '100vh',
       width: '100%',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: 'transparent',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       margin: 0,
       padding: 0,
@@ -4045,11 +8261,11 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               <div style={{ position: 'relative' }} data-dropdown>
                 <button
                   onClick={() => setDropdownOpen(!dropdownOpen)}
-                  style={{
+                style={{
                     minWidth: '240px',
                     padding: '1rem 1.5rem',
                     background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
-                    color: 'white',
+                  color: 'white',
                     border: '1px solid rgba(255,255,255,0.2)',
                     borderRadius: '20px',
                     cursor: 'pointer',
@@ -4105,18 +8321,18 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 </button>
                 
                 {dropdownOpen && (
-                  <div style={{
+      <div style={{
                     position: 'absolute',
                     top: '100%',
                     left: 0,
                     right: 0,
                     marginTop: '0.5rem',
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'rgba(20,24,45,0.7)',
                     backdropFilter: 'blur(20px)',
                     borderRadius: '20px',
-                    border: '1px solid rgba(255,255,255,0.3)',
+                  border: '1px solid rgba(255,255,255,0.3)',
                     boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-                    zIndex: 1000,
+                    zIndex: 9999,
                     overflow: 'hidden',
                     animation: 'dropdownFade 0.3s ease'
                   }}>
@@ -4128,7 +8344,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       style={{
                         padding: '1rem 1.5rem',
                         color: 'white',
-                        cursor: 'pointer',
+                  cursor: 'pointer',
                         fontSize: '1rem',
                         fontWeight: '500',
                         textShadow: '1px 1px 2px rgba(0,0,0,0.3)',
@@ -4143,11 +8359,11 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         (e.target as HTMLDivElement).style.background = selectedOutlet === 'all' ? 'rgba(255,255,255,0.2)' : 'transparent';
                       }}
                     >
-                      All Outlets ({data.outlets})
+                  All Outlets ({data.outlets})
                     </div>
-                    {outlets.map((outlet) => (
+                {outlets.map((outlet) => (
                       <div
-                        key={outlet.id}
+                    key={outlet.id} 
                         onClick={() => {
                           setSelectedOutlet(outlet.id);
                           setDropdownOpen(false);
@@ -4169,11 +8385,11 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         onMouseLeave={(e) => {
                           (e.target as HTMLDivElement).style.background = selectedOutlet === outlet.id ? 'rgba(255,255,255,0.2)' : 'transparent';
                         }}
-                      >
-                        {outlet.name || outlet.outletName || `Outlet ${outlet.id}`}
+                  >
+                    {outlet.name || outlet.outletName || `Outlet ${outlet.id}`}
                       </div>
-                    ))}
-                    {outlets.length === 0 && (
+                ))}
+                {outlets.length === 0 && (
                       <div style={{
                         padding: '1rem 1.5rem',
                         color: 'rgba(255,255,255,0.7)',
@@ -4181,9 +8397,9 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         fontStyle: 'italic',
                         textAlign: 'center'
                       }}>
-                        No outlets found
+                    No outlets found
                       </div>
-                    )}
+                )}
                   </div>
                 )}
               </div>
@@ -4192,7 +8408,12 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Welcome back,</div>
               <div style={{ fontWeight: '600' }}>{user.email}</div>
+              
+
             </div>
+            
+
+            
             <button
               onClick={onLogout}
               style={{
@@ -4236,14 +8457,11 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
             fontSize: '2.5rem', 
             fontWeight: '700',
             color: 'white',
-            margin: '0 0 0.5rem 0',
+            margin: 0,
             textShadow: '2px 2px 4px rgba(0,0,0,0.3)'
           }}>
             Dashboard Overview
           </h2>
-          <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: '1.1rem', margin: 0 }}>
-            Real-time insights from your loyalty program
-          </p>
           {selectedOutlet !== 'all' && (
             <div style={{
               marginTop: '1rem',
@@ -4300,38 +8518,43 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               maxWidth: '1200px'
             }}>
               {/* Top Row: Customers, Points, Revenue */}
-              <div 
-              onClick={() => handleCardClick('customers')}
-              style={{
-                background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
-                color: 'white',
-                padding: '2.5rem',
-                borderRadius: '20px',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
-                position: 'relative',
-                overflow: 'hidden',
-                backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(255,255,255,0.2)',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                transform: 'translateY(0)'
-              }}
+                            <div 
+                onClick={() => handleCardClick('customers')}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  color: 'white',
+                  padding: '2.5rem',
+                  borderRadius: '20px',
+                  boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                                    borderTop: '4px solid #3b82f6',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  transform: 'translateY(0)'
+                }}
               onMouseEnter={(e) => {
-                (e.target as HTMLElement).style.transform = 'translateY(-5px)';
-                (e.target as HTMLElement).style.boxShadow = '0 12px 40px rgba(0,0,0,0.3)';
+                const card = e.currentTarget as HTMLElement;
+                card.style.transform = 'translateY(-2px)';
+                card.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.15), 0 0 40px rgba(59, 130, 246, 0.3)';
+                
+
+                
               }}
               onMouseLeave={(e) => {
-                (e.target as HTMLElement).style.transform = 'translateY(0)';
-                (e.target as HTMLElement).style.boxShadow = '0 8px 32px rgba(0,0,0,0.2)';
+                const card = e.currentTarget as HTMLElement;
+                card.style.transform = 'translateY(0)';
+                card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
+                
+
+                
               }}
             >
-                <div style={{ 
-                  position: 'absolute', 
-                  top: '20px', 
-                  right: '20px', 
-                  opacity: 0.3,
-                  transform: 'scale(1.5)'
-                }}>
+
+
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255, 255, 255, 0.1)', color: '#3b82f6', zIndex: 2 }}>
                   <UsersIcon />
                 </div>
                 <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>
@@ -4346,34 +8569,38 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               <div 
                 onClick={() => handleCardClick('points')}
                 style={{
-                  background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
+                  background: 'rgba(255, 255, 255, 0.1)',
                   color: 'white',
                   padding: '2.5rem',
                   borderRadius: '20px',
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+                  boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)',
                   position: 'relative',
                   overflow: 'hidden',
                   backdropFilter: 'blur(20px)',
-                  border: '1px solid rgba(255,255,255,0.2)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderTop: '4px solid #8b5cf6',
                   cursor: 'pointer',
-                  transition: 'all 0.3s ease'
+                  transition: 'all 0.3s ease',
+                  transform: 'translateY(0)'
                 }}
                 onMouseEnter={(e) => {
-                  (e.target as HTMLElement).style.transform = 'translateY(-5px)';
-                  (e.target as HTMLElement).style.boxShadow = '0 12px 40px rgba(0,0,0,0.3)';
+                  const card = e.currentTarget as HTMLElement;
+                  card.style.transform = 'translateY(-2px)';
+                  card.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.15), 0 0 40px rgba(139, 92, 246, 0.3)';
+                  const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
+                  if (glow) glow.style.opacity = '1';
                 }}
                 onMouseLeave={(e) => {
-                  (e.target as HTMLElement).style.transform = 'translateY(0)';
-                  (e.target as HTMLElement).style.boxShadow = '0 8px 32px rgba(0,0,0,0.2)';
+                  const card = e.currentTarget as HTMLElement;
+                  card.style.transform = 'translateY(0)';
+                  card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
+                  const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
+                  if (glow) glow.style.opacity = '0';
                 }}
               >
-                <div style={{ 
-                  position: 'absolute', 
-                  top: '20px', 
-                  right: '20px', 
-                  opacity: 0.3,
-                  transform: 'scale(1.5)'
-                }}>
+
+
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255, 255, 255, 0.1)', color: '#8b5cf6', zIndex: 2 }}>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                   </svg>
@@ -4387,24 +8614,40 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 </div>
               </div>
               
-              <div style={{
-                background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
-                color: 'white',
-                padding: '2.5rem',
-                borderRadius: '20px',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
-                position: 'relative',
-                overflow: 'hidden',
-                backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(255,255,255,0.2)'
-              }}>
-                <div style={{ 
-                  position: 'absolute', 
-                  top: '20px', 
-                  right: '20px', 
-                  opacity: 0.3,
-                  transform: 'scale(1.5)'
-                }}>
+              <div 
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  color: 'white',
+                  padding: '2.5rem',
+                  borderRadius: '20px',
+                  boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderTop: '4px solid #10b981',
+                  cursor: 'default',
+                  transition: 'all 0.3s ease',
+                  transform: 'translateY(0)'
+                }}
+                onMouseEnter={(e) => {
+                  const card = e.currentTarget as HTMLElement;
+                  card.style.transform = 'translateY(-2px)';
+                  card.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.15), 0 0 40px rgba(16, 185, 129, 0.3)';
+                  const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
+                  if (glow) glow.style.opacity = '1';
+                }}
+                onMouseLeave={(e) => {
+                  const card = e.currentTarget as HTMLElement;
+                  card.style.transform = 'translateY(0)';
+                  card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
+                  const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
+                  if (glow) glow.style.opacity = '0';
+                }}
+              >
+                {/* <div data-role="glow" style={{ position: 'absolute', top: '-60px', right: '-60px', width: '160px', height: '160px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(16,185,129,0.8) 0%, rgba(16,185,129,0.4) 40%, rgba(16,185,129,0) 70%)', opacity: 0, transition: 'opacity 0.3s ease', filter: 'blur(40px)', pointerEvents: 'none', zIndex: -1 }} */ }
+
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255, 255, 255, 0.1)', color: '#10b981', zIndex: 2 }}>
                   <RevenueIcon />
                 </div>
                 <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>
@@ -4420,74 +8663,94 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               <div 
                 onClick={() => handleCardClick('checkins')}
                 style={{
-                  background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
+                  background: 'rgba(255, 255, 255, 0.1)',
                   color: 'white',
                   padding: '2.5rem',
                   borderRadius: '20px',
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+                  boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)',
                   position: 'relative',
                   overflow: 'hidden',
                   backdropFilter: 'blur(20px)',
-                  border: '1px solid rgba(255,255,255,0.2)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderTop: '4px solid #f59e0b',
                   cursor: 'pointer',
-                  transition: 'all 0.3s ease'
+                  transition: 'all 0.3s ease',
+                  transform: 'translateY(0)'
                 }}
                 onMouseEnter={(e) => {
-                  (e.target as HTMLElement).closest('div')!.style.transform = 'translateY(-5px)';
-                  (e.target as HTMLElement).closest('div')!.style.boxShadow = '0 15px 40px rgba(0,0,0,0.3)';
+                  const card = e.currentTarget as HTMLElement;
+                  card.style.transform = 'translateY(-2px)';
+                  card.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.15), 0 0 40px rgba(245, 158, 11, 0.3)';
+                  const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
+                  if (glow) glow.style.opacity = '1';
                 }}
                 onMouseLeave={(e) => {
-                  (e.target as HTMLElement).closest('div')!.style.transform = 'translateY(0)';
-                  (e.target as HTMLElement).closest('div')!.style.boxShadow = '0 8px 32px rgba(0,0,0,0.2)';
+                  const card = e.currentTarget as HTMLElement;
+                  card.style.transform = 'translateY(0)';
+                  card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
+                  const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
+                  if (glow) glow.style.opacity = '0';
                 }}
               >
-                <div style={{ 
-                  position: 'absolute', 
-                  top: '20px', 
-                  right: '20px', 
-                  opacity: 0.3,
-                  transform: 'scale(1.5)'
-                }}>
+                {/* <div data-role="glow" style={{ position: 'absolute', top: '-60px', right: '-60px', width: '160px', height: '160px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(59,130,246,0.8) 0%, rgba(59,130,246,0) 70%)', opacity: 0, transition: 'opacity 0.3s ease', filter: 'blur(40px)', pointerEvents: 'none', zIndex: -1 }} */ }
+
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255, 255, 255, 0.1)', color: '#f59e0b', zIndex: 2 }}>
                   <AnalyticsIcon />
                 </div>
                 <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>Check-ins Today</h3>
                 <p style={{ fontSize: '3.5rem', fontWeight: '900', margin: 0 }}>{data.checkIns.toLocaleString()}</p>
                 <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>
-                  {selectedOutlet === 'all' ? 'All outlets • Click to view details →' : 'This outlet • Click to view details →'}
+                  {selectedOutlet === 'all' ? 'All outlets' : 'This outlet'} • Click to view details →
                 </div>
               </div>
               
               <div 
                 onClick={() => handleCardClick('signups')}
                 style={{
-                  background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
+                  background: 'rgba(255, 255, 255, 0.1)',
                   color: 'white',
                   padding: '2.5rem',
                   borderRadius: '20px',
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+                  boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)',
                   position: 'relative',
                   overflow: 'hidden',
                   backdropFilter: 'blur(20px)',
-                  border: '1px solid rgba(255,255,255,0.2)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderTop: '4px solid #ec4899',
                   cursor: 'pointer',
-                  transition: 'all 0.3s ease'
+                  transition: 'all 0.3s ease',
+                  transform: 'translateY(0)'
                 }}
                 onMouseEnter={(e) => {
-                  (e.target as HTMLElement).style.transform = 'translateY(-5px)';
-                  (e.target as HTMLElement).style.boxShadow = '0 12px 40px rgba(0,0,0,0.3)';
+                  const card = e.currentTarget as HTMLElement;
+                  card.style.transform = 'translateY(-2px)';
+                  card.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.15), 0 0 40px rgba(236, 72, 153, 0.3)';
+                  // card.style.border = '2px solid rgba(251,191,36,1)';
+                  const glow = card.querySelector('[data-role=\"glow\"]') as HTMLElement;
+                  if (glow) glow.style.opacity = '1';
+                  const closeBtn = card.querySelector('[data-role=\"close-btn\"]') as HTMLElement;
+                  if (closeBtn) {
+                    closeBtn.style.opacity = '1';
+                    closeBtn.style.transform = 'scale(1)';
+                  }
                 }}
                 onMouseLeave={(e) => {
-                  (e.target as HTMLElement).style.transform = 'translateY(0)';
-                  (e.target as HTMLElement).style.boxShadow = '0 8px 32px rgba(0,0,0,0.2)';
+                  const card = e.currentTarget as HTMLElement;
+                  card.style.transform = 'translateY(0)';
+                  card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
+                  // card.style.border = '2px solid rgba(251,191,36,0.8)';
+                  const glow = card.querySelector('[data-role=\"glow\"]') as HTMLElement;
+                  if (glow) glow.style.opacity = '0';
+                  const closeBtn = card.querySelector('[data-role=\"close-btn\"]') as HTMLElement;
+                  if (closeBtn) {
+                    closeBtn.style.opacity = '0';
+                    closeBtn.style.transform = 'scale(0.8)';
+                  }
                 }}
               >
-                <div style={{ 
-                  position: 'absolute', 
-                  top: '20px', 
-                  right: '20px', 
-                  opacity: 0.3,
-                  transform: 'scale(1.5)'
-                }}>
+                {/* <div data-role="glow" style={{ position: 'absolute', top: '-60px', right: '-60px', width: '160px', height: '160px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(251,191,36,0.8) 0%, rgba(251,191,36,0) 70%)', opacity: 0, transition: 'opacity 0.3s ease', filter: 'blur(40px)', pointerEvents: 'none', zIndex: -1 }} */ }
+
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255, 255, 255, 0.1)', color: '#ec4899', zIndex: 2 }}>
                   <SignupIcon />
                 </div>
                 <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>New Signups Today</h3>
@@ -4500,45 +8763,332 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               <div 
                 onClick={() => handleCardClick('outlets')}
                 style={{
-                  background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
+                  background: 'rgba(255, 255, 255, 0.1)',
                   color: 'white',
                   padding: '2.5rem',
                   borderRadius: '20px',
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+                  boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)',
                   position: 'relative',
                   overflow: 'hidden',
                   backdropFilter: 'blur(20px)',
-                  border: '1px solid rgba(255,255,255,0.2)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderTop: '4px solid #f97316',
                   cursor: 'pointer',
                   transition: 'all 0.3s ease',
                   transform: 'translateY(0)'
                 }}
                 onMouseEnter={(e) => {
-                  (e.target as HTMLElement).style.transform = 'translateY(-5px)';
-                  (e.target as HTMLElement).style.boxShadow = '0 12px 40px rgba(0,0,0,0.3)';
+                  const card = e.currentTarget as HTMLElement;
+                  card.style.transform = 'translateY(-2px)';
+                  card.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.15), 0 0 40px rgba(249, 115, 22, 0.3)';
+                  const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
+                  if (glow) glow.style.opacity = '1';
                 }}
                 onMouseLeave={(e) => {
-                  (e.target as HTMLElement).style.transform = 'translateY(0)';
-                  (e.target as HTMLElement).style.boxShadow = '0 8px 32px rgba(0,0,0,0.2)';
+                  const card = e.currentTarget as HTMLElement;
+                  card.style.transform = 'translateY(0)';
+                  card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
+                  const glow = card.querySelector('[data-role="glow"]') as HTMLElement;
+                  if (glow) glow.style.opacity = '0';
                 }}
               >
-                <div style={{ 
-                  position: 'absolute', 
-                  top: '20px', 
-                  right: '20px', 
-                  opacity: 0.3,
-                  transform: 'scale(1.5)'
-                }}>
+                {/* <div data-role="glow" style={{ position: 'absolute', top: '-60px', right: '-60px', width: '160px', height: '160px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(251,146,60,0.8) 0%, rgba(251,146,60,0) 70%)', opacity: 0, transition: 'opacity 0.3s ease', filter: 'blur(40px)', pointerEvents: 'none', zIndex: -1 }} */ }
+
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255, 255, 255, 0.1)', color: '#f97316', zIndex: 2 }}>
                   <StoreIcon />
                 </div>
                 <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>Active Outlets</h3>
                 <p style={{ fontSize: '3.5rem', fontWeight: '900', margin: 0 }}>{data.outlets.toLocaleString()}</p>
                 <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>Click to manage outlets →</div>
               </div>
+              
+              {/* Three-Tier Rewards System Card */}
+              <div 
+              onClick={() => handleCardClick('sms-marketing')}
+              style={{
+                background: 'rgba(255, 255, 255, 0.1)',
+                color: 'white',
+                padding: '2.5rem',
+                borderRadius: '20px',
+                boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)',
+                position: 'relative',
+                overflow: 'hidden',
+                backdropFilter: 'blur(20px)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                borderTop: '4px solid #06b6d4',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                transform: 'translateY(0)'
+              }}
+              onMouseEnter={(e) => {
+                const card = e.currentTarget as HTMLElement;
+                card.style.transform = 'translateY(-2px)';
+                                  card.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.15), 0 0 40px rgba(6, 182, 212, 0.3)';
+                
+
+                
+              }}
+              onMouseLeave={(e) => {
+                const card = e.currentTarget as HTMLElement;
+                card.style.transform = 'translateY(0)';
+                card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)';
+                
+
+                
+              }}
+            >
+                {/* <div data-role="glow" style={{ position: 'absolute', top: '-60px', right: '-60px', width: '160px', height: '160px', borderRadius: '50%', background: 'radial-gradient(circle at center, rgba(16,185,129,0.8) 0%, rgba(16,185,129,0) 70%)', opacity: 0, transition: 'opacity 0.3s ease', filter: 'blur(40px)', pointerEvents: 'none', zIndex: -1 }} */ }
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255, 255, 255, 0.1)', color: '#06b6d4', zIndex: 2 }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+                  </svg>
+                </div>
+                <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>Rewards System</h3>
+                <p style={{ fontSize: '1.8rem', fontWeight: '700', margin: 0, color: '#10B981' }}>Promotions • Campaigns</p>
+                <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>Manage your loyalty rewards →</div>
+              </div>
+
+              {/* Admin Panel Card - Only for Authorized Users */}
+              {isAuthorizedAdmin && (
+                <div 
+                  onClick={() => setShowAdminDashboard(true)}
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(255,215,0,0.4) 0%, rgba(255,165,0,0.3) 100%)',
+                    color: 'white',
+                    padding: '2.5rem',
+                    borderRadius: '20px',
+                    boxShadow: '0 8px 32px rgba(255,215,0,0.3)',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    backdropFilter: 'blur(20px)',
+                    border: '2px solid rgba(255,215,0,0.5)',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    transform: 'translateY(0)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const target = e.currentTarget as HTMLElement;
+                    target.style.transform = 'translateY(-5px)';
+                    target.style.boxShadow = '0 12px 40px rgba(255,215,0,0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const target = e.currentTarget as HTMLElement;
+                    target.style.transform = 'translateY(0)';
+                    target.style.boxShadow = '0 8px 32px rgba(255,215,0,0.3)';
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onSelectStart={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
+                  }}
+                >
+                  <div style={{ 
+                    position: 'absolute', 
+                    top: '20px', 
+                    right: '20px', 
+                    opacity: 0.4,
+                    transform: 'scale(1.5)',
+                    fontSize: '2rem'
+                  }}>
+                    👑
+                  </div>
+                  <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>Admin Panel</h3>
+                  <p style={{ fontSize: '2.5rem', fontWeight: '900', margin: 0, color: '#FFD700' }}>ADMIN</p>
+                  <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>Manage users & settings →</div>
+                </div>
+              )}
             </div>
           </>
         )}
       </main>
+
+      {/* Global Date Picker Dropdown - Rendered at root level to avoid z-index issues */}
+      {showDatePicker && currentPage === 'outlets' && (
+        <>
+          {/* Click outside to close */}
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 999999998
+            }}
+            onClick={() => setShowDatePicker(false)}
+          />
+          
+          {/* Dropdown */}
+          <div style={{
+            position: 'fixed',
+            top: '220px',
+            right: '2rem',
+            background: 'rgba(30, 41, 59, 0.95)',
+            backdropFilter: 'blur(20px)',
+            borderRadius: '16px',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+            zIndex: 999999999,
+            minWidth: '350px',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              display: 'flex',
+              background: 'rgba(51, 65, 85, 0.8)',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+            }}>
+              <button
+                onClick={() => setDatePickerMode('preset')}
+                style={{
+                  flex: 1,
+                  padding: '1rem',
+                  border: 'none',
+                  background: datePickerMode === 'preset' ? 'rgba(99, 102, 241, 0.8)' : 'transparent',
+                  color: 'white',
+                  fontSize: '0.9rem',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Time Periods
+              </button>
+              <button
+                onClick={() => setDatePickerMode('custom')}
+                style={{
+                  flex: 1,
+                  padding: '1rem',
+                  border: 'none',
+                  background: datePickerMode === 'custom' ? 'rgba(99, 102, 241, 0.8)' : 'transparent',
+                  color: 'white',
+                  fontSize: '0.9rem',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Custom Range
+              </button>
+            </div>
+
+            <div style={{ padding: '1.5rem' }}>
+              {datePickerMode === 'preset' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {[
+                    { value: '7days', label: 'Last 7 Days' },
+                    { value: '30days', label: 'Last 30 Days' },
+                    { value: '90days', label: 'Last 90 Days' }
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => {
+                        setSelectedTimeframe(option.value);
+                        setShowDatePicker(false);
+                      }}
+                      style={{
+                        padding: '0.75rem 1rem',
+                        border: 'none',
+                        borderRadius: '8px',
+                        background: selectedTimeframe === option.value ? 'rgba(99, 102, 241, 0.8)' : 'rgba(255, 255, 255, 0.1)',
+                        color: 'white',
+                        fontSize: '0.9rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        textAlign: 'left',
+                        width: '100%'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (selectedTimeframe !== option.value) {
+                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.2)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (selectedTimeframe !== option.value) {
+                          (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.1)';
+                        }
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div>
+                    <label style={{ color: 'white', fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>Start Date</label>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        color: 'white',
+                        fontSize: '0.9rem'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: 'white', fontSize: '0.9rem', marginBottom: '0.5rem', display: 'block' }}>End Date</label>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        color: 'white',
+                        fontSize: '0.9rem'
+                      }}
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (startDate && endDate) {
+                        setSelectedTimeframe('custom');
+                        setShowDatePicker(false);
+                      }
+                    }}
+                    style={{
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: 'rgba(99, 102, 241, 0.8)',
+                      color: 'white',
+                      fontSize: '0.9rem',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.target as HTMLElement).style.background = 'rgba(99, 102, 241, 1)';
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.target as HTMLElement).style.background = 'rgba(99, 102, 241, 0.8)';
+                    }}
+                  >
+                    Apply Custom Range
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };
@@ -4548,22 +9098,66 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Prevent text selection during fast mouse movements
   useEffect(() => {
-    // Listen for authentication state changes
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const preventSelectStart = (e: Event) => {
+      const target = e.target as HTMLElement;
+      // Allow selection only for input elements
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.contentEditable === 'true') {
+        return true;
+      }
+      e.preventDefault();
+      return false;
+    };
+
+    const preventDragStart = (e: DragEvent) => {
+      e.preventDefault();
+      return false;
+    };
+
+    const preventMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && target.contentEditable !== 'true') {
+        // Only prevent default for non-input elements during fast movements
+        if (e.detail > 1) { // Multiple rapid clicks
+          e.preventDefault();
+        }
+      }
+    };
+
+    // Add global event listeners
+    document.addEventListener('selectstart', preventSelectStart);
+    document.addEventListener('dragstart', preventDragStart);
+    document.addEventListener('mousedown', preventMouseDown);
+
+    return () => {
+      document.removeEventListener('selectstart', preventSelectStart);
+      document.removeEventListener('dragstart', preventDragStart);
+      document.removeEventListener('mousedown', preventMouseDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    // Simple Firebase auth listener - like admin panel
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      console.log('🔥 User Dashboard - Auth state:', user ? `✅ ${user.email}` : '❌ No user');
       setUser(user);
       setLoading(false);
+      
+      // If no user, redirect to admin panel login
+      if (!user) {
+        console.log('🔄 No user found, redirecting to admin panel login...');
+        window.location.href = '/login';
+      }
     });
 
     return unsubscribe;
   }, []);
 
-  const handleLogin = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
-  };
-
   const handleLogout = async () => {
     await signOut(auth);
+    // After logout, redirect to login page
+    window.location.href = '/login';
   };
 
   if (loading) {
@@ -4574,7 +9168,7 @@ function App() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'transparent',
         color: 'white',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         margin: 0,
@@ -4608,17 +9202,122 @@ function App() {
             margin: '0 auto 2rem'
           }} />
           <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.5rem', fontWeight: '600' }}>Rewin Dashboard</h2>
-          <p style={{ margin: 0, opacity: 0.9 }}>Connecting to Firebase...</p>
+          <p style={{ margin: 0, opacity: 0.9 }}>Loading your dashboard...</p>
         </div>
       </div>
     );
   }
 
-  if (!user) {
-    return <LoginPage onLogin={handleLogin} />;
-  }
-
-  return <Dashboard user={user} onLogout={handleLogout} />;
+  // If we reach here, user is authenticated - show dashboard
+  return (
+    <AuthContext.Provider value={{ user, loading }}>
+      <Dashboard user={user} onLogout={handleLogout} />
+    </AuthContext.Provider>
+  );
 }
 
-export default App;
+// Protected Route Component for Admin
+const AdminProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, isAdmin, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="loading-spinner">
+        <div className="spinner"></div>
+      </div>
+    );
+  }
+
+  return user && isAdmin ? <>{children}</> : <Navigate to="/login" replace />;
+};
+
+// Protected Route Component for Users
+const UserProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="loading-spinner">
+        <div className="spinner"></div>
+      </div>
+    );
+  }
+
+  return user ? <>{children}</> : <Navigate to="/login" replace />;
+};
+
+// App Routes Component
+const AppRoutes: React.FC = () => {
+  const { user, isAdmin } = useAuth();
+
+  return (
+    <Routes>
+      {/* Login Route */}
+      <Route 
+        path="/login" 
+        element={<AdminLoginPage />} 
+      />
+      
+      {/* Admin Routes */}
+      <Route 
+        path="/admin/dashboard" 
+        element={
+          <AdminProtectedRoute>
+            <AdminDashboardPage />
+          </AdminProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/admin/users" 
+        element={
+          <AdminProtectedRoute>
+            <AdminUsersPage />
+          </AdminProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/admin/users/:userId" 
+        element={
+          <AdminProtectedRoute>
+            <AdminUserDetailsPage />
+          </AdminProtectedRoute>
+        } 
+      />
+      
+      {/* User Dashboard Route */}
+      <Route 
+        path="/dashboard" 
+        element={
+          <UserProtectedRoute>
+            <UserDashboard />
+          </UserProtectedRoute>
+        } 
+      />
+      
+      {/* Root Route - Redirect based on user type */}
+      <Route 
+        path="/" 
+        element={
+          user ? (
+            isAdmin ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/dashboard" replace />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        } 
+      />
+    </Routes>
+  );
+};
+
+// New Main App Component
+function MainApp() {
+  return (
+    <AuthProvider>
+      <Router>
+        <AppRoutes />
+      </Router>
+    </AuthProvider>
+  );
+}
+
+export default MainApp;
