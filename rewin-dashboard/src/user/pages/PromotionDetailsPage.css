@@ -8,8 +8,8 @@
 .status-badge{position:absolute;right:1.5rem;padding:.4rem .8rem;border-radius:20px;color:#fff;font-weight:700;font-size:.85rem}
 .status-badge.active{background:linear-gradient(135deg,#10b981,#059669);box-shadow:0 4px 12px rgba(16,185,129,.35)}
 .status-badge.inactive{background:linear-gradient(135deg,#ef4444,#dc2626);box-shadow:0 4px 12px rgba(239,68,68,.35)}
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:1rem;margin-bottom:2rem}
-.stat-card{position:relative;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:16px;padding:1.25rem;backdrop-filter:blur(18px);box-shadow:0 8px 32px rgba(0,0,0,.12);text-align:center}
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:2rem;width:100%}
+.stat-card{position:relative;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:16px;padding:1.5rem;min-height:112px;backdrop-filter:blur(18px);box-shadow:0 8px 32px rgba(0,0,0,.12);text-align:center;display:flex;flex-direction:column;justify-content:center;align-items:center}
 .stat-icon{position:absolute;top:12px;right:12px;width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08)}
 .info-header{display:flex;align-items:center;gap:1rem;justify-content:space-between;flex-wrap:wrap}
 .info-header .chips{margin:0}
