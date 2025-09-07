@@ -4122,15 +4122,15 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                   e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
                 }}
               >
-                <option value="ALL">🏪 All Outlets</option>
+                <option value="ALL">All Outlets</option>
                 {outlets.map(outlet => (
                   <option key={outlet.id} value={outlet.id}>
-                    📍 {outlet.name || `Outlet ${outlet.id}`}
+                    {outlet.name || `Outlet ${outlet.id}`}
                   </option>
                 ))}
               </select>
-              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem', color: '#6b7280' }}>
-                Hold Ctrl/Cmd to select multiple outlets
+              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)' }}>
+                Choose a single outlet or All Outlets
               </p>
             </div>
 
@@ -4339,9 +4339,9 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 }}
               >
                 <option value="" style={{ color: '#9ca3af' }}>Select Type</option>
-                <option value="inactive">🛌 Inactive Customers</option>
-                <option value="birthday">🎂 Birthday Campaign</option>
-                <option value="welcome">👋 Welcome Campaign</option>
+                <option value="welcome">Welcome Campaign</option>
+                <option value="inactive">Inactive Customers</option>
+                <option value="birthday">Birthday Campaign</option>
               </select>
             </div>
 
@@ -4506,23 +4506,38 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               />
             </div>
 
+            {/* Discount Type */}
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, fontSize: '1.05rem', color: '#fff' }}>Discount Type *</label>
+              <div style={{ display: 'inline-flex', gap: '0.5rem', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 12, padding: '0.25rem' }}>
+                <button type="button" onClick={() => setCampaignForm(prev => ({ ...prev, discountType: 'dollar' }))}
+                  style={{ padding: '0.5rem 0.9rem', borderRadius: 10, background: campaignForm.discountType === 'dollar' ? 'linear-gradient(135deg, #10b981, #059669)' : 'transparent', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700 }}>
+                  Dollar ($)
+                </button>
+                <button type="button" onClick={() => setCampaignForm(prev => ({ ...prev, discountType: 'percentage' }))}
+                  style={{ padding: '0.5rem 0.9rem', borderRadius: 10, background: campaignForm.discountType === 'percentage' ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : 'transparent', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700 }}>
+                  Percentage (%)
+                </button>
+              </div>
+            </div>
+
             {/* Discount Amount & Minimum Purchase */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
               <div>
-                <label style={{ 
-                  display: 'block', 
-                  marginBottom: '0.75rem', 
+                <label style={{
+                  display: 'block',
+                  marginBottom: '0.75rem',
                   fontWeight: 600,
                   fontSize: '1.1rem',
                   color: '#374151'
                 }}>
-                  Discount Amount ($) *
+                  {campaignForm.discountType === 'dollar' ? 'Amount ($) *' : 'Percentage (%) *'}
                 </label>
                 <input
                   type="number"
                   value={campaignForm.discountAmount}
                   onChange={(e) => setCampaignForm(prev => ({ ...prev, discountAmount: Number(e.target.value) }))}
-                  placeholder="10"
+                  placeholder={campaignForm.discountType === 'dollar' ? '10' : '20'}
                   style={{
                     width: '100%',
                     padding: '1rem 1.25rem',
@@ -4648,17 +4663,15 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 }}
                 style={{
                   width: '100%',
-                  padding: '1rem 1.25rem',
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '16px',
-                  background: '#ffffff',
-                  color: '#1f2937',
-                  fontSize: '1rem',
-                  fontWeight: 500,
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                  padding: '0.6rem 0.9rem',
+                  border: '1px solid rgba(255,255,255,0.25)',
+                  borderRadius: '12px',
+                  background: 'rgba(255,255,255,0.08)',
+                  color: '#fff',
+                  fontSize: '0.95rem',
+                  fontWeight: 600,
                   outline: 'none',
-                  minHeight: '140px',
+                  height: '44px',
                   cursor: 'pointer'
                 }}
                 onFocus={(e) => {
@@ -4670,15 +4683,15 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                   e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
                 }}
               >
-                <option value="ALL">🏪 All Outlets</option>
+                <option value="ALL">All Outlets</option>
                 {outlets.map(outlet => (
                   <option key={outlet.id} value={outlet.id}>
-                    📍 {outlet.name || `Outlet ${outlet.id}`}
+                    {outlet.name || `Outlet ${outlet.id}`}
                   </option>
                 ))}
               </select>
-              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem', color: '#6b7280' }}>
-                Hold Ctrl/Cmd to select multiple outlets
+              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)' }}>
+                Choose a single outlet or All Outlets
               </p>
             </div>
 
