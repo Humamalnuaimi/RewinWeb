@@ -34,6 +34,7 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { PromotionService } from '../../services/PromotionService';
+import GlassModal from '../../shared/components/ui/GlassModal';
 import { CampaignService } from '../../services/CampaignService';
 import { AutomationService } from '../../services/AutomationService';
 import { CampaignAutomationService } from '../../services/CampaignAutomationService';
@@ -3664,94 +3665,43 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
         </div>
       )}
 
-      {/* 🚀 MODERN PROMOTION CREATION MODAL */}
+      {/* 🚀 UNIFIED GLASS MODAL - CREATE PROMOTION */}
       {showCreatePromotion && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          background: 'rgba(0, 0, 0, 0.75)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '2rem',
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: 'linear-gradient(145deg, #ffffff, #f8fafc)',
-            border: 'none',
-            boxShadow: '0 25px 50px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.8)',
-            borderRadius: '24px',
-            padding: '3rem',
-            width: 'min(700px, 95vw)',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            color: '#1e293b',
-            position: 'relative'
-          }}>
-            {/* Header */}
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'space-between', 
-              marginBottom: '2.5rem',
-              paddingBottom: '1.5rem',
-              borderBottom: '2px solid #e2e8f0'
-            }}>
-              <div>
-                <h2 style={{ 
-                  margin: 0, 
-                  color: '#0f172a', 
-                  fontSize: '2rem', 
-                  fontWeight: 800,
-                  background: 'linear-gradient(135deg, #10b981, #059669)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text'
-                }}>
-                  Create New Promotion
-              </h2>
-                <p style={{ 
-                  margin: '0.5rem 0 0 0', 
-                  color: '#64748b', 
-                  fontSize: '1rem',
-                  fontWeight: 400
-                }}>
-                  Set up instant promotions for your customers
-                </p>
-              </div>
+        <GlassModal
+          title="Create New Promotion"
+          subtitle="Set up instant promotions for your customers"
+          accent="green"
+          onClose={() => setShowCreatePromotion(false)}
+          footer={(
+            <div style={{ display: 'flex', gap: '1.5rem', justifyContent: 'center' }}>
               <button
                 onClick={() => setShowCreatePromotion(false)}
+                disabled={loading}
                 style={{
-                  background: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
-                  border: 'none',
-                  color: '#64748b',
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '16px',
-                  cursor: 'pointer',
-                  fontSize: '1.25rem',
-                  fontWeight: 'bold',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
-                  e.currentTarget.style.color = 'white';
-                  e.currentTarget.style.transform = 'scale(1.05)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #f1f5f9, #e2e8f0)';
-                  e.currentTarget.style.color = '#64748b';
-                  e.currentTarget.style.transform = 'scale(1)';
+                  padding: '1rem 2rem', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 14,
+                  background: 'rgba(255,255,255,0.06)', color: 'white', cursor: loading ? 'not-allowed' : 'pointer',
+                  opacity: loading ? 0.5 : 1, fontSize: '1rem', fontWeight: 600
                 }}
               >
-                ✕
+                Cancel
+              </button>
+              <button
+                onClick={createPromotion}
+                disabled={loading || !promotionForm.title || !promotionForm.discountAmount}
+                style={{
+                  padding: '1rem 2rem', border: 'none', borderRadius: 14,
+                  background: (loading || !promotionForm.title || !promotionForm.discountAmount)
+                    ? 'linear-gradient(135deg, #6b7280, #4b5563)'
+                    : 'linear-gradient(135deg, #10b981, #059669)',
+                  color: 'white', cursor: (loading || !promotionForm.title || !promotionForm.discountAmount) ? 'not-allowed' : 'pointer',
+                  fontWeight: 700, fontSize: '1rem', boxShadow: '0 6px 22px rgba(16,185,129,0.35)'
+                }}
+              >
+                {loading ? '⏳ Creating...' : '🎉 Create Promotion'}
               </button>
             </div>
+          )}
+        >
 
             {/* Title */}
             <div style={{ marginBottom: '2rem' }}>
@@ -4258,178 +4208,47 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 </label>
             </div>
 
-            {/* Action Buttons */}
-            <div style={{ 
-              display: 'flex', 
-              gap: '1.5rem', 
-              justifyContent: 'center',
-              paddingTop: '2rem',
-              borderTop: '2px solid #e2e8f0'
-            }}>
+            {/* Action Buttons now provided by GlassModal footer */}
+        </GlassModal>
+      )}
+
+      {/* 🚀 UNIFIED GLASS MODAL - CREATE CAMPAIGN */}
+      {showCreateCampaign && (
+        <GlassModal
+          title="Create New Campaign"
+          subtitle="Set up automated marketing campaigns for your customers"
+          accent="blue"
+          onClose={() => setShowCreateCampaign(false)}
+          footer={(
+            <div style={{ display: 'flex', gap: '1.5rem', justifyContent: 'center' }}>
               <button
-                onClick={() => setShowCreatePromotion(false)}
+                onClick={() => setShowCreateCampaign(false)}
                 disabled={loading}
                 style={{
-                  padding: '1rem 2rem',
-                  border: '2px solid #d1d5db',
-                  borderRadius: '16px',
-                  background: '#ffffff',
-                  color: '#374151',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  opacity: loading ? 0.5 : 1,
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                  minWidth: '120px'
-                }}
-                onMouseOver={(e) => {
-                  if (!loading) {
-                    e.currentTarget.style.background = '#f3f4f6';
-                    e.currentTarget.style.borderColor = '#9ca3af';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (!loading) {
-                    e.currentTarget.style.background = '#ffffff';
-                    e.currentTarget.style.borderColor = '#d1d5db';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-                  }
+                  padding: '1rem 2rem', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 14,
+                  background: 'rgba(255,255,255,0.06)', color: 'white', cursor: loading ? 'not-allowed' : 'pointer',
+                  opacity: loading ? 0.5 : 1, fontSize: '1rem', fontWeight: 600
                 }}
               >
                 Cancel
               </button>
               <button
-                onClick={createPromotion}
-                disabled={loading || !promotionForm.title || !promotionForm.discountAmount}
+                onClick={createCampaign}
+                disabled={loading || !campaignForm.name || !campaignForm.type || !campaignForm.discountAmount}
                 style={{
-                  padding: '1rem 2rem',
-                  border: 'none',
-                  borderRadius: '16px',
-                  background: (loading || !promotionForm.title || !promotionForm.discountAmount) 
-                    ? 'linear-gradient(135deg, #9ca3af, #6b7280)' 
-                    : 'linear-gradient(135deg, #10b981, #059669)',
-                  color: 'white',
-                  cursor: (loading || !promotionForm.title || !promotionForm.discountAmount) ? 'not-allowed' : 'pointer',
-                  fontWeight: 700,
-                  fontSize: '1rem',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 12px rgba(16,185,129,0.3)',
-                  minWidth: '180px'
-                }}
-                onMouseOver={(e) => {
-                  if (!loading && promotionForm.title && promotionForm.discountAmount) {
-                    e.currentTarget.style.background = 'linear-gradient(135deg, #059669, #047857)';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(16,185,129,0.4)';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (!loading && promotionForm.title && promotionForm.discountAmount) {
-                    e.currentTarget.style.background = 'linear-gradient(135deg, #10b981, #059669)';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(16,185,129,0.3)';
-                  }
+                  padding: '1rem 2rem', border: 'none', borderRadius: 14,
+                  background: (loading || !campaignForm.name || !campaignForm.type || !campaignForm.discountAmount)
+                    ? 'linear-gradient(135deg, #6b7280, #4b5563)'
+                    : 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                  color: 'white', cursor: (loading || !campaignForm.name || !campaignForm.type || !campaignForm.discountAmount) ? 'not-allowed' : 'pointer',
+                  fontWeight: 700, fontSize: '1rem', boxShadow: '0 6px 22px rgba(59,130,246,0.35)'
                 }}
               >
-                {loading ? '⏳ Creating...' : '🎉 Create Promotion'}
+                {loading ? '⏳ Creating...' : '🚀 Create Campaign'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* 🚀 MODERN CAMPAIGN CREATION MODAL */}
-      {showCreateCampaign && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          background: 'rgba(0, 0, 0, 0.75)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '2rem',
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: 'linear-gradient(145deg, #ffffff, #f8fafc)',
-            border: 'none',
-            boxShadow: '0 25px 50px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.8)',
-            borderRadius: '24px',
-            padding: '3rem',
-            width: 'min(700px, 95vw)',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            color: '#1e293b',
-            position: 'relative'
-          }}>
-            {/* Header */}
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'space-between', 
-              marginBottom: '2.5rem',
-              paddingBottom: '1.5rem',
-              borderBottom: '2px solid #e2e8f0'
-            }}>
-              <div>
-                <h2 style={{ 
-                  margin: 0, 
-                  color: '#0f172a', 
-                  fontSize: '2rem', 
-                  fontWeight: 800,
-                  background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text'
-                }}>
-                  Create New Campaign
-              </h2>
-                <p style={{ 
-                  margin: '0.5rem 0 0 0', 
-                  color: '#64748b', 
-                  fontSize: '1rem',
-                  fontWeight: 400
-                }}>
-                  Set up automated marketing campaigns for your customers
-                </p>
-              </div>
-              <button
-                onClick={() => setShowCreateCampaign(false)}
-                style={{
-                  background: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
-                  border: 'none',
-                  color: '#64748b',
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '16px',
-                  cursor: 'pointer',
-                  fontSize: '1.25rem',
-                  fontWeight: 'bold',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
-                  e.currentTarget.style.color = 'white';
-                  e.currentTarget.style.transform = 'scale(1.05)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #f1f5f9, #e2e8f0)';
-                  e.currentTarget.style.color = '#64748b';
-                  e.currentTarget.style.transform = 'scale(1)';
-                }}
-              >
-                ✕
-              </button>
-            </div>
+          )}
+        >
 
             {/* Campaign Name */}
             <div style={{ marginBottom: '2rem' }}>
@@ -4854,88 +4673,8 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               </p>
             </div>
 
-            {/* Action Buttons */}
-            <div style={{ 
-              display: 'flex', 
-              gap: '1.5rem', 
-              justifyContent: 'center',
-              paddingTop: '2rem',
-              borderTop: '2px solid #e5e7eb'
-            }}>
-              <button
-                onClick={() => setShowCreateCampaign(false)}
-                disabled={loading}
-                style={{
-                  padding: '1rem 2rem',
-                  border: '2px solid #d1d5db',
-                  borderRadius: '16px',
-                  background: '#ffffff',
-                  color: '#374151',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  opacity: loading ? 0.5 : 1,
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                  minWidth: '120px'
-                }}
-                onMouseOver={(e) => {
-                  if (!loading) {
-                    e.currentTarget.style.background = '#f3f4f6';
-                    e.currentTarget.style.borderColor = '#9ca3af';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (!loading) {
-                    e.currentTarget.style.background = '#ffffff';
-                    e.currentTarget.style.borderColor = '#d1d5db';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-                  }
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={createCampaign}
-                disabled={loading || !campaignForm.name || !campaignForm.type || !campaignForm.discountAmount}
-                style={{
-                  padding: '1rem 2rem',
-                  border: 'none',
-                  borderRadius: '16px',
-                  background: (loading || !campaignForm.name || !campaignForm.type || !campaignForm.discountAmount) 
-                    ? 'linear-gradient(135deg, #9ca3af, #6b7280)' 
-                    : 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
-                  color: 'white',
-                  cursor: (loading || !campaignForm.name || !campaignForm.type || !campaignForm.discountAmount) ? 'not-allowed' : 'pointer',
-                  fontWeight: 700,
-                  fontSize: '1rem',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 12px rgba(59,130,246,0.3)',
-                  minWidth: '180px'
-                }}
-                onMouseOver={(e) => {
-                  if (!loading && campaignForm.name && campaignForm.type && campaignForm.discountAmount) {
-                    e.currentTarget.style.background = 'linear-gradient(135deg, #2563eb, #1e40af)';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(59,130,246,0.4)';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (!loading && campaignForm.name && campaignForm.type && campaignForm.discountAmount) {
-                    e.currentTarget.style.background = 'linear-gradient(135deg, #3b82f6, #1d4ed8)';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(59,130,246,0.3)';
-                  }
-                }}
-              >
-                {loading ? '⏳ Creating...' : '🚀 Create Campaign'}
-              </button>
-            </div>
-          </div>
-        </div>
+            {/* Action Buttons now provided by GlassModal footer */}
+        </GlassModal>
       )}
 
       {/* 🗑️ DELETE CONFIRMATION POPUP */}
