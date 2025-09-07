@@ -29,6 +29,7 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 import CampaignDetailsPage from './user/pages/CampaignDetailsPage';
+import PromotionDetailsPage from './user/pages/PromotionDetailsPage';
 
 import AdminDashboard from './user/components/AdminDashboard';
 
