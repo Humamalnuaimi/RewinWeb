@@ -35,6 +35,7 @@ import {
 } from 'firebase/firestore';
 import { PromotionService } from '../../services/PromotionService';
 import GlassModal from '../../shared/components/ui/GlassModal';
+import { ThemedSelect, SFGIcon } from '../../shared/components/ui';
 import { CampaignService } from '../../services/CampaignService';
 import { AutomationService } from '../../services/AutomationService';
 import { CampaignAutomationService } from '../../services/CampaignAutomationService';
@@ -4083,22 +4084,12 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             {/* Target Outlets */}
             <div className="field-block">
               <label className="field-label">Target Outlets</label>
-              <select
-                className="select-compact"
+              <ThemedSelect
+                ariaLabel="Target Outlets"
                 value={promotionForm.targetOutlets === 'ALL' ? 'ALL' : (Array.isArray(promotionForm.targetOutlets) && promotionForm.targetOutlets[0]) || 'ALL'}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  const targetOutlets = val === 'ALL' ? 'ALL' : [val];
-                  setPromotionForm(prev => ({ ...prev, targetOutlets }));
-                }}
-              >
-                <option value="ALL">All Outlets</option>
-                {outlets.map(outlet => (
-                  <option key={outlet.id} value={outlet.id}>
-                    {outlet.name || `Outlet ${outlet.id}`}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setPromotionForm(prev => ({ ...prev, targetOutlets: val === 'ALL' ? 'ALL' : [val] }))}
+                options={[{ value: 'ALL', label: 'All Outlets' }, ...outlets.map((o:any) => ({ value: o.id, label: o.name || `Outlet ${o.id}` }))]}
+              />
               <p className="field-hint">Choose a single outlet or All Outlets</p>
             </div>
 
@@ -4223,7 +4214,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                   fontWeight: 700, fontSize: '1rem', boxShadow: '0 6px 22px rgba(59,130,246,0.35)'
                 }}
               >
-                {loading ? '⏳ Creating...' : '🚀 Create Campaign'}
+                {loading ? '⏳ Creating...' : (<span style={{display:'inline-flex',alignItems:'center',gap:8}}><SFGIcon size={18}/> Create Campaign</span>)}
               </button>
             </div>
           )}
@@ -4620,22 +4611,12 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             {/* Target Outlets */}
             <div className="field-block field-block-lg">
               <label className="field-label">Target Outlets</label>
-              <select
-                className="select-compact"
+              <ThemedSelect
+                ariaLabel="Target Outlets"
                 value={campaignForm.targetOutlets === 'ALL' ? 'ALL' : (Array.isArray(campaignForm.targetOutlets) && campaignForm.targetOutlets[0]) || 'ALL'}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  const targetOutlets = val === 'ALL' ? 'ALL' : [val];
-                  setCampaignForm(prev => ({ ...prev, targetOutlets }));
-                }}
-              >
-                <option value="ALL">All Outlets</option>
-                {outlets.map(outlet => (
-                  <option key={outlet.id} value={outlet.id}>
-                    {outlet.name || `Outlet ${outlet.id}`}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setCampaignForm(prev => ({ ...prev, targetOutlets: val === 'ALL' ? 'ALL' : [val] }))}
+                options={[{ value: 'ALL', label: 'All Outlets' }, ...outlets.map((o:any) => ({ value: o.id, label: o.name || `Outlet ${o.id}` }))]}
+              />
               <p className="field-hint">Choose a single outlet or All Outlets</p>
             </div>
 
