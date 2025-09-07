@@ -1568,7 +1568,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       console.log('📞 Unique phone numbers:', Array.from(uniquePhoneNumbers).slice(0, 5), '...');
       
       // Debug web_customers integration
-      console.log('🔍 WEB_CUSTOMERS INTEGRATION:');
+      console.log('���� WEB_CUSTOMERS INTEGRATION:');
       console.log('- Collection: web_customers ✅');
       console.log('- Multi-outlet support: visitedOutlets array ✅');
       
@@ -2013,7 +2013,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 e.preventDefault();
                 e.stopPropagation();
               }}
-              onSelectStart={(e) => {
+              onPointerDown={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 return false;
@@ -2803,7 +2803,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                     e.preventDefault();
                     e.stopPropagation();
                   }}
-                  onSelectStart={(e) => {
+                  onPointerDown={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     return false;
@@ -4073,7 +4073,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       e.preventDefault();
                       e.stopPropagation();
                     }}
-                    onSelectStart={(e) => {
+                    onPointerDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       return false;
@@ -4099,7 +4099,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       e.preventDefault();
                       e.stopPropagation();
                     }}
-                    onSelectStart={(e) => {
+                    onPointerDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       return false;
@@ -4115,7 +4115,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         e.preventDefault();
                         e.stopPropagation();
                       }}
-                      onSelectStart={(e) => {
+                      onPointerDown={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         return false;
@@ -4134,7 +4134,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                            e.preventDefault();
                            e.stopPropagation();
                          }}
-                         onSelectStart={(e) => {
+                         onPointerDown={(e) => {
                            e.preventDefault();
                            e.stopPropagation();
                            return false;
@@ -4154,7 +4154,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                            e.preventDefault();
                            e.stopPropagation();
                          }}
-                         onSelectStart={(e) => {
+                         onPointerDown={(e) => {
                            e.preventDefault();
                            e.stopPropagation();
                            return false;
@@ -4174,7 +4174,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                            e.preventDefault();
                            e.stopPropagation();
                          }}
-                         onSelectStart={(e) => {
+                         onPointerDown={(e) => {
                            e.preventDefault();
                            e.stopPropagation();
                            return false;
@@ -4195,7 +4195,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                            e.preventDefault();
                            e.stopPropagation();
                          }}
-                         onSelectStart={(e) => {
+                         onPointerDown={(e) => {
                            e.preventDefault();
                            e.stopPropagation();
                            return false;
@@ -4214,7 +4214,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         e.preventDefault();
                         e.stopPropagation();
                       }}
-                      onSelectStart={(e) => {
+                      onPointerDown={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         return false;
@@ -4233,7 +4233,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                           e.preventDefault();
                           e.stopPropagation();
                         }}
-                        onSelectStart={(e) => {
+                        onPointerDown={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
                           return false;
@@ -4253,7 +4253,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                           e.preventDefault();
                           e.stopPropagation();
                         }}
-                        onSelectStart={(e) => {
+                        onPointerDown={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
                           return false;
@@ -5519,7 +5519,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         e.preventDefault();
                         e.stopPropagation();
                       }}
-                      onSelectStart={(e) => {
+                      onPointerDown={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         return false;
@@ -6501,7 +6501,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       e.preventDefault();
                       e.stopPropagation();
                     }}
-                    onSelectStart={(e) => {
+                    onPointerDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       return false;
@@ -6523,7 +6523,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       e.preventDefault();
                       e.stopPropagation();
                     }}
-                    onSelectStart={(e) => {
+                    onPointerDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       return false;
@@ -6567,7 +6567,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         e.preventDefault();
                         e.stopPropagation();
                       }}
-                      onSelectStart={(e) => {
+                      onPointerDown={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         return false;
@@ -6588,7 +6588,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         e.preventDefault();
                         e.stopPropagation();
                       }}
-                      onSelectStart={(e) => {
+                      onPointerDown={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         return false;
@@ -6608,7 +6608,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         e.preventDefault();
                         e.stopPropagation();
                       }}
-                      onSelectStart={(e) => {
+                      onPointerDown={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         return false;
@@ -6627,7 +6627,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       e.preventDefault();
                       e.stopPropagation();
                     }}
-                    onSelectStart={(e) => {
+                    onPointerDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       return false;
@@ -6649,7 +6649,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         e.preventDefault();
                         e.stopPropagation();
                       }}
-                      onSelectStart={(e) => {
+                      onPointerDown={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         return false;
@@ -6669,7 +6669,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         e.preventDefault();
                         e.stopPropagation();
                       }}
-                      onSelectStart={(e) => {
+                      onPointerDown={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         return false;
@@ -7219,7 +7219,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                     e.preventDefault();
                     e.stopPropagation();
                   }}
-                  onSelectStart={(e) => {
+                  onPointerDown={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     return false;
@@ -7244,7 +7244,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                       e.preventDefault();
                       e.stopPropagation();
                     }}
-                    onSelectStart={(e) => {
+                    onPointerDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       return false;
@@ -7260,7 +7260,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         e.preventDefault();
                         e.stopPropagation();
                       }}
-                      onSelectStart={(e) => {
+                      onPointerDown={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         return false;
@@ -7278,7 +7278,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                           e.preventDefault();
                           e.stopPropagation();
                         }}
-                        onSelectStart={(e) => {
+                        onPointerDown={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
                           return false;
@@ -7298,7 +7298,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                           e.preventDefault();
                           e.stopPropagation();
                         }}
-                        onSelectStart={(e) => {
+                        onPointerDown={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
                           return false;
@@ -7318,7 +7318,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                           e.preventDefault();
                           e.stopPropagation();
                         }}
-                        onSelectStart={(e) => {
+                        onPointerDown={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
                           return false;
@@ -7337,7 +7337,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                         e.preventDefault();
                         e.stopPropagation();
                       }}
-                      onSelectStart={(e) => {
+                      onPointerDown={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         return false;
@@ -7357,7 +7357,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                            e.preventDefault();
                            e.stopPropagation();
                          }}
-                         onSelectStart={(e) => {
+                         onPointerDown={(e) => {
                            e.preventDefault();
                            e.stopPropagation();
                            return false;
@@ -7375,7 +7375,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                              e.preventDefault();
                              e.stopPropagation();
                            }}
-                           onSelectStart={(e) => {
+                           onPointerDown={(e) => {
                              e.preventDefault();
                              e.stopPropagation();
                              return false;
@@ -7396,7 +7396,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                           e.preventDefault();
                           e.stopPropagation();
                         }}
-                        onSelectStart={(e) => {
+                        onPointerDown={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
                           return false;
@@ -7934,7 +7934,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                     e.preventDefault();
                     e.stopPropagation();
                   }}
-                  onSelectStart={(e) => {
+                  onPointerDown={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     return false;
@@ -8874,7 +8874,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                     e.preventDefault();
                     e.stopPropagation();
                   }}
-                  onSelectStart={(e) => {
+                  onPointerDown={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     return false;
