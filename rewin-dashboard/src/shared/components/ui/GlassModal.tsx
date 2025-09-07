@@ -28,20 +28,44 @@ const GlassModal: React.FC<GlassModalProps> = ({ title, subtitle, accent = 'blue
       role="dialog" aria-modal="true"
     >
       <div
+        data-glass-modal
         style={{
           width: 'min(760px, 95vw)', maxHeight: '90vh', overflowY: 'auto', position: 'relative',
           borderRadius: 24, padding: '2rem',
-          background: 'rgba(255,255,255,0.08)',
-          border: '1px solid rgba(255,255,255,0.2)',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+          background: 'rgba(16,24,40,0.55)',
+          border: '1px solid rgba(255,255,255,0.18)',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.45)',
           color: 'white'
         }}
       >
+        {/* Scoped dark styles for inputs inside modal */}
+        <style>{`
+          [data-glass-modal] label { color: rgba(255,255,255,0.95) !important; }
+          [data-glass-modal] input,
+          [data-glass-modal] select,
+          [data-glass-modal] textarea {
+            background: rgba(255,255,255,0.08) !important;
+            border: 1px solid rgba(255,255,255,0.22) !important;
+            color: #fff !important;
+            box-shadow: none !important;
+          }
+          [data-glass-modal] input::placeholder,
+          [data-glass-modal] textarea::placeholder { color: rgba(255,255,255,0.7); }
+          [data-glass-modal] select option { background: #0b1021; color: #fff; }
+          [data-glass-modal] input:focus,
+          [data-glass-modal] select:focus,
+          [data-glass-modal] textarea:focus {
+            outline: none !important;
+            border-color: rgba(99,102,241,0.6) !important;
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.25) !important;
+          }
+        `}</style>
+
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 800, background: accentMap[accent], WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>{title}</h2>
             {subtitle && (
-              <p style={{ margin: '0.4rem 0 0 0', opacity: 0.85, fontSize: '0.95rem' }}>{subtitle}</p>
+              <p style={{ margin: '0.4rem 0 0 0', opacity: 0.9, fontSize: '0.95rem' }}>{subtitle}</p>
             )}
           </div>
           <button
