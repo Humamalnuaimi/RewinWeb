@@ -28,6 +28,7 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 import CampaignDetailsPage from './user/pages/CampaignDetailsPage';
+import PromotionDetailsPage from './user/pages/PromotionDetailsPage';
 
 import AdminDashboard from './user/components/AdminDashboard';
 
@@ -1371,6 +1372,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
   const [endDate, setEndDate] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
+  const [selectedPromotionId, setSelectedPromotionId] = useState<string>('');
   const [previousPage, setPreviousPage] = useState<string>('customers');
   const [showAdminDashboard, setShowAdminDashboard] = useState(false);
   
@@ -8075,8 +8077,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
   }
   
   if (currentPage === 'sms-marketing') {
-            return <CampaignManager 
-              user={user} 
+            return <CampaignManager
+              user={user}
               onBack={() => {
                 setCurrentPage('dashboard');
                 setShowAdminDashboard(false);
@@ -8084,13 +8086,14 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               currentPage={currentPage}
               setCurrentPage={setCurrentPage}
               setSelectedCampaignId={setSelectedCampaignId}
+              setSelectedPromotionId={setSelectedPromotionId}
             />;
   }
-  
+
   if (currentPage === 'campaignDetails' && selectedCampaignId) {
-            return <CampaignDetailsPage 
+            return <CampaignDetailsPage
               key={`campaign-${selectedCampaignId}`}
-              user={user} 
+              user={user}
               onBack={() => {
                 setSelectedCampaignId('');
                 setCurrentPage('sms-marketing');
@@ -8098,7 +8101,19 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               campaignId={selectedCampaignId}
             />;
   }
-  
+
+  if (currentPage === 'promotionDetails' && selectedPromotionId) {
+            return <PromotionDetailsPage
+              key={`promotion-${selectedPromotionId}`}
+              user={user}
+              onBack={() => {
+                setSelectedPromotionId('');
+                setCurrentPage('sms-marketing');
+              }}
+              promotionId={selectedPromotionId}
+            />;
+  }
+
   if (currentPage === 'outlets') {
     return <OutletAnalyticsPage 
       onBack={() => setCurrentPage('dashboard')}
