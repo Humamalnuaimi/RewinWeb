@@ -218,18 +218,29 @@ export class PromotionService {
       // 1) Delete master promotion
       await deleteDoc(doc(firestore, 'users', user.uid, 'promotions', promotionId));
 
-      // 2) Delete per-customer assignments in users path
-      const customersRef = collection(firestore, 'users', user.uid, 'customerPromotions');
-      const customersSnapshot = await getDocs(customersRef);
       let deletedCount = 0;
-      for (const customerDoc of customersSnapshot.docs) {
-        const customerId = customerDoc.id;
-        const promosRef = collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions');
-        const q = query(promosRef, where('masterPromotionId', '==', promotionId));
-        const promosSnap = await getDocs(q);
-        for (const p of promosSnap.docs) {
-          await deleteDoc(p.ref);
-          deletedCount++;
+
+      // 2a) Delete flat assignments in users/{uid}/customerPromotions
+      {
+        const flatRef = collection(firestore, 'users', user.uid, 'customerPromotions');
+        const flatQuery = query(flatRef, where('masterPromotionId', '==', promotionId));
+        const flatSnap = await getDocs(flatQuery);
+        for (const d of flatSnap.docs) { await deleteDoc(d.ref); deletedCount++; }
+      }
+
+      // 2b) Delete nested assignments in users path (legacy structure)
+      {
+        const customersRef = collection(firestore, 'users', user.uid, 'customerPromotions');
+        const customersSnapshot = await getDocs(customersRef);
+        for (const customerDoc of customersSnapshot.docs) {
+          const customerId = customerDoc.id;
+          const promosRef = collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions');
+          const q = query(promosRef, where('masterPromotionId', '==', promotionId));
+          const promosSnap = await getDocs(q);
+          for (const p of promosSnap.docs) {
+            await deleteDoc(p.ref);
+            deletedCount++;
+          }
         }
       }
 
