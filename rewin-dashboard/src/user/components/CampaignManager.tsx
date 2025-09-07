@@ -2715,7 +2715,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
           <div>
             <div style={{ marginBottom: '1.5rem' }}>
               <h2 style={{ color: 'white', margin: 0 }}>
-                ��� Campaigns ({campaigns.length})
+                Campaigns ({campaigns.length})
               </h2>
             </div>
             {campaigns.length === 0 ? (
