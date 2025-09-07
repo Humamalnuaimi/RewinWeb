@@ -3092,13 +3092,20 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 }}>
                   {promotions.map((promotion) => (
                     <div key={promotion.id}
-                      onClick={(e) => {
-                        const target = e.target as HTMLElement;
-                        if (target.tagName !== 'BUTTON' && !target.closest('button')) {
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
                           if (setCurrentPage && promotion.id && typeof setSelectedPromotionId === 'function') {
                             setSelectedPromotionId(promotion.id);
                             setCurrentPage('promotionDetails');
                           }
+                        }
+                      }}
+                      onClick={() => {
+                        if (setCurrentPage && promotion.id && typeof setSelectedPromotionId === 'function') {
+                          setSelectedPromotionId(promotion.id);
+                          setCurrentPage('promotionDetails');
                         }
                       }}
                       style={{
@@ -3109,7 +3116,8 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                       backdropFilter: 'blur(15px)',
                       boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
                       position: 'relative',
-                      overflow: 'hidden'
+                      overflow: 'hidden',
+                      cursor: 'pointer'
                     }}>
                       {/* STATUS BADGE */}
                       <div style={{
@@ -3224,7 +3232,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                         gap: '0.75rem'
                       }}>
                         <button
-                          onClick={() => togglePromotionStatus(promotion.id!, promotion.isActive)}
+                          onClick={(e) => { e.stopPropagation(); togglePromotionStatus(promotion.id!, promotion.isActive); }}
                           disabled={loading}
                           style={{
                             flex: 1,
@@ -3253,7 +3261,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                           {promotion.isActive ? 'Deactivate' : 'Activate'}
                         </button>
                         <button
-                          onClick={() => handleDeleteClick(promotion)}
+                          onClick={(e) => { e.stopPropagation(); handleDeleteClick(promotion); }}
                           disabled={loading}
                           style={{
                             flex: 1,
