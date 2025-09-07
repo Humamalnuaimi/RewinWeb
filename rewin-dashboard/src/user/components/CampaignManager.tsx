@@ -3069,11 +3069,9 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               🔵 Promotions ({promotions.length})
             </h2>
             <div style={{
-              background: 'rgba(255,255,255,0.1)',
-              borderRadius: '15px',
-              padding: '2rem',
-              backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255,255,255,0.2)'
+              background: 'transparent',
+              padding: 0,
+              border: 'none'
             }}>
               {promotions.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '2rem' }}>
