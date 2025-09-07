@@ -324,14 +324,11 @@ export class PromotionService {
       reasons: []
     };
 
-    // Check outlet targeting (HOME OUTLET ONLY)
-    // - Empty targetOutlets [] = all outlets, but customer MUST have a home outlet
+    // Check outlet targeting (HOME OUTLET ONLY when specific outlets are chosen)
+    // - Empty targetOutlets [] = all outlets, INCLUDE customers even if they have no home outlet
     const homeOutletId = customer.outletId || (customer.outlet && customer.outlet.id) || null;
-    if (!homeOutletId) {
-      eligibility.eligible = false;
-      eligibility.reasons.push('Customer has no home outlet');
-    } else if (promotion.targetOutlets?.length > 0) {
-      if (!promotion.targetOutlets.includes(homeOutletId)) {
+    if (promotion.targetOutlets?.length > 0) {
+      if (!homeOutletId || !promotion.targetOutlets.includes(homeOutletId)) {
         eligibility.eligible = false;
         eligibility.reasons.push('Customer home outlet not in target outlets');
       }
