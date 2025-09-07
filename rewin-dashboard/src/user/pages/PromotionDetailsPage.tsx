@@ -180,8 +180,8 @@ const PromotionDetailsPage: React.FC<PromotionDetailsPageProps> = ({ user, promo
             <div className="info-header">
               <div className="info-title">{promotion.title}</div>
               <div className="chips">
-                <span className="chip chip-gold"><BadgeDollarSign size={14} />{promotion.discountType === 'percentage' ? `${promotion.discountAmount}% OFF` : `$${promotion.discountAmount} OFF`}</span>
-                <span className="chip chip-green"><Wallet size={14} />Min ${promotion.minimumPurchase}</span>
+                <span className="chip chip-gold"><BadgeDollarSign size={16} />{promotion.discountType === 'percentage' ? `${promotion.discountAmount}% OFF` : `$${promotion.discountAmount} OFF`}</span>
+                <span className="chip chip-green"><Wallet size={16} />Min ${promotion.minimumPurchase}</span>
                 {promotion.campaignId && <span className="chip chip-purple">Campaign</span>}
                 {promotion.source && <span className="chip chip-blue">{String(promotion.source).toUpperCase()}</span>}
               </div>
