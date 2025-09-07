@@ -436,36 +436,44 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack, current
         }
       }
       
-      // One-time assignment to customers on creation (no automation, no SMS)
+      // One-time assignment to customers on creation (flat collection, no nested subcollections)
       try {
-        const { CustomerPromotionService } = await import('../../services/CustomerPromotionService');
         const expiresAtTs = promotionData.expiresAt
           ? (promotionData.expiresAt.toDate ? promotionData.expiresAt : Timestamp.fromDate(promotionData.expiresAt))
           : null;
 
+        const batch = writeBatch(firestore);
         let createdCount = 0;
         for (const customer of analytics.eligibleCustomers) {
           const customerId = customer.id;
           const outletId = customer.outletId || (customer.outlet && customer.outlet.id) || null; // home outlet only
           if (!outletId) { continue; }
           const detId = `promo_manual_${promotionId}_${customerId}`; // deterministic id for dedupe
-          await CustomerPromotionService.upsertBoth(customerId, detId, {
+
+          const docRef = doc(firestore, 'users', user.uid, 'customerPromotions', detId);
+          batch.set(docRef, {
             title: promotionData.title,
-            description: promotionData.description,
+            description: promotionData.description || '',
             discountType: promotionData.discountType,
             discountAmount: promotionData.discountAmount,
             minimumPurchase: promotionData.minimumPurchase,
-            expiresAt: expiresAtTs,
-            isActive: true,
-            isUsed: false,
-            outletId,
-            campaignId: null,
             source: 'manual',
-            masterPromotionId: promotionId
+            campaignId: null,
+            masterPromotionId: promotionId,
+            customerId,
+            outletId,
+            isUsed: false,
+            isActive: true,
+            assignedAt: Timestamp.now(),
+            createdAt: Timestamp.now(),
+            validityDays: promotionForm.validityDays,
+            expiresAt: expiresAtTs,
+            targetOutlets: Array.isArray(promotionData.targetOutlets) ? promotionData.targetOutlets : []
           });
           createdCount++;
         }
-        console.log(`✅ Assigned promotion to ${createdCount} eligible customers`);
+        await batch.commit();
+        console.log(`✅ Assigned promotion to ${createdCount} eligible customers (flat users/customerPromotions)`);
       } catch (err) {
         console.error('❌ Fan-out error:', err);
         alert('Fan-out to customers failed. The master promotion was created successfully.');
