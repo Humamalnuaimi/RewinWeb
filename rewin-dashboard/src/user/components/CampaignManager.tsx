@@ -1540,7 +1540,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       // Show success message
       setSuccessNotification({
         show: true,
-        message: `✅ Automation settings updated!\n\n🤖 Auto-processing: ${automationSettings.enabled ? 'ENABLED' : 'DISABLED'}\n⏰ Interval: Every ${automationSettings.intervalHours} hours${automationSettings.enabled ? `\n���� Next run: ${nextRun?.toLocaleString()}` : ''}`
+        message: `✅ Automation settings updated!\n\n🤖 Auto-processing: ${automationSettings.enabled ? 'ENABLED' : 'DISABLED'}\n⏰ Interval: Every ${automationSettings.intervalHours} hours${automationSettings.enabled ? `\n🚀 Next run: ${nextRun?.toLocaleString()}` : ''}`
       });
       
       setTimeout(() => {
@@ -4092,12 +4092,10 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 Target Outlets
               </label>
               <select
-                multiple
-                value={promotionForm.targetOutlets === 'ALL' ? ['ALL'] : promotionForm.targetOutlets}
+                value={promotionForm.targetOutlets === 'ALL' ? 'ALL' : (Array.isArray(promotionForm.targetOutlets) && promotionForm.targetOutlets[0]) || 'ALL'}
                 onChange={(e) => {
-                  const selected = Array.from(e.target.selectedOptions, option => option.value);
-                  // If "ALL" is selected, set to 'ALL' string (meaning all outlets)
-                  const targetOutlets = selected.includes('ALL') ? 'ALL' : selected;
+                  const val = e.target.value;
+                  const targetOutlets = val === 'ALL' ? 'ALL' : [val];
                   setPromotionForm(prev => ({ ...prev, targetOutlets }));
                 }}
                 style={{
