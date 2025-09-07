@@ -436,39 +436,38 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack, current
         }
       }
       
-      // Fan-out to per-customer promotions if requested
-      if (promotionForm.assignNow) {
-        try {
-          const { CustomerPromotionService } = await import('../../services/CustomerPromotionService');
-          const expiresAtTs = promotionData.expiresAt
-            ? (promotionData.expiresAt.toDate ? promotionData.expiresAt : Timestamp.fromDate(promotionData.expiresAt))
-            : null;
+      // One-time assignment to customers on creation (no automation, no SMS)
+      try {
+        const { CustomerPromotionService } = await import('../../services/CustomerPromotionService');
+        const expiresAtTs = promotionData.expiresAt
+          ? (promotionData.expiresAt.toDate ? promotionData.expiresAt : Timestamp.fromDate(promotionData.expiresAt))
+          : null;
 
-          let createdCount = 0;
-          for (const customer of analytics.eligibleCustomers) {
-            const customerId = customer.id;
-            const outletId = customer.outletId || customer.checkInOutletId || customer.preferredOutlet || customer.lastVisitOutlet || null;
-            const detId = `promo_manual_${promotionId}_${customerId}`;
-            await CustomerPromotionService.upsertBoth(customerId, detId, {
-              title: promotionData.title,
-              description: promotionData.description,
-              discountType: promotionData.discountType,
-              discountAmount: promotionData.discountAmount,
-              minimumPurchase: promotionData.minimumPurchase,
-              expiresAt: expiresAtTs,
-              isActive: true,
-              isUsed: false,
-              outletId,
-              campaignId: null,
-              source: 'manual'
-            });
-            createdCount++;
-          }
-          console.log(`✅ Assigned promotion to ${createdCount} eligible customers`);
-        } catch (err) {
-          console.error('❌ Fan-out error:', err);
-          alert('Fan-out to customers failed. The master promotion was created successfully.');
+        let createdCount = 0;
+        for (const customer of analytics.eligibleCustomers) {
+          const customerId = customer.id;
+          const outletId = customer.outletId || customer.checkInOutletId || customer.preferredOutlet || customer.lastVisitOutlet || null;
+          const detId = `promo_manual_${promotionId}_${customerId}`; // deterministic id for dedupe
+          await CustomerPromotionService.upsertBoth(customerId, detId, {
+            title: promotionData.title,
+            description: promotionData.description,
+            discountType: promotionData.discountType,
+            discountAmount: promotionData.discountAmount,
+            minimumPurchase: promotionData.minimumPurchase,
+            expiresAt: expiresAtTs,
+            isActive: true,
+            isUsed: false,
+            outletId,
+            campaignId: null,
+            source: 'manual',
+            masterPromotionId: promotionId
+          });
+          createdCount++;
         }
+        console.log(`✅ Assigned promotion to ${createdCount} eligible customers`);
+      } catch (err) {
+        console.error('❌ Fan-out error:', err);
+        alert('Fan-out to customers failed. The master promotion was created successfully.');
       }
 
       // Show success message with analytics
@@ -852,7 +851,7 @@ ${expirationText}
       console.log(`🚀 Starting campaign processing via Cloud Function... (${isAutomatic ? 'Automatic' : 'Manual'})`);
 
       // 🔥 Process all active campaigns using the same logic as "Process Now"
-      console.log('🚀 Processing all active campaigns...');
+      console.log('���� Processing all active campaigns...');
       
       // Get all active campaigns
       const campaignsRef = collection(firestore, 'users', user.uid, 'campaigns');
@@ -1227,7 +1226,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
   // 🎯 STEP 3: SMS SENDING FUNCTION (Production-Ready with Optional SMS)
   const sendPromotionSMS = async (businessId: string, promotion: Promotion, smsMessage: string) => {
     try {
-      console.log('📱 Sending SMS to customers with flexible requirements...');
+      console.log('�� Sending SMS to customers with flexible requirements...');
       
       // Get all customers from customers collection (as per Firebase console data)
       const customersRef = collection(firestore, 'users', user.uid, 'customers');
@@ -5715,4 +5714,4 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
   );
 };
 
-export default CampaignManager; 
+export default CampaignManager;
