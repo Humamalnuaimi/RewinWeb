@@ -971,7 +971,7 @@ ${expirationText}
     console.log('✅ Auto-processing started');
   };
 
-  // ⏹️ STOP AUTO-PROCESSING
+  // ���️ STOP AUTO-PROCESSING
   const stopAutoProcessing = () => {
     // Stop the automation service
     CampaignAutomationService.stopAutomation();
@@ -1079,7 +1079,7 @@ The promotion is now available on your mobile app!`);
     }
   };
 
-  // 🎯 STEP 2: CUSTOMER ASSIGNMENT FUNCTION (Production-Ready with Graceful Field Handling)
+  // ��� STEP 2: CUSTOMER ASSIGNMENT FUNCTION (Production-Ready with Graceful Field Handling)
   const assignPromotionToCustomers = async (businessId: string, promotionId: string, promotion: Promotion) => {
     try {
       console.log('🔄 Assigning promotion to customers with flexible field requirements...');
@@ -3799,79 +3799,30 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               />
             </div>
 
-            {/* Discount Type Selection */}
-            <div style={{ 
-              marginBottom: '2rem',
-              padding: '1.5rem',
-              background: 'linear-gradient(135deg, #f0f9ff, #e0f2fe)',
-              borderRadius: '16px',
-              border: '2px solid #0ea5e9'
-            }}>
-              <label style={{ 
-                display: 'block', 
-                marginBottom: '1rem', 
-                fontWeight: 600,
-                fontSize: '1.1rem',
-                color: '#0c4a6e'
-              }}>
-                Discount Type *
-              </label>
-              <div style={{ display: 'flex', gap: '2rem', marginBottom: '1rem' }}>
-                <label style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  cursor: 'pointer',
-                  padding: '0.75rem 1rem',
-                  borderRadius: '12px',
-                  background: promotionForm.discountType === 'dollar' ? '#dcfce7' : '#ffffff',
-                  border: `2px solid ${promotionForm.discountType === 'dollar' ? '#10b981' : '#e5e7eb'}`,
-                  transition: 'all 0.2s ease'
-                }}>
-                  <input
-                    type="radio"
-                    name="discountType"
-                    value="dollar"
-                    checked={promotionForm.discountType === 'dollar'}
-                    onChange={(e) => setPromotionForm(prev => ({ ...prev, discountType: e.target.value as 'dollar' | 'percentage' }))}
-                    style={{ marginRight: '0.75rem', transform: 'scale(1.3)' }}
-                  />
-                  <span style={{ color: '#047857', fontWeight: 600 }}>💰 Dollar Amount ($)</span>
-                </label>
-                <label style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  cursor: 'pointer',
-                  padding: '0.75rem 1rem',
-                  borderRadius: '12px',
-                  background: promotionForm.discountType === 'percentage' ? '#fef3c7' : '#ffffff',
-                  border: `2px solid ${promotionForm.discountType === 'percentage' ? '#f59e0b' : '#e5e7eb'}`,
-                  transition: 'all 0.2s ease'
-                }}>
-                  <input
-                    type="radio"
-                    name="discountType"
-                    value="percentage"
-                    checked={promotionForm.discountType === 'percentage'}
-                    onChange={(e) => setPromotionForm(prev => ({ ...prev, discountType: e.target.value as 'dollar' | 'percentage' }))}
-                    style={{ marginRight: '0.75rem', transform: 'scale(1.3)' }}
-                  />
-                  <span style={{ color: '#92400e', fontWeight: 600 }}>📊 Percentage (%)</span>
-                </label>
+            {/* Discount Type */}
+            <div className="toggle-centered">
+              <label className="field-label">Discount Type *</label>
+              <div className="toggle-row">
+                <button
+                  type="button"
+                  className={`toggle-btn ${promotionForm.discountType === 'dollar' ? 'active-dollar' : ''}`}
+                  onClick={() => setPromotionForm(prev => ({ ...prev, discountType: 'dollar' }))}
+                >
+                  Dollar ($)
+                </button>
+                <button
+                  type="button"
+                  className={`toggle-btn ${promotionForm.discountType === 'percentage' ? 'active-percent' : ''}`}
+                  onClick={() => setPromotionForm(prev => ({ ...prev, discountType: 'percentage' }))}
+                >
+                  Percentage (%)
+                </button>
               </div>
-              {/* Dynamic Preview Text */}
-              <div style={{ 
-                fontSize: '0.9rem', 
-                color: '#0c4a6e', 
-                background: '#ffffff',
-                padding: '0.75rem',
-                borderRadius: '8px',
-                border: '1px solid #0ea5e9'
-              }}>
-                {promotionForm.discountType === 'dollar' 
-                  ? `💡 Example: Create $${promotionForm.discountAmount || 5} off $${promotionForm.minimumPurchase || 10} or more deal`
-                  : `💡 Example: Create ${promotionForm.discountAmount || 40}% off $${promotionForm.minimumPurchase || 60} or more deal`
-                }
-              </div>
+              <p className="field-hint">
+                {promotionForm.discountType === 'dollar'
+                  ? `Example: Create $${promotionForm.discountAmount || 5} off $${promotionForm.minimumPurchase || 10} or more deal`
+                  : `Example: Create ${promotionForm.discountAmount || 40}% off $${promotionForm.minimumPurchase || 60} or more deal`}
+              </p>
             </div>
 
             {/* Amount & Minimum Purchase */}
@@ -3954,128 +3905,42 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               </div>
             </div>
 
-            {/* Valid for (Days) */}
-            <div style={{ marginBottom: '2rem' }}>
-              <label style={{ 
-                display: 'block', 
-                marginBottom: '0.75rem', 
-                fontWeight: 600,
-                fontSize: '1.1rem',
-                color: '#374151'
-              }}>
-                Valid for (Days)
-              </label>
-              <input
-                type="number"
-                value={promotionForm.validityDays}
-                onChange={(e) => setPromotionForm(prev => ({ ...prev, validityDays: Number(e.target.value) }))}
-                placeholder="30"
-                style={{
-                  width: '100%',
-                  padding: '1rem 1.25rem',
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '16px',
-                  background: '#ffffff',
-                  color: '#1f2937',
-                  fontSize: '1rem',
-                  fontWeight: 500,
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                  outline: 'none'
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = '#10b981';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(16,185,129,0.1), 0 4px 12px rgba(0,0,0,0.1)';
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = '#e5e7eb';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
-                }}
-              />
-            </div>
 
             {/* Expiration Settings */}
-            <div style={{ 
-              marginBottom: '2rem',
-              padding: '1.5rem',
-              background: 'linear-gradient(135deg, #fef3c7, #fde68a)',
-              borderRadius: '16px',
-              border: '2px solid #f59e0b'
-            }}>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  cursor: 'pointer', 
-                  fontWeight: 600,
-                  fontSize: '1.1rem',
-                  color: '#92400e'
-                }}>
+            <div className="panel-navy field-block">
+              <div style={{ marginBottom: '0.75rem' }}>
+                <label className="checkbox-row" style={{ cursor:'pointer' }}>
                   <input
                     type="checkbox"
                     checked={promotionForm.hasExpiration}
                     onChange={(e) => setPromotionForm(prev => ({ ...prev, hasExpiration: e.target.checked }))}
-                    style={{ marginRight: '0.75rem', transform: 'scale(1.3)' }}
+                    style={{ marginRight: '0.75rem', transform: 'scale(1.1)' }}
                   />
                   <span>⏰ Set Expiration Date</span>
                 </label>
-                <div style={{ 
-                  fontSize: '0.9rem', 
-                  color: '#92400e', 
-                  marginTop: '0.5rem',
-                  marginLeft: '2rem'
-                }}>
-                  Add countdown timer and automatic expiration to this promotion
-                </div>
+                <div className="panel-note">Add countdown timer and automatic expiration to this promotion</div>
               </div>
 
               {promotionForm.hasExpiration && (
                 <>
-                  <div style={{ marginBottom: '1rem' }}>
-                    <label style={{ 
-                      display: 'block', 
-                      marginBottom: '0.75rem', 
-                      fontWeight: 600,
-                      fontSize: '1rem',
-                      color: '#92400e'
-                    }}>
-                      Expires After (Days) *
-                    </label>
+                  <div className="field-block" style={{ marginBottom: '0.75rem' }}>
+                    <label className="field-label" style={{ fontSize: '1rem' }}>Expires After (Days) *</label>
                     <input
+                      className="input-compact"
                       type="number"
                       min="1"
                       max="365"
                       value={promotionForm.expirationDays}
                       onChange={(e) => setPromotionForm(prev => ({ ...prev, expirationDays: Number(e.target.value) }))}
                       placeholder="7"
-                      style={{
-                        width: '100%',
-                        padding: '1rem 1.25rem',
-                        border: '2px solid #f59e0b',
-                        borderRadius: '12px',
-                        background: '#ffffff',
-                        color: '#1f2937',
-                        fontSize: '1rem',
-                        fontWeight: 500,
-                        outline: 'none'
-                      }}
                     />
                   </div>
-                  
-                  {/* Preview Text */}
-                  <div style={{ 
-                    fontSize: '0.9rem', 
-                    color: '#047857', 
-                    background: '#dcfce7',
-                    padding: '0.75rem',
-                    borderRadius: '8px',
-                    border: '1px solid #10b981'
-                  }}>
-                    💡 <strong>Preview:</strong> Customers will see "{
-                      promotionForm.discountType === 'dollar' 
+                  <div className="preview-muted">
+                    Preview: {
+                      promotionForm.discountType === 'dollar'
                         ? `$${promotionForm.discountAmount || 5} off $${promotionForm.minimumPurchase || 10}+ (${promotionForm.expirationDays} days left)`
                         : `${promotionForm.discountAmount || 40}% off $${promotionForm.minimumPurchase || 60}+ (${promotionForm.expirationDays} days left)`
-                    }"
+                    }
                   </div>
                 </>
               )}
