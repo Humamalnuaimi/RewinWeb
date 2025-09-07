@@ -10,7 +10,9 @@
 .status-badge.inactive{background:linear-gradient(135deg,#ef4444,#dc2626);box-shadow:0 4px 12px rgba(239,68,68,.35)}
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:1rem;margin-bottom:2rem}
 .stat-card{position:relative;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:16px;padding:1.25rem;backdrop-filter:blur(18px);box-shadow:0 8px 32px rgba(0,0,0,.12);text-align:center}
-.stat-icon{position:absolute;top:12px;right:12px;width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08)}
+.stat-icon{position:absolute;top:12px;right:12px;width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08)}
+.info-header{display:flex;align-items:center;gap:1rem;justify-content:space-between;flex-wrap:wrap}
+.info-header .chips{margin:0}
 .stat-label{opacity:.9;font-size:1rem;margin:0 0 .35rem 0}
 .stat-value{font-size:2.4rem;font-weight:900}
 .stat-total{border-top:4px solid #14b8a6}
