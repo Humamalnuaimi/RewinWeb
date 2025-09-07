@@ -1301,7 +1301,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             console.log(`✅ SMS sent to ${phoneNumber} (${customer.firstName || customer.customerId})`);
           } catch (smsError) {
             smsFailedCount++;
-            console.warn(`⚠��� Failed to send SMS to ${customer.phoneNumber}:`, smsError);
+            console.warn(`⚠️ Failed to send SMS to ${customer.phoneNumber}:`, smsError);
             // Continue with other customers even if one fails
           }
         } else {
@@ -1755,7 +1755,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       console.log(`✅ Campaign deleted and ${cleanupCount} customer promotions cleaned up`);
       
       loadCampaigns();
-      alert(`��� Campaign deleted successfully!\n🧹 Cleaned up ${cleanupCount} customer promotions`);
+      alert(`✅ Campaign deleted successfully!\n🧹 Cleaned up ${cleanupCount} customer promotions`);
     } catch (error) {
       console.error('❌ Error deleting campaign:', error);
       alert(`❌ Error deleting campaign: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -5316,7 +5316,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 <h4 style={{ color: '#3b82f6', margin: '0 0 0.5rem 0' }}>📊 Campaign Details</h4>
                 <div style={{ color: '#d1d5db', fontSize: '0.9rem' }}>
                   <div><strong>Name:</strong> {campaignToDelete.name}</div>
-                  <div><strong>Type:</strong> {campaignToDelete.triggerType === 'birthday' ? 'Birthday' : 'Inactive Customer'}</div>
+                  <div><strong>Type:</strong> {campaignToDelete.triggerType === 'birthday' ? 'Birthday' : campaignToDelete.triggerType === 'welcome' ? 'Welcome' : 'Inactive Customer'}</div>
                   <div><strong>Discount:</strong> ${campaignToDelete.discountAmount} {campaignToDelete.discountType === 'percentage' ? '%' : ''}</div>
                   <div><strong>Status:</strong> {campaignToDelete.isActive ? '🟢 Active' : '🔴 Inactive'}</div>
                 </div>
