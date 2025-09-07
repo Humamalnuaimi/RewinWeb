@@ -1331,7 +1331,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       console.log('🏢 Business ID used for creation:', businessId);
       
       // Map campaign type to proper trigger type
-      let triggerType: 'birthday' | 'inactive_15' | 'inactive_30' | 'inactive_custom' = 'birthday';
+      let triggerType: 'birthday' | 'inactive_15' | 'inactive_30' | 'inactive_custom' | 'welcome' = 'birthday';
       let daysSinceLastVisit: number = 0; // Default to 0 instead of undefined
       
       switch (campaignForm.type) {
