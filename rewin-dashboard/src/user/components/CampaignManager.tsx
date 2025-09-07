@@ -119,7 +119,7 @@ interface CampaignForm {
   targetOutlets: string[] | 'ALL';
 }
 
-const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack, currentPage, setCurrentPage, setSelectedCampaignId: propSetSelectedCampaignId }) => {
+const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack, currentPage, setCurrentPage, setSelectedCampaignId: propSetSelectedCampaignId, setSelectedPromotionId }) => {
   const [activeTab, setActiveTab] = useState<'campaigns' | 'promotions' | 'rewards'>('campaigns');
   const [showCreateCampaign, setShowCreateCampaign] = useState(false);
   const [showCreatePromotion, setShowCreatePromotion] = useState(false);
@@ -1152,7 +1152,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
           }
           
           // DEBUG: Log the exact comparison for troubleshooting
-          console.log(`   🔍 DEBUG - Outlet matching details:`);
+          console.log(`   ���� DEBUG - Outlet matching details:`);
           console.log(`      Customer outletId: "${customer.outletId}"`);
           console.log(`      Promotion targetOutlets: [${promotion.targetOutlets.join(', ')}]`);
           console.log(`      Is customer outletId in targetOutlets? ${promotion.targetOutlets.includes(customer.outletId)}`);
