@@ -3711,7 +3711,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                   fontWeight: 700, fontSize: '1rem', boxShadow: '0 6px 22px rgba(16,185,129,0.35)'
                 }}
               >
-                {loading ? '⏳ Creating...' : '🎉 Create Promotion'}
+                {loading ? '⏳ Creating...' : (<span style={{display:'inline-flex',alignItems:'center',gap:8}}><SFGIcon size={18}/> Create Promotion</span>)}
               </button>
             </div>
           )}
@@ -4001,46 +4001,25 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             </div>
 
             {/* Options */}
-            <div style={{ 
-              marginBottom: '3rem',
-              padding: '1.5rem',
-              background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)',
-              borderRadius: '16px',
-              border: '2px solid #10b981'
-            }}>
-              <label style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                cursor: 'pointer',
-                marginBottom: '1rem',
-                fontSize: '1rem',
-                fontWeight: 600,
-                color: '#047857'
-              }}>
+            <div className="panel-navy" style={{ marginBottom: '3rem' }}>
+              <label className="checkbox-row" style={{ marginBottom: '0.75rem' }}>
                 <input
                   type="checkbox"
                   checked={promotionForm.sendSMS}
                   onChange={(e) => setPromotionForm(prev => ({ ...prev, sendSMS: e.target.checked }))}
-                  style={{ marginRight: '0.75rem', transform: 'scale(1.2)' }}
+                  style={{ marginRight: '0.6rem', transform: 'scale(1.05)' }}
                 />
-                📱 Send SMS to customers
+                <span>📱 Send SMS to customers</span>
               </label>
-              <label style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                cursor: 'pointer',
-                fontSize: '1rem',
-                fontWeight: 600,
-                color: '#047857'
-              }}>
-                  <input
-                    type="checkbox"
-                    checked={!!promotionForm.assignNow}
-                    onChange={(e) => setPromotionForm(prev => ({ ...prev, assignNow: e.target.checked }))}
-                  style={{ marginRight: '0.75rem', transform: 'scale(1.2)' }}
-                  />
-                🎯 Assign to eligible customers now
-                </label>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={!!promotionForm.assignNow}
+                  onChange={(e) => setPromotionForm(prev => ({ ...prev, assignNow: e.target.checked }))}
+                  style={{ marginRight: '0.6rem', transform: 'scale(1.05)' }}
+                />
+                <span>🎯 Assign to eligible customers now</span>
+              </label>
             </div>
 
             {/* Action Buttons now provided by GlassModal footer */}
