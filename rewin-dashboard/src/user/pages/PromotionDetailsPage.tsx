@@ -47,12 +47,21 @@ const PromotionDetailsPage: React.FC<PromotionDetailsPageProps> = ({ user, promo
       );
       const assignmentsSnap = await getDocs(assignmentsQuery);
 
-      // Usage records (dedupe by customer)
-      const usageQuery = query(
-        collection(firestore, 'users', user.uid, 'promotionUsage'),
-        where('promotionId', '==', promotionId)
-      );
-      const usageSnap = await getDocs(usageQuery);
+      // Usage records (dedupe by customer) — support multiple shapes the mobile app may write
+      const usageCol = collection(firestore, 'users', user.uid, 'promotionUsage');
+      const byIdSnap = await getDocs(query(usageCol, where('promotionId', '==', promotionId)));
+
+      // Also try by title/name in case the app only stored text
+      const byTitleSnap = master?.title ? await getDocs(query(usageCol, where('title', '==', master.title))) : ({ docs: [] } as any);
+      const byPromotionTitleSnap = master?.title ? await getDocs(query(usageCol, where('promotionTitle', '==', master.title))) : ({ docs: [] } as any);
+      const byNameSnap = master?.title ? await getDocs(query(usageCol, where('name', '==', master.title))) : ({ docs: [] } as any);
+
+      // Merge all usage docs (de-dup by doc id)
+      const usageDocsMap = new Map<string, any>();
+      [byIdSnap, byTitleSnap, byPromotionTitleSnap, byNameSnap].forEach((snap: any) => {
+        snap.docs?.forEach((d: any) => usageDocsMap.set(d.id, d));
+      });
+      const usageDocs = Array.from(usageDocsMap.values());
 
       const usedCustomerIds = new Set<string>();
       const itemsMap = new Map<string, any>(); // key: customerId
