@@ -102,7 +102,6 @@ interface PromotionForm {
   targetOutlets: string[] | 'ALL';
   smsMessage: string;
   sendSMS: boolean;
-  assignNow?: boolean;                     // NEW: Fan-out immediately to eligible customers
 }
 
 interface CampaignForm {
@@ -202,8 +201,7 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack, current
     hasExpiration: false,    // Default no expiration
     targetOutlets: [],
     smsMessage: '',
-    sendSMS: true,
-    assignNow: true
+    sendSMS: true
   });
 
   const [campaignForm, setCampaignForm] = useState<CampaignForm>({
@@ -1753,7 +1751,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       // Execute all deletions
       await batch.commit();
       
-      console.log(`✅ Campaign deleted and ${cleanupCount} customer promotions cleaned up`);
+      console.log(`��� Campaign deleted and ${cleanupCount} customer promotions cleaned up`);
       
       loadCampaigns();
       alert(`✅ Campaign deleted successfully!\n🧹 Cleaned up ${cleanupCount} customer promotions`);
@@ -2419,7 +2417,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               justifyContent: 'center',
               boxShadow: '0 4px 20px rgba(59, 130, 246, 0.4)'
             }}>
-              <span style={{ fontSize: '24px' }}>🔵</span>
+              <span style={{ fontSize: '24px' }}>����</span>
             </div>
             <h3 style={{ 
               margin: '0 0 1rem 0', 
@@ -4010,15 +4008,6 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                   style={{ marginRight: '0.6rem', transform: 'scale(1.05)' }}
                 />
                 <span>📱 Send SMS to customers</span>
-              </label>
-              <label className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={!!promotionForm.assignNow}
-                  onChange={(e) => setPromotionForm(prev => ({ ...prev, assignNow: e.target.checked }))}
-                  style={{ marginRight: '0.6rem', transform: 'scale(1.05)' }}
-                />
-                <span>🎯 Assign to eligible customers now</span>
               </label>
             </div>
 
