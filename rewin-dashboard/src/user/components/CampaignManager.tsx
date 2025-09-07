@@ -446,7 +446,8 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack, current
         let createdCount = 0;
         for (const customer of analytics.eligibleCustomers) {
           const customerId = customer.id;
-          const outletId = customer.outletId || customer.checkInOutletId || customer.preferredOutlet || customer.lastVisitOutlet || null;
+          const outletId = customer.outletId || (customer.outlet && customer.outlet.id) || null; // home outlet only
+          if (!outletId) { continue; }
           const detId = `promo_manual_${promotionId}_${customerId}`; // deterministic id for dedupe
           await CustomerPromotionService.upsertBoth(customerId, detId, {
             title: promotionData.title,
@@ -851,7 +852,7 @@ ${expirationText}
       console.log(`🚀 Starting campaign processing via Cloud Function... (${isAutomatic ? 'Automatic' : 'Manual'})`);
 
       // 🔥 Process all active campaigns using the same logic as "Process Now"
-      console.log('���� Processing all active campaigns...');
+      console.log('🚀 Processing all active campaigns...');
       
       // Get all active campaigns
       const campaignsRef = collection(firestore, 'users', user.uid, 'campaigns');
@@ -1226,7 +1227,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
   // 🎯 STEP 3: SMS SENDING FUNCTION (Production-Ready with Optional SMS)
   const sendPromotionSMS = async (businessId: string, promotion: Promotion, smsMessage: string) => {
     try {
-      console.log('�� Sending SMS to customers with flexible requirements...');
+      console.log('📱 Sending SMS to customers with flexible requirements...');
       
       // Get all customers from customers collection (as per Firebase console data)
       const customersRef = collection(firestore, 'users', user.uid, 'customers');
