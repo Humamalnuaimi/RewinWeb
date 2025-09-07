@@ -802,7 +802,7 @@ ${expirationText}
           // Create campaign-generated promotion for this customer
           const campaignPromotion = {
             title: `${campaign.name}`,
-            description: `Special ${campaign.triggerType === 'birthday' ? 'Birthday' : 'Welcome Back'} Offer!`,
+            description: `Special ${campaign.triggerType === 'birthday' ? 'Birthday' : campaign.triggerType === 'welcome' ? 'Welcome' : 'Welcome Back'} Offer!`,
             discountType: campaign.discountType,
             discountAmount: campaign.discountAmount,
             minimumPurchase: campaign.minimumPurchase,
@@ -1540,7 +1540,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       // Show success message
       setSuccessNotification({
         show: true,
-        message: `✅ Automation settings updated!\n\n🤖 Auto-processing: ${automationSettings.enabled ? 'ENABLED' : 'DISABLED'}\n⏰ Interval: Every ${automationSettings.intervalHours} hours${automationSettings.enabled ? `\n🚀 Next run: ${nextRun?.toLocaleString()}` : ''}`
+        message: `✅ Automation settings updated!\n\n🤖 Auto-processing: ${automationSettings.enabled ? 'ENABLED' : 'DISABLED'}\n⏰ Interval: Every ${automationSettings.intervalHours} hours${automationSettings.enabled ? `\n���� Next run: ${nextRun?.toLocaleString()}` : ''}`
       });
       
       setTimeout(() => {
