@@ -1,0 +1,19 @@
+{
+  "name": "rewin-webb",
+  "version": "1.0.0",
+  "description": "Rewin Web Dashboard with Firebase Cloud Functions",
+  "scripts": {
+    "deploy-functions": "firebase deploy --only functions",
+    "deploy-all": "npm run build:dashboard && firebase deploy",
+    "build:dashboard": "cd rewin-dashboard && npm run build",
+    "serve:functions": "cd functions && npm run serve",
+    "logs:functions": "firebase functions:log"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.4.0",
+    "twilio": "^5.8.0"
+  },
+  "devDependencies": {
+    "firebase-tools": "^13.0.0"
+  }
+}

@@ -3,9 +3,13 @@
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color-scheme: dark;
+  color: rgba(255, 255, 255, 0.92);
+  /* Match admin panel theme: layered dark gradients with subtle lighting */
+  background:
+    radial-gradient(1400px 900px at 18% 10%, rgba(109, 40, 217, 0.28), transparent 62%),
+    radial-gradient(1200px 700px at 80% 15%, rgba(59, 130, 246, 0.22), transparent 60%),
+    linear-gradient(135deg, #0b1021 0%, #151a33 40%, #0a1126 100%);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -17,6 +21,16 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  /* Aggressive prevention for fast mouse movements */
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  -webkit-user-drag: none !important;
+  -moz-user-drag: none !important;
+  user-drag: none !important;
+  -webkit-touch-callout: none !important;
+  -webkit-tap-highlight-color: transparent !important;
 }
 
 html, body {
@@ -68,15 +82,102 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+/* Always use the admin dark theme in the dashboard regardless of OS preference */
+
+/* Modal animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
   }
-  a:hover {
-    color: #747bff;
+  to {
+    opacity: 1;
   }
-  button {
-    background-color: #f9f9f9;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(-20px);
   }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Allow text selection only for input fields and editable content */
+input, 
+textarea, 
+[contenteditable="true"],
+.selectable-text {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+}
+
+/* Prevent text selection on all interactive elements */
+button,
+.btn,
+[role="button"],
+[onclick],
+[style*="cursor: pointer"],
+.card,
+.customer-card,
+.stat-card,
+.nav-item,
+.clickable {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+}
+
+/* Prevent text selection on hover states */
+*:hover {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+}
+
+/* Override hover prevention for input fields */
+input:hover,
+textarea:hover,
+[contenteditable="true"]:hover,
+.selectable-text:hover {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+}
+
+/* Completely disable text selection highlighting */
+*::selection {
+  background: transparent !important;
+  color: inherit !important;
+}
+
+*::-moz-selection {
+  background: transparent !important;
+  color: inherit !important;
+}
+
+/* Disable selection on mousedown and mousemove events */
+*:not(input):not(textarea):not([contenteditable="true"]) {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  pointer-events: auto;
+}
+
+/* Prevent selection during all mouse interaction states */
+*:active:not(input):not(textarea):not([contenteditable="true"]),
+*:focus:not(input):not(textarea):not([contenteditable="true"]),
+*:hover:not(input):not(textarea):not([contenteditable="true"]) {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
 }
