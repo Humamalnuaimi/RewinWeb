@@ -44,6 +44,7 @@ interface CampaignManagerProps {
   currentPage?: string;
   setCurrentPage?: (page: string) => void;
   setSelectedCampaignId?: (id: string) => void;
+  setSelectedPromotionId?: (id: string) => void;
 }
 
 // 🎯 FIREBASE DATA INTERFACES (Exact as per App Team Specification)
