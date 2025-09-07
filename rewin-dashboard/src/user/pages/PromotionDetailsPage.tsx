@@ -87,9 +87,10 @@ const PromotionDetailsPage: React.FC<PromotionDetailsPageProps> = ({ user, promo
       });
 
       // From usage collection
-      usageSnap.docs.forEach(d => {
+      usageDocs.forEach((d: any) => {
         const u: any = d.data();
         const cid = u.customerId;
+        if (!cid) return;
         usedCustomerIds.add(cid);
         const customer = customersMap[cid] || {};
         const existing = itemsMap.get(cid);
