@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { type User } from 'firebase/auth';
 import { firestore } from '../../firebase/config';
 import { doc, getDoc, collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { Gift, Activity, CheckCircle2, Calendar, Store, Tag } from 'lucide-react';
 import './PromotionDetailsPage.css';
 
 interface PromotionDetailsPageProps {
@@ -159,14 +160,17 @@ const PromotionDetailsPage: React.FC<PromotionDetailsPageProps> = ({ user, promo
         <div>
           <div className="stats-grid">
             <div className="stat-card stat-total">
+              <div className="stat-icon"><Gift size={20} /></div>
               <div className="stat-label">Total Assigned</div>
               <div className="stat-value">{stats.totalAssignments}</div>
             </div>
             <div className="stat-card stat-active">
+              <div className="stat-icon"><Activity size={20} /></div>
               <div className="stat-label">Active</div>
               <div className="stat-value">{stats.activePromotions}</div>
             </div>
             <div className="stat-card stat-used">
+              <div className="stat-icon"><CheckCircle2 size={20} /></div>
               <div className="stat-label">Used</div>
               <div className="stat-value">{stats.usedPromotions}</div>
             </div>
@@ -175,9 +179,19 @@ const PromotionDetailsPage: React.FC<PromotionDetailsPageProps> = ({ user, promo
           <div className="glass-card info-card">
             <div className="info-title">{promotion.title}</div>
             <p className="info-desc">{promotion.description || '—'}</p>
-            <div className="info-meta">
-              <span className="info-accent">Discount:</span> {promotion.discountType === 'percentage' ? `${promotion.discountAmount}%` : `$${promotion.discountAmount}`} •
-              <span className="info-green"> Min Purchase:</span> ${promotion.minimumPurchase}
+
+            <div className="chips">
+              <span className="chip chip-gold">{promotion.discountType === 'percentage' ? `${promotion.discountAmount}% OFF` : `$${promotion.discountAmount} OFF`}</span>
+              <span className="chip chip-green">Min ${promotion.minimumPurchase}</span>
+              {promotion.campaignId && <span className="chip chip-purple">Campaign</span>}
+              {promotion.source && <span className="chip chip-blue">{String(promotion.source).toUpperCase()}</span>}
+            </div>
+
+            <div className="meta-grid">
+              <div className="meta-item"><Tag size={16} /> Type: {String(promotion.discountType || '—')}</div>
+              <div className="meta-item"><Store size={16} /> Outlets: {Array.isArray(promotion.targetOutlets) ? promotion.targetOutlets.length : (promotion.targetOutlets ? 1 : 0)}</div>
+              <div className="meta-item"><Calendar size={16} /> Created: {formatDate(promotion.createdAt)}</div>
+              <div className="meta-item"><Calendar size={16} /> Expires: {formatDate(promotion.expiresAt)}</div>
             </div>
           </div>
 
