@@ -3512,14 +3512,26 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 totalEarned += pointsAdded;
                 totalRedeemed += pointsRedeemed;
 
-                dayTransactions.push({
-                  id: doc.id,
-                  ...transaction,
-                  timestamp: transactionDate,
-                  customerDisplay: customerDisplayMap[transaction.customerId] || 'Unknown',
-                  pointsAdded,
-                  pointsRedeemed
-                });
+                if (pointsAdded > 0) {
+                  dayTransactions.push({
+                    id: `${doc.id}_earned`,
+                    ...transaction,
+                    transactionType: 'EARNED',
+                    pointsChanged: pointsAdded,
+                    timestamp: transactionDate,
+                    customerDisplay: customerDisplayMap[transaction.customerId] || 'Unknown'
+                  });
+                }
+                if (pointsRedeemed > 0) {
+                  dayTransactions.push({
+                    id: `${doc.id}_redeemed`,
+                    ...transaction,
+                    transactionType: 'REDEEMED',
+                    pointsChanged: -pointsRedeemed,
+                    timestamp: transactionDate,
+                    customerDisplay: customerDisplayMap[transaction.customerId] || 'Unknown'
+                  });
+                }
               }
             }
           });
