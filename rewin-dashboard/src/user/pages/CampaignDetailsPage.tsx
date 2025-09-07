@@ -162,7 +162,7 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
       });
 
       const usedPromotions = usedCustomerIds.size;
-      const totalAssignments = usedPromotions + Array.from(assignmentCustomerIds).filter(cid => !usedCustomerIds.has(cid)).length + Array.from(assignmentCustomerIds).filter(cid => usedCustomerIds.has(cid) && false).length; // explicit formula for clarity
+      const totalAssignments = activePromotions + usedPromotions;
 
       console.log('📈 Final stats:', { totalAssignments, activePromotions, usedPromotions });
 
