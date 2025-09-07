@@ -66,7 +66,7 @@ const GlassModal: React.FC<GlassModalProps> = ({ title, subtitle, accent = 'blue
           [data-glass-modal] .field-label { display:block; margin: 0 0 0.6rem 0; font-weight: 600; font-size: 1.05rem; }
           [data-glass-modal] .field-hint { margin: 0.4rem 0 0 0; font-size: 0.85rem; color: rgba(255,255,255,0.7); }
 
-          /* Compact, themed select */
+          /* Compact, themed native select (fallback) */
           [data-glass-modal] .select-compact {
             width: 100%;
             padding: 0.5rem 0.75rem;
@@ -80,6 +80,17 @@ const GlassModal: React.FC<GlassModalProps> = ({ title, subtitle, accent = 'blue
             cursor: pointer;
             line-height: 1.2;
           }
+
+          /* Custom ThemedSelect */
+          [data-glass-modal] .select-control { position: relative; }
+          [data-glass-modal] .select-control.open .select-display { border-color: rgba(99,102,241,0.6); box-shadow: 0 0 0 3px rgba(99,102,241,0.25); }
+          [data-glass-modal] .select-display { width:100%; height:40px; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:0 0.75rem; border-radius:12px; border:1px solid rgba(255,255,255,0.22); background:rgba(255,255,255,0.08); color:#fff; font-weight:600; }
+          [data-glass-modal] .select-display:disabled { opacity:.6; cursor:not-allowed; }
+          [data-glass-modal] .select-caret { opacity:.9 }
+          [data-glass-modal] .select-menu { position:absolute; left:0; right:0; top:calc(100% + 8px); background:rgba(11,16,33,0.98); border:1px solid rgba(255,255,255,0.18); border-radius:12px; box-shadow:0 18px 40px rgba(0,0,0,0.45); padding:6px; max-height:260px; overflow:auto; z-index:50; }
+          [data-glass-modal] .select-option { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border-radius:10px; color:#fff; cursor:pointer; font-weight:600; }
+          [data-glass-modal] .select-option:hover, [data-glass-modal] .select-option.highlighted { background:rgba(255,255,255,0.08); }
+          [data-glass-modal] .select-option.selected { background:linear-gradient(135deg, rgba(59,130,246,0.25), rgba(37,99,235,0.25)); border:1px solid rgba(99,102,241,0.35); }
 
           /* Centered toggle group */
           [data-glass-modal] .toggle-centered { margin-bottom: 1rem; display:flex; flex-direction: column; align-items: center; }
