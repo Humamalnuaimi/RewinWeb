@@ -8101,9 +8101,9 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
   }
   
   if (currentPage === 'campaignDetails' && selectedCampaignId) {
-            return <CampaignDetailsPage 
+            return <CampaignDetailsPage
               key={`campaign-${selectedCampaignId}`}
-              user={user} 
+              user={user}
               onBack={() => {
                 setSelectedCampaignId('');
                 setCurrentPage('sms-marketing');
@@ -8111,7 +8111,19 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               campaignId={selectedCampaignId}
             />;
   }
-  
+
+  if (currentPage === 'promotionDetails' && selectedPromotionId) {
+            return <PromotionDetailsPage
+              key={`promotion-${selectedPromotionId}`}
+              user={user}
+              onBack={() => {
+                setSelectedPromotionId('');
+                setCurrentPage('sms-marketing');
+              }}
+              promotionId={selectedPromotionId}
+            />;
+  }
+
   if (currentPage === 'outlets') {
     return <OutletAnalyticsPage 
       onBack={() => setCurrentPage('dashboard')}
