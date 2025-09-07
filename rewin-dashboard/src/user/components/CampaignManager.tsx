@@ -1301,7 +1301,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             console.log(`✅ SMS sent to ${phoneNumber} (${customer.firstName || customer.customerId})`);
           } catch (smsError) {
             smsFailedCount++;
-            console.warn(`⚠️ Failed to send SMS to ${customer.phoneNumber}:`, smsError);
+            console.warn(`⚠��� Failed to send SMS to ${customer.phoneNumber}:`, smsError);
             // Continue with other customers even if one fails
           }
         } else {
@@ -1755,7 +1755,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       console.log(`✅ Campaign deleted and ${cleanupCount} customer promotions cleaned up`);
       
       loadCampaigns();
-      alert(`✅ Campaign deleted successfully!\n🧹 Cleaned up ${cleanupCount} customer promotions`);
+      alert(`��� Campaign deleted successfully!\n🧹 Cleaned up ${cleanupCount} customer promotions`);
     } catch (error) {
       console.error('❌ Error deleting campaign:', error);
       alert(`❌ Error deleting campaign: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -4640,12 +4640,10 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 Target Outlets
               </label>
               <select
-                multiple
-                value={Array.isArray(campaignForm.targetOutlets) ? campaignForm.targetOutlets : ['ALL']}
+                value={campaignForm.targetOutlets === 'ALL' ? 'ALL' : (Array.isArray(campaignForm.targetOutlets) && campaignForm.targetOutlets[0]) || 'ALL'}
                 onChange={(e) => {
-                  const selected = Array.from(e.target.selectedOptions, option => option.value);
-                  // If "ALL" is selected, set to 'ALL' string (meaning all outlets)
-                  const targetOutlets = selected.includes('ALL') ? 'ALL' : selected;
+                  const val = e.target.value;
+                  const targetOutlets = val === 'ALL' ? 'ALL' : [val];
                   setCampaignForm(prev => ({ ...prev, targetOutlets }));
                 }}
                 style={{
