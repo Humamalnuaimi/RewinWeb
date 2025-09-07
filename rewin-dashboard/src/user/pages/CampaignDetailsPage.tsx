@@ -77,76 +77,39 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
   const getAssignmentStats = async (campaignId: string) => {
     try {
       console.log('🔍 Getting assignment stats for campaign:', campaignId);
-      
-      // Get all customer promotions for this campaign
+
+      // Get customers (for labels)
       const customersSnapshot = await getDocs(collection(firestore, 'users', user.uid, 'customers'));
-      
-      let totalAssignments = 0;
+      const customersMap: Record<string, any> = {};
+      customersSnapshot.docs.forEach(d => (customersMap[d.id] = d.data()));
+
       let activePromotions = 0;
-      let usedPromotions = 0;
       const recentAssignments: any[] = [];
-      const usedPromotionIds = new Set();
-      
-      // First, collect all promotion IDs that belong to this specific campaign
-      const campaignPromotionIds = new Set();
-      
-      // NEW FLAT STRUCTURE: Query promotions directly by campaignId (much more efficient!)
-      const promotionsQuery = query(
+      const usedCustomerIds = new Set<string>();
+      const assignmentCustomerIds = new Set<string>();
+      const campaignPromotionIds: string[] = [];
+
+      // 1) Assignments for this campaign (flat collection)
+      const promotionsQueryRef = query(
         collection(firestore, 'users', user.uid, 'customerPromotions'),
         where('campaignId', '==', campaignId)
       );
-      const promotionsSnapshot = await getDocs(promotionsQuery);
-      
+      const promotionsSnapshot = await getDocs(promotionsQueryRef);
+
       for (const promoDoc of promotionsSnapshot.docs) {
-        const promo = promoDoc.data();
+        const promo: any = promoDoc.data();
         const promoId = promoDoc.id;
-        
-        campaignPromotionIds.add(promoId);
-        console.log('🎯 Found campaign promotion:', promoId, 'for campaign:', campaignId);
-      }
-      
-      console.log('📋 Total promotions for this campaign:', campaignPromotionIds.size);
-      
-      // Check promotion usage directly from isUsed field (app team updates this when promotion is redeemed)
-      console.log('📊 Checking promotion usage from isUsed field...');
-      
-      for (const promoDoc of promotionsSnapshot.docs) {
-        const promo = promoDoc.data();
-        const promoId = promoDoc.id;
-        
-        if (promo.isUsed) {
-          usedPromotionIds.add(promoId);
-          usedPromotions++;
-          console.log('✅ Found used promotion:', promoId, 'from campaign:', campaignId);
-        }
-      }
-      
-      console.log('🎯 Found', usedPromotions, 'used promotions from THIS campaign only');
-      
-      // Now build the final stats and recent assignments from the campaign promotions we already found
-      // We already have all promotions for this campaign from the previous query, so let's reuse them
-      for (const promoDoc of promotionsSnapshot.docs) {
-        const promo = promoDoc.data();
-        const promoId = promoDoc.id;
-        const customerId = promo.customerId; // NEW: Get customerId from the promotion data
-        
-        // Get customer data for display purposes
-        const customerDoc = customersSnapshot.docs.find(doc => doc.id === customerId);
-        const customerData = customerDoc?.data() || {};
-        
-        totalAssignments++;
-        
-        // Check if this promotion was used (app team updates isUsed field when redeemed)
-        const wasUsed = promo.isUsed;
-        
-        if (!wasUsed && promo.isActive) {
-          activePromotions++;
-        }
-        
-        // Add to recent assignments (last 10)
+        campaignPromotionIds.push(promoId);
+        const customerId = promo.customerId;
+        if (customerId) assignmentCustomerIds.add(customerId);
+
+        const customer = customersMap[customerId] || {};
+        const wasUsed = !!promo.isUsed; // legacy support
+        if (!wasUsed && promo.isActive) activePromotions++;
+
         if (recentAssignments.length < 10) {
           recentAssignments.push({
-            customerName: customerData.phoneNumber || customerData.phone || customerData.firstName || customerData.name || customerId,
+            customerName: customer.phoneNumber || customer.phone || `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || customerId,
             createdAt: promo.createdAt,
             isActive: !wasUsed && promo.isActive,
             isUsed: wasUsed,
@@ -155,24 +118,68 @@ const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({ user, onBack,
             promotionId: promoId
           });
         }
+        if (wasUsed && customerId) usedCustomerIds.add(customerId);
       }
-      
+
+      // 2) Usage documents for this campaign
+      const usageCol = collection(firestore, 'users', user.uid, 'promotionUsage');
+      const byCampaignSnap = await getDocs(query(usageCol, where('campaignId', '==', campaignId)));
+      const usageDocsMap = new Map<string, any>();
+      byCampaignSnap.docs.forEach(d => usageDocsMap.set(d.id, d));
+
+      // Fallback: if no explicit campaignId stored, try querying by promotionId in batches
+      if (usageDocsMap.size === 0 && campaignPromotionIds.length > 0) {
+        for (let i = 0; i < campaignPromotionIds.length; i += 10) {
+          const batch = campaignPromotionIds.slice(i, i + 10);
+          try {
+            const byPromoSnap = await getDocs(query(usageCol, where('promotionId', 'in', batch)));
+            byPromoSnap.docs.forEach(d => usageDocsMap.set(d.id, d));
+          } catch (e) {
+            console.log('Skipping large IN query batch or not supported:', e?.message || e);
+          }
+        }
+      }
+
+      // Merge usage
+      const usageDocs = Array.from(usageDocsMap.values());
+      usageDocs.forEach((d: any) => {
+        const u: any = d.data();
+        const cid = u.customerId;
+        if (!cid) return;
+        usedCustomerIds.add(cid);
+        if (recentAssignments.length < 10) {
+          const customer = customersMap[cid] || {};
+          recentAssignments.push({
+            customerName: customer.phoneNumber || customer.phone || `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || cid,
+            createdAt: u.usedAt,
+            isActive: false,
+            isUsed: true,
+            discountAmount: u.discountAmount,
+            discountType: u.discountType,
+            promotionId: u.promotionId
+          });
+        }
+      });
+
+      const usedPromotions = usedCustomerIds.size;
+      const totalAssignments = usedPromotions + Array.from(assignmentCustomerIds).filter(cid => !usedCustomerIds.has(cid)).length + Array.from(assignmentCustomerIds).filter(cid => usedCustomerIds.has(cid) && false).length; // explicit formula for clarity
+
       console.log('📈 Final stats:', { totalAssignments, activePromotions, usedPromotions });
-      
-      // Sort recent assignments by creation date
+
+      // Sort recent by date desc
       recentAssignments.sort((a, b) => {
         const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt || 0);
         const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt || 0);
         return dateB.getTime() - dateA.getTime();
       });
-      
+
       setAssignmentStats({
         totalAssignments,
         activePromotions,
         usedPromotions,
-        recentAssignments: recentAssignments.slice(0, 5) // Show last 5
+        recentAssignments: recentAssignments.slice(0, 5)
       });
-      
+
     } catch (error) {
       console.error('Error getting assignment stats:', error);
     }
