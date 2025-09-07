@@ -1555,7 +1555,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
     }
   };
 
-  // 🗑️ HANDLE CAMPAIGN DELETE CLICK
+  // ��️ HANDLE CAMPAIGN DELETE CLICK
   const handleCampaignDeleteClick = (campaign: Campaign) => {
     setCampaignToDelete(campaign);
     setShowCampaignDeleteConfirmation(true);
@@ -4100,17 +4100,15 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 }}
                 style={{
                   width: '100%',
-                  padding: '1rem 1.25rem',
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '16px',
-                  background: '#ffffff',
-                  color: '#1f2937',
-                  fontSize: '1rem',
-                  fontWeight: 500,
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                  padding: '0.6rem 0.9rem',
+                  border: '1px solid rgba(255,255,255,0.25)',
+                  borderRadius: '12px',
+                  background: 'rgba(255,255,255,0.08)',
+                  color: '#fff',
+                  fontSize: '0.95rem',
+                  fontWeight: 600,
                   outline: 'none',
-                  minHeight: '120px',
+                  height: '44px',
                   cursor: 'pointer'
                 }}
                 onFocus={(e) => {
