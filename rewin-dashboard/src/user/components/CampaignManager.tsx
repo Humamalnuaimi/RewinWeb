@@ -2115,7 +2115,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
     }
   };
 
-  // 🕐 EXPIRATION HELPER FUNCTIONS (As Per App Team Specification)
+  // �� EXPIRATION HELPER FUNCTIONS (As Per App Team Specification)
   const getPromotionExpirationInfo = (promotion: Promotion) => {
     if (!promotion.expiresAt) {
       return { isExpired: false, daysRemaining: null, formattedText: '' };
@@ -4261,47 +4261,19 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             </div>
 
             {/* Campaign Type */}
-            <div style={{ marginBottom: '2rem' }}>
-              <label style={{ 
-                display: 'block', 
-                marginBottom: '0.75rem', 
-                fontWeight: 600,
-                fontSize: '1.1rem',
-                color: '#374151'
-              }}>
-                Campaign Type *
-              </label>
-              <select
-                value={campaignForm.type}
-                onChange={(e) => setCampaignForm(prev => ({ ...prev, type: e.target.value as any }))}
-                style={{
-                  width: '100%',
-                  padding: '1rem 1.25rem',
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '16px',
-                  background: '#ffffff',
-                  color: '#1f2937',
-                  fontSize: '1rem',
-                  fontWeight: 500,
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                  outline: 'none',
-                  cursor: 'pointer'
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = '#3b82f6';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1), 0 4px 12px rgba(0,0,0,0.1)';
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = '#e5e7eb';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
-                }}
-              >
-                <option value="" style={{ color: '#9ca3af' }}>Select Type</option>
-                <option value="welcome">Welcome Campaign</option>
-                <option value="inactive">Inactive Customers</option>
-                <option value="birthday">Birthday Campaign</option>
-              </select>
+            <div className="field-block">
+              <label className="field-label">Campaign Type *</label>
+              <ThemedSelect
+                ariaLabel="Campaign Type"
+                value={campaignForm.type || ''}
+                onChange={(val) => setCampaignForm(prev => ({ ...prev, type: val as any }))}
+                options={[
+                  { value: '', label: 'Select Type' },
+                  { value: 'welcome', label: 'Welcome Campaign' },
+                  { value: 'inactive', label: 'Inactive Customers' },
+                  { value: 'birthday', label: 'Birthday Campaign' }
+                ]}
+              />
             </div>
 
             {/* Conditional trigger fields */}
