@@ -296,7 +296,7 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack, current
     return user.uid;
   };
 
-  // 📱 SMS SERVICE INTEGRATION (Production-Ready with Multi-Account Support)
+  // ���� SMS SERVICE INTEGRATION (Production-Ready with Multi-Account Support)
   const sendSMSMessage = async (phoneNumber: string, message: string) => {
     try {
       console.log(`📱 SMS to ${phoneNumber}: ${message}`);
@@ -2715,7 +2715,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
           <div>
             <div style={{ marginBottom: '1.5rem' }}>
               <h2 style={{ color: 'white', margin: 0 }}>
-                🟢 Campaigns ({campaigns.length})
+                ��� Campaigns ({campaigns.length})
               </h2>
             </div>
             {campaigns.length === 0 ? (
@@ -3091,7 +3091,17 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                   marginTop: '1rem'
                 }}>
                   {promotions.map((promotion) => (
-                    <div key={promotion.id} style={{
+                    <div key={promotion.id}
+                      onClick={(e) => {
+                        const target = e.target as HTMLElement;
+                        if (target.tagName !== 'BUTTON' && !target.closest('button')) {
+                          if (setCurrentPage && promotion.id && typeof setSelectedPromotionId === 'function') {
+                            setSelectedPromotionId(promotion.id);
+                            setCurrentPage('promotionDetails');
+                          }
+                        }
+                      }}
+                      style={{
                       backgroundColor: 'rgba(255, 255, 255, 0.08)',
                       borderRadius: '20px',
                       padding: '2rem',
