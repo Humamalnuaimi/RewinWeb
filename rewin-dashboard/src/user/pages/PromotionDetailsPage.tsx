@@ -1,13 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { type User } from 'firebase/auth';
 import { firestore } from '../../firebase/config';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import './PromotionDetailsPage.css';
 
 interface PromotionDetailsPageProps {
   user: User;
   promotionId: string;
   onBack: () => void;
 }
+
+const formatDate = (date: any) => {
+  if (!date) return '';
+  const d = date?.toDate ? date.toDate() : new Date(date);
+  return d.toLocaleString();
+};
 
 const PromotionDetailsPage: React.FC<PromotionDetailsPageProps> = ({ user, promotionId, onBack }) => {
   const [promotion, setPromotion] = useState<any>(null);
@@ -23,54 +30,90 @@ const PromotionDetailsPage: React.FC<PromotionDetailsPageProps> = ({ user, promo
     try {
       setLoading(true);
 
-      // Fetch master promotion
+      // Master promotion
       const promoSnap = await getDoc(doc(firestore, 'users', user.uid, 'promotions', promotionId));
-      setPromotion(promoSnap.exists() ? { id: promoSnap.id, ...promoSnap.data() } : null);
+      const master = promoSnap.exists() ? { id: promoSnap.id, ...promoSnap.data() } : null;
+      setPromotion(master);
 
-      // Fetch customers (for names/phones)
+      // Customers (for labels)
       const customersSnap = await getDocs(collection(firestore, 'users', user.uid, 'customers'));
       const customersMap: Record<string, any> = {};
       customersSnap.docs.forEach(d => (customersMap[d.id] = d.data()));
 
-      // Fetch flat assignments for this promotion
+      // Assignments
       const assignmentsQuery = query(
         collection(firestore, 'users', user.uid, 'customerPromotions'),
         where('masterPromotionId', '==', promotionId)
       );
       const assignmentsSnap = await getDocs(assignmentsQuery);
 
-      let total = 0;
-      let used = 0;
-      let active = 0;
-      const recent: any[] = [];
+      // Usage records (dedupe by customer)
+      const usageQuery = query(
+        collection(firestore, 'users', user.uid, 'promotionUsage'),
+        where('promotionId', '==', promotionId)
+      );
+      const usageSnap = await getDocs(usageQuery);
 
+      const usedCustomerIds = new Set<string>();
+      const itemsMap = new Map<string, any>(); // key: customerId
+
+      // From assignments
       assignmentsSnap.docs.forEach(d => {
-        const a = d.data();
-        total++;
-        if (a.isUsed) used++;
-        if (!a.isUsed && a.isActive) active++;
-        if (recent.length < 10) {
-          const c = customersMap[a.customerId] || {};
-          recent.push({
-            id: d.id,
-            customerName: c.phoneNumber || c.phone || `${c.firstName || ''} ${c.lastName || ''}`.trim() || a.customerId,
-            createdAt: a.createdAt,
-            isActive: a.isActive && !a.isUsed,
-            isUsed: a.isUsed,
-            discountAmount: a.discountAmount,
-            discountType: a.discountType
-          });
-        }
+        const a: any = d.data();
+        const cid = a.customerId;
+        const customer = customersMap[cid] || {};
+        const entry = {
+          id: d.id,
+          customerId: cid,
+          customerName: customer.phoneNumber || customer.phone || `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || cid,
+          createdAt: a.createdAt,
+          isActive: a.isActive && !a.isUsed,
+          isUsed: !!a.isUsed,
+          discountAmount: a.discountAmount,
+          discountType: a.discountType,
+          usedAt: a.usedAt || null
+        };
+        if (entry.isUsed) usedCustomerIds.add(cid);
+        itemsMap.set(cid, entry);
       });
 
-      // Sort by creation date desc
-      recent.sort((x, y) => {
-        const ax = x.createdAt?.toDate?.() || new Date(x.createdAt || 0);
-        const ay = y.createdAt?.toDate?.() || new Date(y.createdAt || 0);
-        return ay.getTime() - ax.getTime();
+      // From usage collection
+      usageSnap.docs.forEach(d => {
+        const u: any = d.data();
+        const cid = u.customerId;
+        usedCustomerIds.add(cid);
+        const customer = customersMap[cid] || {};
+        const existing = itemsMap.get(cid);
+        const entry = {
+          id: existing?.id || d.id,
+          customerId: cid,
+          customerName: customer.phoneNumber || customer.phone || `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || cid,
+          createdAt: existing?.createdAt || u.usedAt || Timestamp.now(),
+          isActive: false,
+          isUsed: true,
+          discountAmount: existing?.discountAmount ?? master?.discountAmount,
+          discountType: existing?.discountType ?? master?.discountType,
+          usedAt: u.usedAt || Timestamp.now()
+        };
+        itemsMap.set(cid, entry);
       });
 
-      setStats({ totalAssignments: total, activePromotions: active, usedPromotions: used, recentAssignments: recent.slice(0, 5) });
+      // Compute stats
+      let active = 0;
+      itemsMap.forEach(v => { if (!v.isUsed && v.isActive) active++; });
+      const used = usedCustomerIds.size;
+      const total = active + used;
+
+      // Recent list (by usedAt/createdAt desc)
+      const recent = Array.from(itemsMap.values())
+        .sort((a, b) => {
+          const ta = (a.usedAt?.toDate?.() || a.createdAt?.toDate?.() || new Date(0)).getTime();
+          const tb = (b.usedAt?.toDate?.() || b.createdAt?.toDate?.() || new Date(0)).getTime();
+          return tb - ta;
+        })
+        .slice(0, 5);
+
+      setStats({ totalAssignments: total, activePromotions: active, usedPromotions: used, recentAssignments: recent });
     } catch (e) {
       console.error('Error loading promotion details:', e);
     } finally {
@@ -84,56 +127,66 @@ const PromotionDetailsPage: React.FC<PromotionDetailsPageProps> = ({ user, promo
   }, [promotionId]);
 
   return (
-    <div style={{ padding: '2rem' }}>
-      <button onClick={onBack} style={{
-        background: 'transparent', color: 'white', border: '1px solid rgba(255,255,255,0.2)', padding: '0.5rem 1rem', borderRadius: 8, marginBottom: '1rem'
-      }}>← Back</button>
-
-      <h1 style={{ color: 'white', margin: '0 0 1rem 0' }}>Promotion Details</h1>
+    <div className="promo-details">
+      <div className="header-card">
+        <button className="back-btn" onClick={onBack}>← Back to Promotions</button>
+        <div className="header-center">
+          <h1 className="header-title">Promotion Details</h1>
+          <p className="header-sub">{promotion?.title || '—'}</p>
+        </div>
+        {promotion && (
+          <span className={`status-badge ${promotion.isActive ? 'active' : 'inactive'}`}>
+            {promotion.isActive ? 'ACTIVE' : 'INACTIVE'}
+          </span>
+        )}
+      </div>
 
       {loading ? (
-        <div style={{ color: 'rgba(255,255,255,0.8)' }}>Loading...</div>
+        <div className="loading-text">Loading...</div>
       ) : !promotion ? (
-        <div style={{ color: 'rgba(255,255,255,0.8)' }}>Promotion not found</div>
+        <div className="loading-text">Promotion not found</div>
       ) : (
         <div>
-          <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1rem', marginBottom: '2rem'
-          }}>
-            <div style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.35)', borderRadius: 12, padding: '1rem' }}>
-              <div style={{ color: '#34d399', fontWeight: 700, marginBottom: 6 }}>Total Assigned</div>
-              <div style={{ color: 'white', fontSize: '2rem', fontWeight: 900 }}>{stats.totalAssignments}</div>
+          <div className="stats-grid">
+            <div className="stat-card stat-total">
+              <div className="stat-label">Total Assigned</div>
+              <div className="stat-value">{stats.totalAssignments}</div>
             </div>
-            <div style={{ background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.35)', borderRadius: 12, padding: '1rem' }}>
-              <div style={{ color: '#60a5fa', fontWeight: 700, marginBottom: 6 }}>Active</div>
-              <div style={{ color: 'white', fontSize: '2rem', fontWeight: 900 }}>{stats.activePromotions}</div>
+            <div className="stat-card stat-active">
+              <div className="stat-label">Active</div>
+              <div className="stat-value">{stats.activePromotions}</div>
             </div>
-            <div style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.35)', borderRadius: 12, padding: '1rem' }}>
-              <div style={{ color: '#f87171', fontWeight: 700, marginBottom: 6 }}>Used</div>
-              <div style={{ color: 'white', fontSize: '2rem', fontWeight: 900 }}>{stats.usedPromotions}</div>
+            <div className="stat-card stat-used">
+              <div className="stat-label">Used</div>
+              <div className="stat-value">{stats.usedPromotions}</div>
             </div>
           </div>
 
-          <div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: '1.25rem', marginBottom: '2rem' }}>
-            <h3 style={{ color: 'white', margin: '0 0 0.75rem 0' }}>{promotion.title}</h3>
-            <p style={{ color: 'rgba(255,255,255,0.8)', margin: 0 }}>{promotion.description || '—'}</p>
-            <div style={{ color: 'rgba(255,255,255,0.8)', marginTop: '0.75rem' }}>
-              <span style={{ color: '#fbbf24' }}>Discount:</span> {promotion.discountType === 'percentage' ? `${promotion.discountAmount}%` : `$${promotion.discountAmount}`} •
-              <span style={{ color: '#34d399', marginLeft: 8 }}>Min Purchase:</span> ${promotion.minimumPurchase}
+          <div className="glass-card info-card">
+            <div className="info-title">{promotion.title}</div>
+            <p className="info-desc">{promotion.description || '—'}</p>
+            <div className="info-meta">
+              <span className="info-accent">Discount:</span> {promotion.discountType === 'percentage' ? `${promotion.discountAmount}%` : `$${promotion.discountAmount}`} •
+              <span className="info-green"> Min Purchase:</span> ${promotion.minimumPurchase}
             </div>
           </div>
 
-          <div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: '1.25rem' }}>
-            <h3 style={{ color: 'white', margin: '0 0 1rem 0' }}>Recent Assignments</h3>
+          <div className="glass-card">
+            <h3 className="section-title">Recent Assignments</h3>
             {stats.recentAssignments.length === 0 ? (
-              <div style={{ color: 'rgba(255,255,255,0.7)' }}>No assignments yet</div>
+              <div className="muted">No assignments yet</div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {stats.recentAssignments.map(item => (
-                  <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'rgba(255,255,255,0.9)' }}>
-                    <div>{item.customerName}</div>
-                    <div style={{ fontSize: 12, opacity: 0.8 }}>
-                      {item.isUsed ? 'Used' : (item.isActive ? 'Active' : 'Inactive')}
+              <div className="assignments-list">
+                {stats.recentAssignments.map((item: any) => (
+                  <div key={`${item.customerId}-${item.id}`} className="assignment-row">
+                    <div className="assignment-left">
+                      <div className="assignment-name">{item.customerName}</div>
+                      <div className="assignment-date">{formatDate(item.usedAt || item.createdAt)}</div>
+                    </div>
+                    <div className="assignment-right">
+                      <div className={`pill ${item.isUsed ? 'pill-used' : item.isActive ? 'pill-active' : 'pill-inactive'}`}>
+                        {item.isUsed ? 'USED' : item.isActive ? 'ACTIVE' : 'INACTIVE'}
+                      </div>
                     </div>
                   </div>
                 ))}
