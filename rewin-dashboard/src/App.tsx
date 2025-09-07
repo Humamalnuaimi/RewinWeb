@@ -1382,6 +1382,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
   const [endDate, setEndDate] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
+  const [selectedPromotionId, setSelectedPromotionId] = useState<string>('');
   const [previousPage, setPreviousPage] = useState<string>('customers');
   const [showAdminDashboard, setShowAdminDashboard] = useState(false);
   
