@@ -8096,6 +8096,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               currentPage={currentPage}
               setCurrentPage={setCurrentPage}
               setSelectedCampaignId={setSelectedCampaignId}
+              setSelectedPromotionId={setSelectedPromotionId}
             />;
   }
   
