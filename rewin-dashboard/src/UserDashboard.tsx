@@ -1097,7 +1097,7 @@ const OutletAnalyticsPage = ({ onBack }: { onBack: () => void }) => {
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              <span style={{ fontSize: '1.5rem' }}>🏆</span>
+              <span style={{ fontSize: '1.5rem' }}>����</span>
             </div>
             <h3 style={{ color: 'white', margin: 0, fontSize: '1.3rem' }}>Top Performing</h3>
           </div>
@@ -3316,10 +3316,12 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
   const PointsDetailsPage = () => {
     const [pointsData, setPointsData] = useState<{
       totalPoints: number;
+      redeemedPoints: number;
       transactions: any[];
       loading: boolean;
     }>({
       totalPoints: 0,
+      redeemedPoints: 0,
       transactions: [],
       loading: true
     });
@@ -3491,7 +3493,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
         // Now set up transactions listener with customer data
         const unsubscribeTransactions = onSnapshot(transactionsQuery, (snapshot) => {
           let dayTransactions: any[] = [];
-          let totalPoints = 0;
+          let totalEarned = 0;
+          let totalRedeemed = 0;
 
           snapshot.docs.forEach(doc => {
             const transaction = doc.data();
@@ -3502,20 +3505,20 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
               const matchesOutlet = selectedOutlet === 'all' || transaction.transactionOutletId === selectedOutlet;
               
               if (matchesOutlet) {
-                const pointsChanged = transaction.pointsChanged || 0;
-                const transactionType = transaction.transactionType || '';
-                const isManualTransaction = transaction.isManualTransaction || false;
-                
-                // Only count manual earned points
-                if (transactionType.toUpperCase() === 'EARNED' && isManualTransaction && pointsChanged > 0) {
-                  totalPoints += pointsChanged;
-                }
-                
+                const pointsChanged = Number(transaction.pointsChanged || 0);
+                const transactionType = (transaction.transactionType || '').toUpperCase();
+                const pointsAdded = transaction.pointsAdded ?? (transactionType === 'EARNED' ? Math.max(0, pointsChanged) : pointsChanged > 0 ? pointsChanged : 0);
+                const pointsRedeemed = transaction.pointsRedeemed ?? (transactionType === 'REDEEMED' ? Math.abs(pointsChanged) : pointsChanged < 0 ? Math.abs(pointsChanged) : 0);
+                totalEarned += pointsAdded;
+                totalRedeemed += pointsRedeemed;
+
                 dayTransactions.push({
                   id: doc.id,
                   ...transaction,
                   timestamp: transactionDate,
-                  customerDisplay: customerDisplayMap[transaction.customerId] || 'Unknown'
+                  customerDisplay: customerDisplayMap[transaction.customerId] || 'Unknown',
+                  pointsAdded,
+                  pointsRedeemed
                 });
               }
             }
@@ -3525,7 +3528,8 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
           dayTransactions.sort((a, b) => b.timestamp - a.timestamp);
 
           setPointsData({
-            totalPoints,
+            totalPoints: totalEarned,
+            redeemedPoints: totalRedeemed,
             transactions: dayTransactions,
             loading: false
           });
@@ -3972,7 +3976,16 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                   {pointsData.totalPoints.toLocaleString()}
                 </p>
                 <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
-                  Manual points only
+                  All earned points
+                </p>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <h3 style={{ color: 'white', margin: '0 0 1rem 0', fontSize: '1.2rem' }}>Points Redeemed</h3>
+                <p style={{ fontSize: '3rem', fontWeight: '900', margin: 0, color: 'white' }}>
+                  {pointsData.redeemedPoints.toLocaleString()}
+                </p>
+                <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
+                  Redemptions
                 </p>
               </div>
               <div style={{ textAlign: 'center' }}>
