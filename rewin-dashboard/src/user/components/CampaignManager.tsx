@@ -4081,43 +4081,15 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             </div>
 
             {/* Target Outlets */}
-            <div style={{ marginBottom: '2rem' }}>
-              <label style={{ 
-                display: 'block', 
-                marginBottom: '0.75rem', 
-                fontWeight: 600,
-                fontSize: '1.1rem',
-                color: '#374151'
-              }}>
-                Target Outlets
-              </label>
+            <div className="field-block">
+              <label className="field-label">Target Outlets</label>
               <select
+                className="select-compact"
                 value={promotionForm.targetOutlets === 'ALL' ? 'ALL' : (Array.isArray(promotionForm.targetOutlets) && promotionForm.targetOutlets[0]) || 'ALL'}
                 onChange={(e) => {
                   const val = e.target.value;
                   const targetOutlets = val === 'ALL' ? 'ALL' : [val];
                   setPromotionForm(prev => ({ ...prev, targetOutlets }));
-                }}
-                style={{
-                  width: '100%',
-                  padding: '0.6rem 0.9rem',
-                  border: '1px solid rgba(255,255,255,0.25)',
-                  borderRadius: '12px',
-                  background: 'rgba(255,255,255,0.08)',
-                  color: '#fff',
-                  fontSize: '0.95rem',
-                  fontWeight: 600,
-                  outline: 'none',
-                  height: '44px',
-                  cursor: 'pointer'
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = '#10b981';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(16,185,129,0.1), 0 4px 12px rgba(0,0,0,0.1)';
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = '#e5e7eb';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
                 }}
               >
                 <option value="ALL">All Outlets</option>
@@ -4127,9 +4099,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                   </option>
                 ))}
               </select>
-              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)' }}>
-                Choose a single outlet or All Outlets
-              </p>
+              <p className="field-hint">Choose a single outlet or All Outlets</p>
             </div>
 
             {/* SMS Message */}
@@ -4505,15 +4475,21 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             </div>
 
             {/* Discount Type */}
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, fontSize: '1.05rem', color: '#fff' }}>Discount Type *</label>
-              <div style={{ display: 'inline-flex', gap: '0.5rem', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 12, padding: '0.25rem' }}>
-                <button type="button" onClick={() => setCampaignForm(prev => ({ ...prev, discountType: 'dollar' }))}
-                  style={{ padding: '0.5rem 0.9rem', borderRadius: 10, background: campaignForm.discountType === 'dollar' ? 'linear-gradient(135deg, #10b981, #059669)' : 'transparent', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700 }}>
+            <div className="toggle-centered">
+              <label className="field-label">Discount Type *</label>
+              <div className="toggle-row">
+                <button
+                  type="button"
+                  className={`toggle-btn ${campaignForm.discountType === 'dollar' ? 'active-dollar' : ''}`}
+                  onClick={() => setCampaignForm(prev => ({ ...prev, discountType: 'dollar' }))}
+                >
                   Dollar ($)
                 </button>
-                <button type="button" onClick={() => setCampaignForm(prev => ({ ...prev, discountType: 'percentage' }))}
-                  style={{ padding: '0.5rem 0.9rem', borderRadius: 10, background: campaignForm.discountType === 'percentage' ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : 'transparent', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700 }}>
+                <button
+                  type="button"
+                  className={`toggle-btn ${campaignForm.discountType === 'percentage' ? 'active-percent' : ''}`}
+                  onClick={() => setCampaignForm(prev => ({ ...prev, discountType: 'percentage' }))}
+                >
                   Percentage (%)
                 </button>
               </div>
@@ -4642,43 +4618,15 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             </div>
 
             {/* Target Outlets */}
-            <div style={{ marginBottom: '3rem' }}>
-              <label style={{ 
-                display: 'block', 
-                marginBottom: '0.75rem', 
-                fontWeight: 600,
-                fontSize: '1.1rem',
-                color: '#374151'
-              }}>
-                Target Outlets
-              </label>
+            <div className="field-block field-block-lg">
+              <label className="field-label">Target Outlets</label>
               <select
+                className="select-compact"
                 value={campaignForm.targetOutlets === 'ALL' ? 'ALL' : (Array.isArray(campaignForm.targetOutlets) && campaignForm.targetOutlets[0]) || 'ALL'}
                 onChange={(e) => {
                   const val = e.target.value;
                   const targetOutlets = val === 'ALL' ? 'ALL' : [val];
                   setCampaignForm(prev => ({ ...prev, targetOutlets }));
-                }}
-                style={{
-                  width: '100%',
-                  padding: '0.6rem 0.9rem',
-                  border: '1px solid rgba(255,255,255,0.25)',
-                  borderRadius: '12px',
-                  background: 'rgba(255,255,255,0.08)',
-                  color: '#fff',
-                  fontSize: '0.95rem',
-                  fontWeight: 600,
-                  outline: 'none',
-                  height: '44px',
-                  cursor: 'pointer'
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = '#3b82f6';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1), 0 4px 12px rgba(0,0,0,0.1)';
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = '#e5e7eb';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
                 }}
               >
                 <option value="ALL">All Outlets</option>
@@ -4688,9 +4636,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                   </option>
                 ))}
               </select>
-              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem', color: 'rgba(255,255,255,0.75)' }}>
-                Choose a single outlet or All Outlets
-              </p>
+              <p className="field-hint">Choose a single outlet or All Outlets</p>
             </div>
 
             {/* Action Buttons now provided by GlassModal footer */}
