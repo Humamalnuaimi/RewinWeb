@@ -1250,6 +1250,114 @@ export class AuthService {
     }
   }
 
+  // 🚀 NEW: Bulk import customers using phone number as document ID for instant lookups
+  static async bulkImportCustomersWithPhoneID(userId: string, customers: any[], duplicateHandling: 'skip' | 'update' | 'merge') {
+    try {
+      console.log(`🚀 Bulk importing ${customers.length} customers with phone-ID structure for user: ${userId}`);
+      
+      let importedCount = 0;
+      let skippedCount = 0;
+      let errorCount = 0;
+      const errors: string[] = [];
+
+      console.log(`🚀 Importing customers - Mobile app will handle check-ins automatically`);
+
+      // Process customers in batches to avoid Firebase limits
+      const batchSize = 500;
+      for (let i = 0; i < customers.length; i += batchSize) {
+        const batch = writeBatch(db);
+        const batchCustomers = customers.slice(i, i + batchSize);
+        
+        for (const customer of batchCustomers) {
+          try {
+            // Format phone number for document ID
+            const phoneNumber = customer.phoneNumber;
+            if (!phoneNumber) {
+              console.warn('⚠️ Skipping customer without phone number:', customer);
+              skippedCount++;
+              continue;
+            }
+
+            // Use phone number as document ID (removes spaces, etc. for valid Firestore ID)
+            const docId = phoneNumber.replace(/[^0-9+]/g, ''); // Keep only digits and +
+            
+            // Reference to customer document using phone as ID
+            const customerRef = doc(db, 'users', userId, 'customers', docId);
+            
+            // Check if customer already exists
+            const existingDoc = await getDoc(customerRef);
+            
+            if (existingDoc.exists()) {
+              if (duplicateHandling === 'skip') {
+                console.log(`⏭️ Skipping existing customer: ${phoneNumber}`);
+                skippedCount++;
+                continue;
+              } else if (duplicateHandling === 'update') {
+                // Update existing customer
+                batch.set(customerRef, {
+                  ...customer,
+                  updatedAt: serverTimestamp(),
+                  lastImportedAt: serverTimestamp()
+                });
+                console.log(`🔄 Updating existing customer: ${phoneNumber}`);
+              } else if (duplicateHandling === 'merge') {
+                // Merge with existing data
+                const existingData = existingDoc.data();
+                batch.set(customerRef, {
+                  ...existingData,
+                  ...customer,
+                  updatedAt: serverTimestamp(),
+                  lastImportedAt: serverTimestamp()
+                });
+                console.log(`🔀 Merging with existing customer: ${phoneNumber}`);
+              }
+            } else {
+              // Create new customer with phone as document ID (SIMPLE!)
+              batch.set(customerRef, {
+                ...customer,
+                createdAt: serverTimestamp(),
+                importedAt: serverTimestamp()
+              });
+              
+              console.log(`✅ Customer imported: ${phoneNumber} - Mobile app will handle check-ins automatically`);
+            }
+            
+            importedCount++;
+            
+          } catch (error) {
+            console.error('❌ Error processing customer:', customer, error);
+            errorCount++;
+            errors.push(`Error processing customer ${customer.phoneNumber || 'unknown'}: ${error}`);
+          }
+        }
+        
+        // Commit the batch
+        await batch.commit();
+        console.log(`📦 Committed batch ${Math.floor(i / batchSize) + 1} of ${Math.ceil(customers.length / batchSize)}`);
+      }
+
+      console.log(`🎉 Bulk import completed: ${importedCount} imported, ${skippedCount} skipped, ${errorCount} errors`);
+      
+      return {
+        success: true,
+        imported: importedCount,
+        skipped: skippedCount,
+        errors: errorCount,
+        errorMessages: errors
+      };
+      
+    } catch (error) {
+      console.error('❌ Bulk import failed:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        imported: 0,
+        skipped: 0,
+        errors: 0
+      };
+    }
+  }
+
   // Bulk delete customers by IDs
   static async bulkDeleteCustomers(userId: string, customerIds: string[]) {
     try {

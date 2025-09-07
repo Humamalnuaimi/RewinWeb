@@ -724,35 +724,41 @@ const UserDetailsPage: React.FC = () => {
           // 🚨 MOBILE APP COMPATIBLE FORMAT - Using exact field names from mobile app specification
           // 🚨 CRITICAL: Create customer in EXACT native mobile app format
           const customerData: any = {
-            // === REQUIRED BASIC INFO === (EXACT native mobile app format)
+            // === REQUIRED BASIC INFO === (Your preference: empty names if not provided)
             phoneNumber: formatPhoneNumber(row[fieldMapping['phone']] || ''),  // ✅ EXACT format: +1XXXXXXXXXX
-            firstName: row[fieldMapping['first_name']] || '',  // ✅ Empty if not provided (like native)
-            lastName: row[fieldMapping['last_name']] || '',   // ✅ Empty if not provided (like native)
+            firstName: row[fieldMapping['first_name']] || '',  // ✅ Empty if not provided (your preference)
+            lastName: row[fieldMapping['last_name']] || '',   // ✅ Empty if not provided (your preference)
             fullName: row[fieldMapping['full_name']] || `${row[fieldMapping['first_name']] || ''} ${row[fieldMapping['last_name']] || ''}`.trim() || formatPhoneNumber(row[fieldMapping['phone']] || ''),  // ✅ REQUIRED - fallback to phone if empty
             email: row[fieldMapping['email']] || '',
             
-            // === CRITICAL MISSING FIELDS === (EXACT native mobile app format)
+            // === CRITICAL MISSING FIELDS === (EXACT mobile app format)
             active: convertToBoolean(row[fieldMapping['active']] || row[fieldMapping['was_registered']] || true),  // ✅ CRITICAL - "active" not "isActive"
             visitCount: parseNumber(row[fieldMapping['visit_count']] || row[fieldMapping['visits']] || 1),  // ✅ CRITICAL - Required by mobile app
-            availablePoints: parseNumber(row[fieldMapping['available_points']] || row[fieldMapping['points']] || 0),  // ✅ REQUIRED - Available points
             
-            // === REQUIRED POINTS & ACTIVITY === (EXACT native mobile app format)
+            // === REQUIRED POINTS & ACTIVITY === (EXACT mobile app format)
             totalPoints: parseNumber(row[fieldMapping['total_points']] || row[fieldMapping['points']] || 0),  // ✅ REQUIRED - Current point balance (number)
             pointsRedeemed: parseNumber(row[fieldMapping['points_redeemed']] || 0),  // ✅ REQUIRED - Total points redeemed (number)
+            availablePoints: parseNumber(row[fieldMapping['available_points']] || row[fieldMapping['points']] || 0),  // ✅ REQUIRED - Available points (mobile app spec)
             
             // === REQUIRED DATES === (Firebase Timestamp Objects - NOT strings!)
             dateJoined: convertToFirebaseTimestamp(row[fieldMapping['created_at']] || row[fieldMapping['date_joined']]),  // ✅ REQUIRED - Firebase Timestamp object
             lastVisit: convertToFirebaseTimestamp(row[fieldMapping['last_visited_at']] || row[fieldMapping['last_visit']]),  // ✅ REQUIRED - Firebase Timestamp object
             
             // === REQUIRED STATUS FLAGS === (Boolean - NOT strings!)
-            optedInForSMS: convertToBoolean(row[fieldMapping['reachable_sms']] || row[fieldMapping['sms_opt_in']] || false),  // ✅ REQUIRED - Boolean SMS consent (default false like native)
-            processed: false,  // ✅ REQUIRED - Boolean processing status (always false for imports)
+            optedInForSMS: convertToBoolean(
+              row[fieldMapping['reachable_sms_status']] === 'opted-in' || 
+              row[fieldMapping['sms_opt_in']] === 'opted-in' ||
+              row[fieldMapping['reachable_sms']] === 'opted-in' ||
+              (row[fieldMapping['reachable_sms_status']] && row[fieldMapping['reachable_sms_status']] !== 'opted-out') ||
+              false
+            ),  // ✅ REQUIRED - Check for "opted-in" text, not boolean values
+            processed: true,  // ✅ CRITICAL - Mark imported customers as processed (don't show on employee tablet)
             
-            // === REQUIRED OUTLET ASSIGNMENT === (EXACT mobile app format)
-            outletId: row[fieldMapping['outlet_id']] || selectedOutletForImport || '',  // ✅ REQUIRED - Home outlet ID
-            outletName: row[fieldMapping['outlet_name']] || (selectedOutletForImport ? outlets.find(o => o.id === selectedOutletForImport)?.name || '' : ''),  // ✅ REQUIRED - Home outlet name
-            checkInOutletId: row[fieldMapping['check_in_outlet_id']] || '',  // ✅ REQUIRED - Current check-in outlet
-            checkInOutletName: row[fieldMapping['check_in_outlet_name']] || '',  // ✅ REQUIRED - Current check-in outlet name
+            // === FLEXIBLE OUTLET ASSIGNMENT === (Mobile app handles automatically)
+            outletId: row[fieldMapping['outlet_id']] || selectedOutletForImport || '',  // Can be empty - app will assign on first check-in
+            outletName: row[fieldMapping['outlet_name']] || (selectedOutletForImport ? outlets.find(o => o.id === selectedOutletForImport)?.name || '' : ''),  // Can be empty - app will assign on first check-in
+            checkInOutletId: '',  // Always empty for imported customers
+            checkInOutletName: '',  // Always empty for imported customers
             
             // === OPTIONAL FIELDS === (EXACT native mobile app format)
             notes: row[fieldMapping['notes']] || '',  // Optional - Customer notes
@@ -761,7 +767,13 @@ const UserDetailsPage: React.FC = () => {
             totalSpent: row[fieldMapping['total_spent']] ? parseNumber(row[fieldMapping['total_spent']]) : null,  // Optional - Total amount spent (null like native)
             
             // === REQUIRED SMS CONSENT TRACKING === (EXACT native mobile app format)
-            smsConsentExplicit: convertToBoolean(row[fieldMapping['reachable_sms']] || row[fieldMapping['sms_opt_in']] || false),  // ✅ REQUIRED - Boolean explicit consent (default false like native)
+            smsConsentExplicit: convertToBoolean(
+              row[fieldMapping['reachable_sms_status']] === 'opted-in' || 
+              row[fieldMapping['sms_opt_in']] === 'opted-in' ||
+              row[fieldMapping['reachable_sms']] === 'opted-in' ||
+              (row[fieldMapping['reachable_sms_status']] && row[fieldMapping['reachable_sms_status']] !== 'opted-out') ||
+              false
+            ),  // ✅ REQUIRED - Check for "opted-in" text, not boolean values
             smsConsentMethod: row[fieldMapping['sms_consent_method']] || '',  // ✅ REQUIRED - How they consented (empty like native)
             smsConsentTimestamp: row[fieldMapping['sms_consent_date']] ? convertToFirebaseTimestamp(row[fieldMapping['sms_consent_date']]) : null,  // ✅ REQUIRED - When they agreed (null like native)
             smsConsentVersion: row[fieldMapping['sms_consent_version']] || '',  // ✅ REQUIRED - Version of consent (empty like native)
@@ -780,8 +792,8 @@ const UserDetailsPage: React.FC = () => {
           return customerData;
         });
 
-        // Import this batch using AuthService
-        const response = await AuthService.bulkImportCustomers(user.uid, customersToImport, duplicateHandling);
+        // 🚀 NEW: Import using phone number as document ID for instant lookups
+        const response = await AuthService.bulkImportCustomersWithPhoneID(user.uid, customersToImport, duplicateHandling);
         
         if (response.success) {
           importedCount += response.imported || 0;
@@ -1198,7 +1210,7 @@ const UserDetailsPage: React.FC = () => {
             fontSize: '2rem',
             fontWeight: '700'
           }}>
-            {user?.displayName?.charAt(0) || user?.email.charAt(0).toUpperCase()}
+            {user?.displayName?.charAt(0) || user?.email?.charAt(0)?.toUpperCase() || '?'}
           </span>
         </div>
         
@@ -3702,7 +3714,9 @@ const UserDetailsPage: React.FC = () => {
                         {/* Marketing Preferences */}
                         <option value="reachable_email" style={{ background: '#1e293b' }}>Email Opt-in</option>
                         <option value="reachable_sms" style={{ background: '#1e293b' }}>SMS Opt-in</option>
+                        <option value="reachable_sms_status" style={{ background: '#1e293b' }}>SMS Status (opted-in/opted-out)</option>
                         <option value="reachable_push" style={{ background: '#1e293b' }}>Push Opt-in</option>
+                        <option value="sms_opt_in" style={{ background: '#1e293b' }}>SMS Opt-in Status</option>
                         <option value="sms_consent_date" style={{ background: '#1e293b' }}>SMS Consent Date</option>
                         
                         {/* Customer Status */}
