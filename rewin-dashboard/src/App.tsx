@@ -820,7 +820,7 @@ const OutletAnalyticsPage = ({ onBack }: { onBack: () => void }) => {
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              <span style={{ fontSize: '1.5rem' }}>📈</span>
+              <span style={{ fontSize: '1.5rem' }}>����</span>
             </div>
             <h3 style={{ color: 'white', margin: 0, fontSize: '1.3rem' }}>Performance Metrics</h3>
           </div>
@@ -1922,7 +1922,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
           '📱 Phone Number Search',
           '📧 Email Domain Analysis',
           '📊 Customer Lifetime Value',
-          '🔄 Recent Activity (Last visit, Last transaction)'
+          '���� Recent Activity (Last visit, Last transaction)'
         ]
       },
       outlets: {
@@ -3522,14 +3522,26 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 totalEarned += pointsAdded;
                 totalRedeemed += pointsRedeemed;
 
-                dayTransactions.push({
-                  id: doc.id,
-                  ...transaction,
-                  timestamp: transactionDate,
-                  customerDisplay: customerDisplayMap[transaction.customerId] || 'Unknown',
-                  pointsAdded,
-                  pointsRedeemed
-                });
+                if (pointsAdded > 0) {
+                  dayTransactions.push({
+                    id: `${doc.id}_earned`,
+                    ...transaction,
+                    transactionType: 'EARNED',
+                    pointsChanged: pointsAdded,
+                    timestamp: transactionDate,
+                    customerDisplay: customerDisplayMap[transaction.customerId] || 'Unknown'
+                  });
+                }
+                if (pointsRedeemed > 0) {
+                  dayTransactions.push({
+                    id: `${doc.id}_redeemed`,
+                    ...transaction,
+                    transactionType: 'REDEEMED',
+                    pointsChanged: -pointsRedeemed,
+                    timestamp: transactionDate,
+                    customerDisplay: customerDisplayMap[transaction.customerId] || 'Unknown'
+                  });
+                }
               }
             }
           });
