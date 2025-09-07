@@ -44,9 +44,7 @@ export class PromotionService {
         throw new Error('Promotion title is required');
       }
       
-      if (!promotionData.description || !promotionData.description.trim()) {
-        throw new Error('Promotion description is required');
-      }
+      // Description is optional; default to empty string
       
       if (!promotionData.discountAmount || promotionData.discountAmount <= 0) {
         throw new Error('Discount amount must be greater than 0');
