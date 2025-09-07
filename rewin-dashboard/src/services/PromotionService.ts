@@ -71,7 +71,7 @@ export class PromotionService {
       const payload = {
           // Required fields for mobile app
           title: promotionData.title,
-          description: promotionData.description || '',
+          description: (promotionData.description ?? '').toString(),
           discountType: promotionData.discountType, // "dollar" or "percentage"
           discountAmount: promotionData.discountAmount,
           minimumPurchase: promotionData.minimumPurchase || 0,
