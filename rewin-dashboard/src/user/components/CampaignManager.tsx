@@ -4330,7 +4330,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 <option value="" style={{ color: '#9ca3af' }}>Select Type</option>
                 <option value="inactive">🛌 Inactive Customers</option>
                 <option value="birthday">🎂 Birthday Campaign</option>
-                <option value="spending">💰 Low Spending Campaign</option>
+                <option value="welcome">👋 Welcome Campaign</option>
               </select>
             </div>
 
