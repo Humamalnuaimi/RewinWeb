@@ -208,7 +208,7 @@ const PromotionDetailsPage: React.FC<PromotionDetailsPageProps> = ({ user, promo
                       <div className="assignment-date">{formatDate(item.usedAt || item.createdAt)}</div>
                     </div>
                     <div className="assignment-right">
-                      <div className={`pill ${item.isUsed ? 'pill-used' : item.isActive ? 'pill-active' : 'pill-inactive'}`}>
+                      <div className={`pill ${item.isUsed ? 'pill-used' : item.isActive ? 'pill-active' : 'pill-inactive'}`} style={{minWidth: 86, textAlign: 'center'}}>
                         {item.isUsed ? 'USED' : item.isActive ? 'ACTIVE' : 'INACTIVE'}
                       </div>
                     </div>
