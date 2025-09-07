@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { type User } from 'firebase/auth';
 import { firestore } from '../../firebase/config';
 import { doc, getDoc, collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
-import { Gift, Activity, CheckCircle2, Calendar, Store, Tag } from 'lucide-react';
+import { Gift, Activity, CheckCircle2, Calendar, Store, Tag, BadgeDollarSign, Wallet } from 'lucide-react';
 import './PromotionDetailsPage.css';
 
 interface PromotionDetailsPageProps {
@@ -177,15 +177,17 @@ const PromotionDetailsPage: React.FC<PromotionDetailsPageProps> = ({ user, promo
           </div>
 
           <div className="glass-card info-card">
-            <div className="info-title">{promotion.title}</div>
-            <p className="info-desc">{promotion.description || '—'}</p>
-
-            <div className="chips">
-              <span className="chip chip-gold">{promotion.discountType === 'percentage' ? `${promotion.discountAmount}% OFF` : `$${promotion.discountAmount} OFF`}</span>
-              <span className="chip chip-green">Min ${promotion.minimumPurchase}</span>
-              {promotion.campaignId && <span className="chip chip-purple">Campaign</span>}
-              {promotion.source && <span className="chip chip-blue">{String(promotion.source).toUpperCase()}</span>}
+            <div className="info-header">
+              <div className="info-title">{promotion.title}</div>
+              <div className="chips">
+                <span className="chip chip-gold"><BadgeDollarSign size={14} />{promotion.discountType === 'percentage' ? `${promotion.discountAmount}% OFF` : `$${promotion.discountAmount} OFF`}</span>
+                <span className="chip chip-green"><Wallet size={14} />Min ${promotion.minimumPurchase}</span>
+                {promotion.campaignId && <span className="chip chip-purple">Campaign</span>}
+                {promotion.source && <span className="chip chip-blue">{String(promotion.source).toUpperCase()}</span>}
+              </div>
             </div>
+
+            <p className="info-desc">{promotion.description || '—'}</p>
 
             <div className="meta-grid">
               <div className="meta-item"><Tag size={16} /> Type: {String(promotion.discountType || '—')}</div>
