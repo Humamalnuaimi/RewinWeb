@@ -98,6 +98,13 @@ const GlassModal: React.FC<GlassModalProps> = ({ title, subtitle, accent = 'blue
           [data-glass-modal] .toggle-btn { padding: 0.5rem 0.9rem; border-radius: 10px; background: transparent; color: white; border: none; cursor: pointer; font-weight: 700; }
           [data-glass-modal] .toggle-btn.active-dollar { background: linear-gradient(135deg, #10b981, #059669); }
           [data-glass-modal] .toggle-btn.active-percent { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+
+          /* Navy panel */
+          [data-glass-modal] .panel-navy { margin-bottom: 2rem; padding: 1rem 1.25rem; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.2); border-radius: 16px; }
+          [data-glass-modal] .checkbox-row { display:flex; align-items:center; gap:0.6rem; font-weight:600; }
+          [data-glass-modal] .panel-note { font-size: 0.9rem; color: rgba(255,255,255,0.75); margin-left: 1.95rem; margin-top: 0.25rem; }
+          [data-glass-modal] .input-compact { width: 100%; height: 40px; padding: 0 0.75rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.22); background: rgba(255,255,255,0.08); color: #fff; font-size: 0.95rem; font-weight: 600; }
+          [data-glass-modal] .preview-muted { font-size: 0.9rem; color: rgba(255,255,255,0.85); background: rgba(11,16,33,0.25); border: 1px solid rgba(255,255,255,0.18); padding: 0.6rem 0.75rem; border-radius: 10px; }
         `}</style>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
