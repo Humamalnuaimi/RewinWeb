@@ -1344,10 +1344,9 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
           triggerType = 'birthday';
           daysSinceLastVisit = 0; // Not applicable for birthday campaigns
           break;
-        case 'spending':
-          // For now, map spending campaigns to inactive (you can adjust this later)
-          triggerType = 'inactive_15';
-          daysSinceLastVisit = 15; // Default for spending campaigns
+        case 'welcome':
+          triggerType = 'welcome';
+          daysSinceLastVisit = 0;
           break;
         default:
           triggerType = 'birthday';
