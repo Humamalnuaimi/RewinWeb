@@ -754,14 +754,28 @@ ${expirationText}
               }
             }
             break;
+          case 'welcome':
+            const welcomeWindowDays = 14;
+            const createdAt = customerData.createdAt?.toDate ? customerData.createdAt.toDate() : (customerData.createdAt ? new Date(customerData.createdAt) : null);
+            const noLastVisit = !customerData.lastVisit;
+            let withinWindow = true;
+            if (createdAt) {
+              const daysSinceSignup = Math.floor((today.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+              withinWindow = daysSinceSignup <= welcomeWindowDays;
+            }
+            if (noLastVisit && withinWindow) {
+              qualifies = true;
+              console.log(`👋 WELCOME MATCH for ${customerId}: no lastVisit and within ${welcomeWindowDays} days of signup`);
+            }
+            break;
         }
 
         if (qualifies) {
           // 🔍 ENHANCED DUPLICATE PREVENTION (Check for any unredeemed promotions from this campaign)
-          const duplicateCheckId = campaign.triggerType === 'birthday' 
+          const duplicateCheckId = campaign.triggerType === 'birthday'
             ? `promo_birthday_${customerId}_${new Date().getFullYear()}`
             : `promo_inactive_${customerId}_${campaign.id!}_${Date.now()}`;
-          
+
           try {
             // Check for ANY existing unredeemed promotions from this campaign for this customer
             const customerPromotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions');
