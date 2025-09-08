@@ -228,6 +228,15 @@ const UserDetailsPage: React.FC = () => {
     }
   }, [userId, timePeriod]);
 
+  useEffect(() => {
+    const loadGrowth = async () => {
+      if (!userId) return;
+      const response = await AuthService.getCustomerGrowthByPeriod(userId!, growthPeriod);
+      if (response.success) setCustomerGrowth(response.growthData);
+    };
+    loadGrowth();
+  }, [userId, growthPeriod]);
+
   // 3. HANDLERS
   const fetchUserData = async () => {
     try {
