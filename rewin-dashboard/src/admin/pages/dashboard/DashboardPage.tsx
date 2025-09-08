@@ -52,14 +52,18 @@ const DashboardPage: React.FC = () => {
     try {
       setLoading(true);
       
-      // Fetch users count using AuthService
-      const userCount = await AuthService.getUserCount();
-      console.log(`📊 Dashboard: Found ${userCount} users in Firebase`);
-      
-      setStats(prevStats => ({
-        ...prevStats,
-        totalUsers: userCount
-      }));
+      // Fetch aggregated stats for admin dashboard
+      const overview = await AuthService.getGlobalOverviewStats();
+      console.log('📊 Admin overview:', overview);
+
+      if (overview.success) {
+        setStats({
+          totalUsers: overview.totalUsers,
+          totalOutlets: overview.totalOutlets,
+          totalRevenue: overview.totalRevenue,
+          totalCustomers: overview.totalCustomers
+        });
+      }
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
     } finally {
