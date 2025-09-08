@@ -732,7 +732,7 @@ const UserDetailsPage: React.FC = () => {
         const customersToImport = batch.map((row: any) => {
 
           // 🚨 MOBILE APP COMPATIBLE FORMAT - Using exact field names from mobile app specification
-          // 🚨 CRITICAL: Create customer in EXACT native mobile app format
+          // ���� CRITICAL: Create customer in EXACT native mobile app format
           const customerData: any = {
             // === REQUIRED BASIC INFO === (Your preference: empty names if not provided)
             phoneNumber: formatPhoneNumber(row[fieldMapping['phone']] || ''),  // ✅ EXACT format: +1XXXXXXXXXX
@@ -2174,11 +2174,39 @@ const UserDetailsPage: React.FC = () => {
                 <div style={{
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: 'space-between',
                   gap: '0.75rem',
                   marginBottom: '1.5rem'
                 }}>
-                  <TrendingUp size={24} color="#3b82f6" />
-                  <h4 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>Customer Growth Over Time</h4>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <TrendingUp size={24} color="#3b82f6" />
+                    <h4 style={{ color: 'white', margin: 0, fontSize: '1.25rem' }}>Customer Growth Over Time</h4>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {(['today','week','month','year'] as const).map(p => (
+                      <button
+                        key={p}
+                        onClick={() => setGrowthPeriod(p)}
+                        style={{
+                          padding: '0.4rem 0.8rem',
+                          borderRadius: '9999px',
+                          background: growthPeriod === p ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'rgba(255,255,255,0.1)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: 'white',
+                          fontSize: '0.75rem',
+                          cursor: 'pointer'
+                        }}
+                        onMouseEnter={(e) => {
+                          if (growthPeriod !== p) e.currentTarget.style.background = 'rgba(255,255,255,0.2)';
+                        }}
+                        onMouseLeave={(e) => {
+                          if (growthPeriod !== p) e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                        }}
+                      >
+                        {p === 'today' ? 'Day' : p.charAt(0).toUpperCase() + p.slice(1)}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div style={{
                   height: '300px',
@@ -4079,7 +4107,7 @@ const UserDetailsPage: React.FC = () => {
               marginBottom: '1.5rem'
             }}>
               <h2 style={{ color: 'white', margin: 0, fontSize: '1.25rem', fontWeight: '600' }}>
-                🗑️ Delete ALL Customers
+                ��️ Delete ALL Customers
               </h2>
               <button
                 onClick={() => setShowDeleteAllModal(false)}
