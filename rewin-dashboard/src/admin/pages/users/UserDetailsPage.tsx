@@ -277,7 +277,7 @@ const UserDetailsPage: React.FC = () => {
         setAnalytics({
           totalCustomers: analyticsResponse.analytics.customersCount,
           totalRevenue: analyticsResponse.analytics.totalRevenue,
-          totalPointsEarned: analyticsResponse.analytics.totalPoints,
+          totalPointsEarned: analyticsResponse.analytics.totalPointsEarned,
           totalPointsRedeemed: analyticsResponse.analytics.totalPointsRedeemed || 0,
           totalCheckIns: analyticsResponse.analytics.checkInsCount,
           averageCustomerRating: 4.7, // This would need additional calculation
