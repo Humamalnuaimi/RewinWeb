@@ -537,7 +537,7 @@ ${expirationText}
     }
   };
 
-  // 🤖 CAMPAIGN AUTOMATION SYSTEM (As Per App Team Specification)
+  // ���� CAMPAIGN AUTOMATION SYSTEM (As Per App Team Specification)
   const assignCampaignToCustomers = async (businessId: string, campaign: Campaign) => {
     try {
       console.log('🎯 Processing campaign for customers:', campaign.name);
@@ -843,7 +843,7 @@ ${expirationText}
             try {
               const smsMessage = `🎉 ${campaign.name}! Get ${campaign.discountAmount}${campaign.discountType === 'percentage' ? '%' : '$'} off your next visit. Valid for 7 days. Show this message in-store.`;
               await sendSMSMessage(customer.data.phoneNumber, smsMessage);
-              console.log(`📱 SMS sent to ${customer.data.name || customer.id}: ${customer.data.phoneNumber}`);
+              console.log(`�� SMS sent to ${customer.data.name || customer.id}: ${customer.data.phoneNumber}`);
             } catch (error) {
               console.error(`❌ Failed to send SMS to ${customer.id}:`, error);
             }
@@ -2502,7 +2502,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               lineHeight: '1.5',
               color: 'rgba(255,255,255,0.9)'
             }}>
-              Existing loyalty system (unchanged)
+              Existing loyalty system
             </p>
             <div style={{ 
               fontSize: '1.5rem', 
