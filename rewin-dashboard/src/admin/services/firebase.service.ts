@@ -256,6 +256,68 @@ export class AuthService {
     }
   }
 
+  // Get global overview stats across ALL users (admin dashboard)
+  static async getGlobalOverviewStats() {
+    try {
+      const usersSnapshot = await getDocs(collection(db, 'users'));
+      const userIds = usersSnapshot.docs.map(d => d.id);
+
+      let totalOutlets = 0;
+      let totalCustomers = 0;
+      let totalRevenue = 0;
+
+      for (const userId of userIds) {
+        try {
+          const outletsSnap = await getDocs(collection(db, 'users', userId, 'outlets'));
+          totalOutlets += outletsSnap.size;
+        } catch (e) {
+          console.log(`Could not fetch outlets for user ${userId}`);
+        }
+
+        try {
+          const customersSnap = await getDocs(collection(db, 'users', userId, 'customers'));
+          totalCustomers += customersSnap.size;
+        } catch (e) {
+          console.log(`Could not fetch customers for user ${userId}`);
+        }
+
+        try {
+          const transactionsSnap = await getDocs(collection(db, 'users', userId, 'web_transactions'));
+          transactionsSnap.docs.forEach(docSnap => {
+            const t = docSnap.data() as any;
+            const pointsChanged = t.pointsChanged || 0;
+            const transactionType = (t.transactionType || '').toString().toUpperCase();
+            const isManual = !!t.isManualTransaction;
+            if (transactionType === 'EARNED' && isManual && pointsChanged > 0) {
+              totalRevenue += pointsChanged * 0.1; // $0.10 per point
+            }
+          });
+        } catch (e) {
+          console.log(`Could not fetch transactions for user ${userId}`);
+        }
+      }
+
+      return {
+        success: true,
+        totalUsers: userIds.length,
+        totalOutlets,
+        totalCustomers,
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
+        error: null
+      };
+    } catch (error: any) {
+      console.error('Error getting global overview stats:', error);
+      return {
+        success: false,
+        totalUsers: 0,
+        totalOutlets: 0,
+        totalCustomers: 0,
+        totalRevenue: 0,
+        error: error.message
+      };
+    }
+  }
+
   // Create new user (Admin functionality)
   static async createUser(userData: { email: string; displayName: string; invitationType: 'email' | 'gmail' }) {
     try {
@@ -1064,14 +1126,12 @@ export class AuthService {
     }
   }
 
-  // 10. GET CUSTOMER GROWTH OVER TIME
+  // 10. GET CUSTOMER GROWTH OVER TIME (last N days, default 7)
   static async getCustomerGrowth(userId: string, days: number = 7) {
     try {
       console.log(`📈 Fetching customer growth for user: ${userId}, last ${days} days`);
-      
       const customersRef = collection(db, 'users', userId, 'customers');
       const customersSnapshot = await getDocs(customersRef);
-      
       const customers = customersSnapshot.docs.map(doc => {
         const data = doc.data();
         return {
@@ -1081,33 +1141,26 @@ export class AuthService {
         };
       });
 
-      // Create array for the last N days
-      const growthData = [];
+      const growthData: any[] = [];
       const now = new Date();
-      
       for (let i = days - 1; i >= 0; i--) {
         const date = new Date(now);
         date.setDate(date.getDate() - i);
         date.setHours(0, 0, 0, 0);
-        
         const nextDate = new Date(date);
         nextDate.setDate(nextDate.getDate() + 1);
-        
-        // Count customers created on this day
+
         const customersOnDay = customers.filter(customer => {
-          let customerDate;
+          let customerDate: Date | null = null;
           if (customer.createdAt && customer.createdAt.toDate) {
             customerDate = customer.createdAt.toDate();
           } else if (customer.createdAt) {
             customerDate = new Date(customer.createdAt);
-          } else {
-            return false;
           }
-          return customerDate >= date && customerDate < nextDate;
+          return !!customerDate && customerDate >= date && customerDate < nextDate;
         });
 
         const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        
         growthData.push({
           date: date.toISOString().split('T')[0],
           dayName: dayNames[date.getDay()],
@@ -1116,23 +1169,63 @@ export class AuthService {
         });
       }
 
-      console.log(`✅ Customer growth data calculated:`, growthData);
-      
-      return {
-        success: true,
-        growthData,
-        totalCustomers: customers.length,
-        error: null
-      };
-      
+      return { success: true, growthData, totalCustomers: customers.length, error: null };
     } catch (error: any) {
       console.error('❌ Error fetching customer growth:', error);
-      return {
-        success: false,
-        growthData: [],
-        totalCustomers: 0,
-        error: error.message
-      };
+      return { success: false, growthData: [], totalCustomers: 0, error: error.message };
+    }
+  }
+
+  // 10.1 GET CUSTOMER GROWTH BY PERIOD (today/week/month/year)
+  static async getCustomerGrowthByPeriod(userId: string, period: 'today' | 'week' | 'month' | 'year') {
+    try {
+      const customersRef = collection(db, 'users', userId, 'customers');
+      const customersSnapshot = await getDocs(customersRef);
+      const customers = customersSnapshot.docs.map(doc => {
+        const data = doc.data();
+        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : null);
+        return { id: doc.id, createdAt } as { id: string; createdAt: Date | null };
+      });
+
+      const now = new Date();
+      const growthData: any[] = [];
+
+      if (period === 'today') {
+        const start = new Date(now);
+        start.setHours(0, 0, 0, 0);
+        for (let h = 0; h < 24; h++) {
+          const hourStart = new Date(start);
+          hourStart.setHours(h, 0, 0, 0);
+          const hourEnd = new Date(hourStart);
+          hourEnd.setHours(h + 1, 0, 0, 0);
+          const count = customers.filter(c => c.createdAt && c.createdAt >= hourStart && c.createdAt < hourEnd).length;
+          const label = `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? 'AM' : 'PM'}`;
+          growthData.push({ date: hourStart.toISOString(), dayName: label, count, isToday: h === now.getHours() });
+        }
+      } else if (period === 'week') {
+        return await this.getCustomerGrowth(userId, 7);
+      } else if (period === 'month') {
+        const days = 30;
+        const base = await this.getCustomerGrowth(userId, days);
+        return base;
+      } else if (period === 'year') {
+        // Aggregate by month for last 12 months
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        for (let i = 11; i >= 0; i--) {
+          const date = new Date(now);
+          date.setMonth(now.getMonth() - i, 1);
+          date.setHours(0, 0, 0, 0);
+          const next = new Date(date);
+          next.setMonth(date.getMonth() + 1, 1);
+          const count = customers.filter(c => c.createdAt && c.createdAt >= date && c.createdAt < next).length;
+          growthData.push({ date: date.toISOString(), dayName: months[date.getMonth()], count, isToday: i === 0 });
+        }
+      }
+
+      return { success: true, growthData, totalCustomers: customers.length, error: null };
+    } catch (error: any) {
+      console.error('❌ Error fetching customer growth by period:', error);
+      return { success: false, growthData: [], totalCustomers: 0, error: error.message };
     }
   }
 
