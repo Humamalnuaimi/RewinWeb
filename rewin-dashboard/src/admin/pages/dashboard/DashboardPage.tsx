@@ -32,9 +32,9 @@ const DashboardPage: React.FC = () => {
   // 1. STATE MANAGEMENT
   const [stats, setStats] = useState<DashboardStats>({
     totalUsers: 0,
-    totalOutlets: 89,
-    totalRevenue: 125430,
-    totalCustomers: 3421
+    totalOutlets: 0,
+    totalRevenue: 0,
+    totalCustomers: 0
   });
   const [loading, setLoading] = useState(true);
   
