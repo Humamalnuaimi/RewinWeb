@@ -259,8 +259,8 @@ const UserDetailsPage: React.FC = () => {
           setOutlets(outletsResponse.outlets);
         }
 
-        // Fetch customer growth data
-        const growthResponse = await AuthService.getCustomerGrowth(userId!, 7);
+        // Initial growth data (defaults to current growthPeriod)
+        const growthResponse = await AuthService.getCustomerGrowthByPeriod(userId!, growthPeriod);
         if (growthResponse.success) {
           setCustomerGrowth(growthResponse.growthData);
         }
