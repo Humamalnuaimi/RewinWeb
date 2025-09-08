@@ -108,6 +108,7 @@ const UserDetailsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [timePeriod, setTimePeriod] = useState<TimePeriod>('today');
+  const [growthPeriod, setGrowthPeriod] = useState<'today' | 'week' | 'month' | 'year'>('week');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
