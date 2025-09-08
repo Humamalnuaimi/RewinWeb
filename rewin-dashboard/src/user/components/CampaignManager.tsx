@@ -1795,7 +1795,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
   const loadRewardSettings = async () => {
     try {
       setIsLoadingRewards(true);
-      console.log('�� Loading reward settings...');
+      console.log('🎯 Loading reward settings...');
       
       if (!user) return;
       
@@ -2417,7 +2417,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               justifyContent: 'center',
               boxShadow: '0 4px 20px rgba(59, 130, 246, 0.4)'
             }}>
-              <Gift size={24} color="#fff" />
+              <span style={{ fontSize: '24px' }}>🔵</span>
             </div>
             <h3 style={{ 
               margin: '0 0 1rem 0', 
