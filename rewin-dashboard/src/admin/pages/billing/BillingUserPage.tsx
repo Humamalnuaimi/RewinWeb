@@ -6,16 +6,28 @@ import { CreditCard, ExternalLink, ArrowLeft, Copy } from 'lucide-react';
 import '../../styles/billing.css';
 
 const api = async (path: string, body: any) => {
-  const res = await fetch(`/api${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const res = await fetch(`/api${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
   if (!res.ok) {
-    const clone = res.clone();
-    let msg = res.statusText;
+    let msg = res.statusText || `HTTP ${res.status}`;
     try {
-      const ct = clone.headers.get('content-type') || '';
-      msg = ct.includes('application/json') ? JSON.stringify(await clone.json()) : await clone.text();
+      if (!res.bodyUsed) {
+        const ct = res.headers.get('content-type') || '';
+        if (ct.includes('application/json')) {
+          const data = await res.json();
+          msg = typeof data === 'string' ? data : JSON.stringify(data);
+        } else {
+          msg = await res.text();
+        }
+      }
     } catch {}
-    throw new Error(msg || `HTTP ${res.status}`);
+    throw new Error(msg);
   }
+
   const ct = res.headers.get('content-type') || '';
   return ct.includes('application/json') ? res.json() : res.text();
 };
