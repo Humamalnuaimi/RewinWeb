@@ -18,6 +18,7 @@ const BillingUserPage: React.FC = () => {
   const [user, setUser] = useState<any>(null);
   const [priceId, setPriceId] = useState<string>('');
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     const load = async () => {
