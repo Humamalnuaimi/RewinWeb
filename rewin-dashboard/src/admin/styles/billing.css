@@ -210,6 +210,15 @@
 .user-left { display: inline-flex; align-items: center; gap: 12px; }
 .user-right { display: inline-flex; align-items: center; gap: 8px; }
 
+.billing-tabs { display: flex; gap: 8px; margin: 0 0 0.75rem 0; }
+.tab { padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color:#fff; cursor:pointer; }
+.tab.active { background: linear-gradient(135deg,#667eea,#764ba2); border-color: transparent; }
+
+.steps { list-style: none; padding: 0; margin: 0 0 .5rem 0; display: grid; gap: 6px; }
+.step-badge { display:inline-grid; place-items:center; width:20px; height:20px; border-radius:999px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); margin-right:8px; font-size:12px; }
+
+.panel-grid.single { grid-template-columns: 1fr; }
+
 .glass-panel {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.12);
