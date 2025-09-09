@@ -458,15 +458,20 @@ if (stripe) {
       const { uid, email, name } = req.body;
       if (!uid) return res.status(400).json({ success: false, error: 'uid required' });
 
-      const userRef = db.doc(`users/${uid}`);
-      const snap = await userRef.get();
-      const data = snap.exists ? snap.data() : {};
-
-      let customerId = data?.stripeCustomerId;
-      if (!customerId) {
-        const customer = await stripe.customers.create({ email: email || data?.email || undefined, name: name || data?.displayName || email || undefined, metadata: { uid } });
+      let customerId = null;
+      if (db) {
+        const userRef = db.doc(`users/${uid}`);
+        const snap = await userRef.get();
+        const data = snap.exists ? snap.data() : {};
+        customerId = data?.stripeCustomerId || null;
+        if (!customerId) {
+          const customer = await stripe.customers.create({ email: email || data?.email || undefined, name: name || data?.displayName || email || undefined, metadata: { uid } });
+          customerId = customer.id;
+          await userRef.set({ stripeCustomerId: customerId }, { merge: true });
+        }
+      } else {
+        const customer = await stripe.customers.create({ email: email || undefined, name: name || email || undefined, metadata: { uid } });
         customerId = customer.id;
-        await userRef.set({ stripeCustomerId: customerId }, { merge: true });
       }
 
       res.json({ success: true, customerId });
@@ -525,7 +530,7 @@ if (stripe) {
         priceId: priceMonthlyId || priceYearlyId,
         billingInterval: priceMonthlyId ? 'month' : 'year'
       };
-      await db.doc(`users/${uid}`).set(payload, { merge: true });
+      if (db) await db.doc(`users/${uid}`).set(payload, { merge: true });
 
       res.json({ success: true, ...payload });
     } catch (err) {
@@ -538,18 +543,23 @@ if (stripe) {
   // Create Checkout Session (subscription by default)
   app.post('/api/billing/checkout', requireAdmin, async (req, res) => {
     try {
-      const { uid, priceId, mode = 'subscription', successUrl, cancelUrl } = req.body;
+      const { uid, priceId, mode = 'subscription', successUrl, cancelUrl, email } = req.body;
       if (!uid || !priceId || !successUrl || !cancelUrl) return res.status(400).json({ success: false, error: 'uid, priceId, successUrl, cancelUrl required' });
 
-      const userRef = db.doc(`users/${uid}`);
-      const snap = await userRef.get();
-      const data = snap.exists ? snap.data() : {};
-
-      let customerId = data?.stripeCustomerId;
-      if (!customerId) {
-        const customer = await stripe.customers.create({ email: data?.email || undefined, metadata: { uid } });
+      let customerId = null;
+      if (db) {
+        const userRef = db.doc(`users/${uid}`);
+        const snap = await userRef.get();
+        const data = snap.exists ? snap.data() : {};
+        customerId = data?.stripeCustomerId || null;
+        if (!customerId) {
+          const customer = await stripe.customers.create({ email: data?.email || email || undefined, metadata: { uid } });
+          customerId = customer.id;
+          await userRef.set({ stripeCustomerId: customerId }, { merge: true });
+        }
+      } else {
+        const customer = await stripe.customers.create({ email: email || undefined, metadata: { uid } });
         customerId = customer.id;
-        await userRef.set({ stripeCustomerId: customerId }, { merge: true });
       }
 
       const session = await stripe.checkout.sessions.create({
