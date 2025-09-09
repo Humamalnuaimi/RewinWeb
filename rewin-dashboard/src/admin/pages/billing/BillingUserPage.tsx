@@ -139,39 +139,14 @@ const BillingUserPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="billing-tabs">
-        <button className={`tab ${tab==='overview'?'active':''}`} onClick={()=>setTab('overview')}>Overview</button>
-        <button className={`tab ${tab==='invoices'?'active':''}`} onClick={()=>{setTab('invoices'); refreshInvoices();}}>Invoices</button>
-        <button className={`tab ${tab==='charges'?'active':''}`} onClick={()=>setTab('charges')}>One‑off charges</button>
-        <button className={`tab ${tab==='portal'?'active':''}`} onClick={()=>{openPortal();}}>Portal</button>
-      </div>
-
-      {tab==='overview' && (
-        <div className="panel-grid">
+      {/* Card layout: left = setup, right = actions */}
+      <div className="billing-columns">
+        <div className="left-col">
           <div className="glass-panel">
-            <h3 className="panel-title">Subscription</h3>
-            <ol className="steps">
-              <li><span className="step-badge">1</span> Status: <strong>{user.subscriptionStatus || 'none'}</strong></li>
-              <li><span className="step-badge">2</span> Customer: <code>{user.stripeCustomerId || '-'}</code></li>
-            </ol>
-            <div className="inline-actions">
-              {!user.stripeCustomerId && (
-                <button className="btn btn-secondary" onClick={ensureCustomer}>Create Customer</button>
-              )}
-              <button className="btn btn-secondary" onClick={openPortal}>
-                Manage in Portal <ExternalLink size={16} />
-              </button>
+            <div className="panel-head">
+              <h3 className="panel-title">Plan</h3>
+              <p className="panel-caption">Select price and start subscription</p>
             </div>
-            <div className="inline-actions" style={{ marginTop: 8 }}>
-              <button className="btn btn-secondary" onClick={async()=>{ await api('/billing/subscription/pause',{uid}); }}>Pause</button>
-              <button className="btn btn-secondary" onClick={async()=>{ await api('/billing/subscription/resume',{uid}); }}>Resume</button>
-              <button className="btn btn-secondary" onClick={async()=>{ if(confirm('Cancel subscription?')){ await api('/billing/subscription/cancel',{uid, atPeriodEnd:true}); } }}>Cancel at period end</button>
-            </div>
-          </div>
-
-          <div className="glass-panel">
-            <h3 className="panel-title">Plan</h3>
             <label className="field-label">Stripe priceId</label>
             <input className="glass-input" value={priceId} onChange={e => setPriceId(e.target.value)} placeholder="price_..." />
             {priceId && !priceId.startsWith('price_') && (
@@ -183,30 +158,21 @@ const BillingUserPage: React.FC = () => {
               <button className="btn btn-primary" onClick={startCheckout}>Start Checkout</button>
             </div>
           </div>
-        </div>
-      )}
 
-      {tab==='charges' && (
-        <div className="panel-grid single">
           <div className="glass-panel">
-            <h3 className="panel-title">One‑off invoice</h3>
-            <label className="field-label">Amount (cents)</label>
-            <input className="glass-input" value={itemAmount} onChange={e=>setItemAmount(e.target.value)} placeholder="e.g. 500 for $5.00" />
-            <label className="field-label" style={{ marginTop: 8 }}>Description</label>
-            <input className="glass-input" value={itemDesc} onChange={e=>setItemDesc(e.target.value)} placeholder="Line item description" />
-            <div className="field-actions">
-              <button className="btn btn-secondary" onClick={async()=>{ await api('/billing/invoice-item',{uid, amount:Number(itemAmount||0), description:itemDesc}); alert('Item added to upcoming invoice'); }}>Add Item</button>
-              <button className="btn btn-secondary" onClick={async()=>{ const r=await api('/billing/invoice/create-draft',{uid}); alert('Draft created: '+r.invoice?.id); }}>Create Draft</button>
-              <button className="btn btn-primary" onClick={async()=>{ const id=user.pendingInvoiceId || prompt('Enter invoice ID to finalize'); if(!id) return; await api('/billing/invoice/finalize',{invoiceId:id, send:true}); alert('Invoice finalized and sent'); }}>Finalize + Send</button>
+            <div className="panel-head">
+              <h3 className="panel-title">Subscription controls</h3>
+              <p className="panel-caption">Current: <strong>{user.subscriptionStatus || 'none'}</strong></p>
+            </div>
+            <div className="inline-actions">
+              <button className="btn btn-secondary" onClick={async()=>{ await api('/billing/subscription/pause',{uid}); }}>Pause</button>
+              <button className="btn btn-secondary" onClick={async()=>{ await api('/billing/subscription/resume',{uid}); }}>Resume</button>
+              <button className="btn btn-secondary" onClick={async()=>{ if(confirm('Cancel subscription?')){ await api('/billing/subscription/cancel',{uid, atPeriodEnd:true}); } }}>Cancel at period end</button>
             </div>
           </div>
-        </div>
-      )}
 
-      {tab==='invoices' && (
-        <div className="panel-grid single">
           <div className="glass-panel">
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+            <div className="panel-head">
               <h3 className="panel-title">Recent invoices</h3>
               <button className="btn btn-secondary" onClick={refreshInvoices}>Refresh</button>
             </div>
@@ -229,7 +195,38 @@ const BillingUserPage: React.FC = () => {
             )}
           </div>
         </div>
-      )}
+
+        <div className="right-col">
+          <div className="glass-panel">
+            <div className="panel-head">
+              <h3 className="panel-title">Customer</h3>
+              <p className="panel-caption">ID: <code>{user.stripeCustomerId || '-'}</code></p>
+            </div>
+            <div className="inline-actions">
+              {!user.stripeCustomerId && (
+                <button className="btn btn-secondary" onClick={ensureCustomer}>Create Customer</button>
+              )}
+              <button className="btn btn-secondary" onClick={openPortal}>Open Portal</button>
+            </div>
+          </div>
+
+          <div className="glass-panel">
+            <div className="panel-head">
+              <h3 className="panel-title">One‑off charge</h3>
+              <p className="panel-caption">Create and email an invoice</p>
+            </div>
+            <label className="field-label">Amount (cents)</label>
+            <input className="glass-input" value={itemAmount} onChange={e=>setItemAmount(e.target.value)} placeholder="e.g. 500 for $5.00" />
+            <label className="field-label" style={{ marginTop: 8 }}>Description</label>
+            <input className="glass-input" value={itemDesc} onChange={e=>setItemDesc(e.target.value)} placeholder="Line item description" />
+            <div className="field-actions">
+              <button className="btn btn-secondary" onClick={async()=>{ await api('/billing/invoice-item',{uid, amount:Number(itemAmount||0), description:itemDesc}); alert('Item added'); }}>Add Item</button>
+              <button className="btn btn-secondary" onClick={async()=>{ const r=await api('/billing/invoice/create-draft',{uid}); alert('Draft created: '+r.invoice?.id); }}>Create Draft</button>
+              <button className="btn btn-primary" onClick={async()=>{ const id=user.pendingInvoiceId || prompt('Enter invoice ID to finalize'); if(!id) return; await api('/billing/invoice/finalize',{invoiceId:id, send:true}); alert('Invoice sent'); }}>Finalize + Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
