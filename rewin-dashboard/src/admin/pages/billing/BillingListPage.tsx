@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebase.service';
-import { CreditCard, Search, ChevronRight, Copy } from 'lucide-react';
+import { CreditCard, Search, ChevronRight, Copy, ArrowLeft } from 'lucide-react';
 import '../../styles/billing.css';
 
 interface BillingUser {
@@ -72,9 +72,12 @@ const BillingListPage: React.FC = () => {
   return (
     <div className="billing-page">
       <div className="billing-header">
-        <div>
-          <h2 className="billing-title"><CreditCard size={22} /> Billing</h2>
-          <div className="billing-subtitle">Manage users’ Stripe status and customer links</div>
+        <div className="header-left">
+          <button className="back-btn" onClick={() => navigate(-1)}><ArrowLeft size={16}/> Back</button>
+          <div>
+            <h2 className="billing-title"><CreditCard size={22} /> Billing</h2>
+            <div className="billing-subtitle">Manage users’ Stripe status and customer links</div>
+          </div>
         </div>
       </div>
 
