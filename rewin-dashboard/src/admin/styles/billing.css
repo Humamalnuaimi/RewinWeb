@@ -229,7 +229,7 @@
 .switch { padding:6px 10px; border-radius:8px; background: transparent; border:none; color:#fff; cursor:pointer; }
 .switch.active { background: linear-gradient(135deg,#667eea,#764ba2); }
 
-@media (max-width: 900px) { .billing-columns { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .billing-columns { grid-template-columns: 1fr; } .info-row { grid-template-columns: 1fr; } }
 
 .glass-panel {
   background: rgba(255, 255, 255, 0.05);
@@ -237,6 +237,36 @@
   border-radius: 16px;
   padding: 1rem;
 }
+
+/* Modern status card */
+.status-card {
+  position: relative;
+  background: linear-gradient(135deg, rgba(9, 9, 121, 0.25), rgba(116, 75, 162, 0.25));
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 20px;
+  padding: 1.25rem 1.25rem;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  overflow: hidden;
+}
+.status-title { margin: 0; font-size: 1.25rem; font-weight: 800; }
+.status-desc { margin: 6px 0 0 0; opacity: .85; }
+.status-bubble {
+  width: 64px; height: 64px; border-radius: 50%;
+  display: grid; place-items: center;
+  box-shadow: inset 0 0 0 6px rgba(255,255,255,0.08), 0 10px 25px rgba(0,0,0,0.35);
+}
+.status-dot { width: 16px; height: 16px; border-radius: 50%; box-shadow: 0 0 18px currentColor; }
+.status-dot.green { color: #10b981; background: #10b981; }
+.status-dot.yellow { color: #f59e0b; background: #f59e0b; }
+.status-dot.red { color: #ef4444; background: #ef4444; }
+
+/* Info rows under status */
+.info-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+.info-chip { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); padding: 8px 10px; border-radius: 12px; font-size: 12px; display:flex; align-items:center; gap:6px; }
+.info-label { opacity:.8; }
+.info-value { font-weight:700; }
 
 .panel-title {
   margin: 0 0 0.75rem 0;
