@@ -238,17 +238,6 @@ const BillingUserPage: React.FC = () => {
           )}
         </div>
 
-        <div className="glass-panel">
-          <div className="panel-head">
-            <h3 className="panel-title">Customer</h3>
-            <p className="panel-caption">ID: <code>{user.stripeCustomerId || '-'}</code></p>
-          </div>
-          <div className="inline-actions">
-            {!user.stripeCustomerId && (
-              <button className="btn btn-secondary" onClick={ensureCustomer}>Create Customer</button>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );
