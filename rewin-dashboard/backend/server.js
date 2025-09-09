@@ -12,8 +12,24 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Stripe setup
+let stripe = null;
+try {
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  if (stripeKey) {
+    stripe = require('stripe')(stripeKey);
+    console.log('✅ Stripe initialized');
+  } else {
+    console.log('ℹ️ STRIPE_SECRET_KEY not set; billing routes will be disabled');
+  }
+} catch (e) {
+  console.error('❌ Stripe init error:', e);
+}
+
 // Middleware
 app.use(cors());
+// Use raw body for Stripe webhook verification
+app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
 // Initialize Firebase Admin SDK (matching old admin panel approach)
@@ -389,6 +405,163 @@ function createEmailMessage({ from, to, subject, htmlBody, textBody }) {
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/, '');
+}
+
+// =========================
+// BILLING (Stripe) ENDPOINTS
+// =========================
+if (stripe) {
+  const db = admin.firestore();
+
+  // Create/retrieve Stripe customer for a user
+  app.post('/api/billing/create-customer', async (req, res) => {
+    try {
+      const { uid, email, name } = req.body;
+      if (!uid || !email) return res.status(400).json({ success: false, error: 'uid and email required' });
+
+      const userRef = db.doc(`users/${uid}`);
+      const snap = await userRef.get();
+      const data = snap.exists ? snap.data() : {};
+
+      let customerId = data?.stripeCustomerId;
+      if (!customerId) {
+        const customer = await stripe.customers.create({ email, name: name || email, metadata: { uid } });
+        customerId = customer.id;
+        await userRef.set({ stripeCustomerId: customerId }, { merge: true });
+      }
+
+      res.json({ success: true, customerId });
+    } catch (err) {
+      console.error('create-customer error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Create Checkout Session (subscription by default)
+  app.post('/api/billing/checkout', async (req, res) => {
+    try {
+      const { uid, priceId, mode = 'subscription', successUrl, cancelUrl } = req.body;
+      if (!uid || !priceId || !successUrl || !cancelUrl) return res.status(400).json({ success: false, error: 'uid, priceId, successUrl, cancelUrl required' });
+
+      const userRef = db.doc(`users/${uid}`);
+      const snap = await userRef.get();
+      const data = snap.exists ? snap.data() : {};
+
+      let customerId = data?.stripeCustomerId;
+      if (!customerId) {
+        const customer = await stripe.customers.create({ email: data?.email || undefined, metadata: { uid } });
+        customerId = customer.id;
+        await userRef.set({ stripeCustomerId: customerId }, { merge: true });
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        mode,
+        customer: customerId,
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        client_reference_id: uid,
+        metadata: { uid },
+        allow_promotion_codes: true,
+      });
+
+      res.json({ success: true, url: session.url, id: session.id });
+    } catch (err) {
+      console.error('checkout error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Create Customer Portal Session
+  app.post('/api/billing/portal', async (req, res) => {
+    try {
+      const { uid, returnUrl } = req.body;
+      if (!uid || !returnUrl) return res.status(400).json({ success: false, error: 'uid and returnUrl required' });
+      const userRef = db.doc(`users/${uid}`);
+      const data = (await userRef.get()).data() || {};
+      if (!data.stripeCustomerId) return res.status(400).json({ success: false, error: 'No stripeCustomerId for user' });
+
+      const session = await stripe.billingPortal.sessions.create({ customer: data.stripeCustomerId, return_url: returnUrl });
+      res.json({ success: true, url: session.url });
+    } catch (err) {
+      console.error('portal error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Stripe Webhook
+  app.post('/api/billing/webhook', async (req, res) => {
+    const sig = req.headers['stripe-signature'];
+    let event;
+    try {
+      event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    } catch (err) {
+      console.error('Webhook signature verification failed:', err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    try {
+      switch (event.type) {
+        case 'checkout.session.completed': {
+          const session = event.data.object;
+          const uid = session.client_reference_id || session.metadata?.uid;
+          if (uid) {
+            await db.doc(`users/${uid}`).set({
+              stripeCustomerId: session.customer,
+              subscriptionStatus: 'active',
+              subscriptionId: session.subscription || null
+            }, { merge: true });
+          }
+          break;
+        }
+        case 'invoice.payment_succeeded': {
+          const invoice = event.data.object;
+          const customerId = invoice.customer;
+          const uid = invoice.metadata?.uid || null;
+          await updateUserByCustomerId(db, customerId, { subscriptionStatus: 'active', lastInvoiceAt: new Date().toISOString() }, uid);
+          break;
+        }
+        case 'invoice.payment_failed': {
+          const invoice = event.data.object;
+          const customerId = invoice.customer;
+          const uid = invoice.metadata?.uid || null;
+          await updateUserByCustomerId(db, customerId, { subscriptionStatus: 'past_due' }, uid);
+          break;
+        }
+        case 'customer.subscription.updated': {
+          const sub = event.data.object;
+          const customerId = sub.customer;
+          const status = sub.pause_collection ? 'paused' : (sub.status === 'active' ? 'active' : sub.status);
+          await updateUserByCustomerId(db, customerId, { subscriptionStatus: status, subscriptionId: sub.id });
+          break;
+        }
+        case 'customer.subscription.deleted': {
+          const sub = event.data.object;
+          await updateUserByCustomerId(db, sub.customer, { subscriptionStatus: 'canceled' });
+          break;
+        }
+        default:
+          break;
+      }
+      res.json({ received: true });
+    } catch (e) {
+      console.error('Webhook handling error:', e);
+      res.status(500).send('Server error');
+    }
+  });
+}
+
+async function updateUserByCustomerId(db, customerId, updates, fallbackUid) {
+  if (!customerId) return;
+  const usersRef = db.collection('users');
+  const snap = await usersRef.where('stripeCustomerId', '==', customerId).get();
+  if (!snap.empty) {
+    for (const doc of snap.docs) {
+      await doc.ref.set(updates, { merge: true });
+    }
+  } else if (fallbackUid) {
+    await db.doc(`users/${fallbackUid}`).set(updates, { merge: true });
+  }
 }
 
 // Email templates
