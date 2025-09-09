@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase.service';
-import { ArrowLeft, Copy } from 'lucide-react';
+import { Copy } from 'lucide-react';
 import '../../styles/billing.css';
 
 const api = async (path: string, body: any) => {
@@ -159,9 +159,9 @@ const BillingUserPage: React.FC = () => {
         </div>
         <div className="user-right">
           <div className="user-left">
-            <div className="avatar-circle" style={{ width: 32, height: 32 }}>{(user.displayName || user.email || user.uid).slice(0,1).toUpperCase()}</div>
+            <div className="avatar-circle avatar-sm">{(user.displayName || user.email || user.uid).slice(0,1).toUpperCase()}</div>
             <div>
-              <div className="name-text" style={{ fontSize: '0.95rem' }}>{user.displayName || user.uid}</div>
+              <div className="name-text name-sm">{user.displayName || user.uid}</div>
               <div className="email-text">{user.email}</div>
             </div>
           </div>
@@ -171,11 +171,11 @@ const BillingUserPage: React.FC = () => {
       {/* User summary */}
       <div className="user-summary">
         <div className="user-left">
-          <div className="avatar-circle" style={{ width: 44, height: 44 }}>
+          <div className="avatar-circle avatar-lg">
             {(user.displayName || user.email || user.uid).slice(0,1).toUpperCase()}
           </div>
           <div>
-            <div className="name-text" style={{ fontSize: '1.1rem' }}>{user.displayName || user.uid}</div>
+            <div className="name-text name-lg">{user.displayName || user.uid}</div>
             <div className="email-text">{user.email}</div>
           </div>
         </div>
@@ -196,8 +196,8 @@ const BillingUserPage: React.FC = () => {
           <p className="status-desc">{(user.priceMonthlyId || user.priceYearlyId || user.priceId) ? 'Plan assigned to this account' : 'No plan assigned yet'}</p>
           <div className="info-row">
             <div className="info-chip"><span className="info-label">Interval</span><span className="info-value">{user.billingInterval || '-'}</span></div>
-            <div className="info-chip"><span className="info-label">Monthly</span><span className="info-value">{fmt(monthlyAmt, currency)}</span></div>
-            <div className="info-chip"><span className="info-label">Yearly</span><span className="info-value">{fmt(yearlyAmt, currency)}</span></div>
+            <div className="info-chip price-chip"><span className="info-label">Monthly</span><span className="info-value price-value">{fmt(monthlyAmt, currency)}</span></div>
+            <div className="info-chip price-chip"><span className="info-label">Yearly</span><span className="info-value price-value">{fmt(yearlyAmt, currency)}</span></div>
           </div>
         </div>
         <div className="status-bubble">
@@ -207,14 +207,14 @@ const BillingUserPage: React.FC = () => {
 
       {/* Stacked panels */}
       <div className="panel-grid single">
-        <div className="glass-panel">
+        <div className="glass-panel panel-themed">
           <div className="panel-head">
             <h3 className="panel-title">Create plan</h3>
             <p className="panel-caption">Set simple monthly/yearly prices in USD</p>
           </div>
           <label className="field-label">Choose existing plan</label>
           <select
-            className="glass-input select-glass"
+            className="glass-input select-glass select-caret-left"
             value={selectedPlanId}
             onChange={(e)=>{
               const id = e.target.value; setSelectedPlanId(id);
@@ -229,14 +229,24 @@ const BillingUserPage: React.FC = () => {
             ))}
           </select>
 
+          {selectedPlanId && (
+            <div className="chosen-plan-preview">
+              <div className="info-row">
+                <div className="info-chip"><span className="info-label">Plan</span><span className="info-value">{selectedPlan?.productName || '-'}</span></div>
+                <div className="info-chip price-chip"><span className="info-label">Monthly</span><span className="info-value price-value">{fmt(selectedPlan?.monthlyAmount, selectedPlan?.currency)}</span></div>
+                <div className="info-chip price-chip"><span className="info-label">Yearly</span><span className="info-value price-value">{fmt(selectedPlan?.yearlyAmount, selectedPlan?.currency)}</span></div>
+              </div>
+            </div>
+          )}
+
           {!selectedPlanId && (
             <>
-              <label className="field-label" style={{ marginTop: 8 }}>Plan name (optional)</label>
+              <label className="field-label mt-2">Plan name (optional)</label>
               <input className="glass-input" value={productName} onChange={e=>setProductName(e.target.value)} placeholder="e.g. Starter" />
 
               <label className="field-label">Monthly price ($)</label>
               <input className="glass-input" inputMode="decimal" value={monthlyUsd} onChange={e=>setMonthlyUsd(e.target.value)} placeholder="e.g. 19.99" />
-              <label className="field-label" style={{ marginTop: 8 }}>Yearly price ($)</label>
+              <label className="field-label mt-2">Yearly price ($)</label>
               <input className="glass-input" inputMode="decimal" value={yearlyUsd} onChange={e=>setYearlyUsd(e.target.value)} placeholder="e.g. 199" />
             </>
           )}
@@ -249,7 +259,7 @@ const BillingUserPage: React.FC = () => {
           </div>
 
           {(priceMonthlyId || priceYearlyId) && (
-            <div className="muted-text" style={{ marginTop: 8 }}>
+            <div className="muted-text mt-2">
               Created prices: {priceMonthlyId ? `M: ${priceMonthlyId}` : ''} {priceYearlyId ? `Y: ${priceYearlyId}` : ''}
             </div>
           )}
