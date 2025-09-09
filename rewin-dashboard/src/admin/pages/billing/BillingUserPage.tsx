@@ -41,7 +41,7 @@ const BillingUserPage: React.FC = () => {
   const savePlan = async () => {
     setSaving(true);
     try {
-      await setDoc(doc(db, 'users', uid!), { priceId }, { merge: true });
+      await api('/billing/set-plan', { uid, priceId });
       setUser((p: any) => ({ ...p, priceId }));
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
