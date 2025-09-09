@@ -200,6 +200,16 @@
   grid-template-columns: 1fr 1fr;
 }
 
+.user-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 0.75rem 0;
+}
+.user-left { display: inline-flex; align-items: center; gap: 12px; }
+.user-right { display: inline-flex; align-items: center; gap: 8px; }
+
 .glass-panel {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.12);
