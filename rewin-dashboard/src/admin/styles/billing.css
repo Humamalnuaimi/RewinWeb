@@ -225,6 +225,10 @@
 .panel-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:.5rem; }
 .panel-caption { margin:0; color: rgba(255,255,255,0.7); font-size: 12px; }
 
+.interval-switch { display:inline-flex; gap:8px; margin: 0 0 8px 0; background: rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:4px; }
+.switch { padding:6px 10px; border-radius:8px; background: transparent; border:none; color:#fff; cursor:pointer; }
+.switch.active { background: linear-gradient(135deg,#667eea,#764ba2); }
+
 @media (max-width: 900px) { .billing-columns { grid-template-columns: 1fr; } }
 
 .glass-panel {
