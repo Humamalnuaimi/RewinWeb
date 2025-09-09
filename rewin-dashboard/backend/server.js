@@ -455,6 +455,9 @@ if (stripe) {
   // Create Stripe product and monthly/yearly prices from USD amounts, and save to user
   app.post('/api/billing/create-plan', async (req, res) => {
     try {
+      if (!stripe) return res.status(500).json({ success: false, error: 'Stripe not configured on server' });
+      if (!admin.apps.length) return res.status(500).json({ success: false, error: 'Firebase Admin not initialized on server' });
+
       const { uid, name, monthlyUsd = 0, yearlyUsd = 0, currency = 'usd' } = req.body;
       if (!uid) return res.status(400).json({ success: false, error: 'uid required' });
       const m = Number(monthlyUsd) || 0;
@@ -503,7 +506,8 @@ if (stripe) {
       res.json({ success: true, ...payload });
     } catch (err) {
       console.error('create-plan error:', err);
-      res.status(500).json({ success: false, error: err.message });
+      const message = err?.raw?.message || err?.message || 'Unknown error';
+      res.status(500).json({ success: false, error: message });
     }
   });
 
