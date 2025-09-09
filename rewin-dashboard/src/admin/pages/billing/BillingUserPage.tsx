@@ -176,7 +176,13 @@ const BillingUserPage: React.FC = () => {
 
       {/* Header shows user info; removed duplicate summary */}
 
-      {/* Status overview card */}
+      {/* Mode toggle */}
+      <div className="mode-toggle">
+        <button className={`mode-card ${mode === 'current' ? 'active' : ''}`} onClick={() => setMode('current')}>Current plan</button>
+        <button className={`mode-card ${mode === 'create' ? 'active' : ''}`} onClick={() => setMode('create')}>Create new plan</button>
+      </div>
+
+      {mode === 'current' && (
       <div className="status-card mb-3">
         <div>
           <h3 className="status-title">Plan status</h3>
@@ -188,11 +194,25 @@ const BillingUserPage: React.FC = () => {
           </div>
         </div>
         <div className="status-bubble">
-          <div className={`status-dot ${ (user.priceMonthlyId || user.priceYearlyId || user.priceId) ? 'green' : 'red' }`} />
+          <div className={`status-dot ${ statusKey === 'active' ? 'green' : statusKey === 'paused' ? 'yellow' : statusKey === 'canceled' ? 'red' : 'red' }`} />
+        </div>
+        <div className="status-actions">
+          {statusKey !== 'canceled' && (
+            statusKey === 'paused' ? (
+              <button className="btn btn-status resume" onClick={async()=>{ await api('/billing/subscription/resume',{ uid, subscriptionId: user.subscriptionId }); window.location.reload(); }}>Resume</button>
+            ) : (
+              <button className="btn btn-status pause" onClick={async()=>{ await api('/billing/subscription/pause',{ uid, subscriptionId: user.subscriptionId }); window.location.reload(); }}>Pause</button>
+            )
+          )}
+          {statusKey !== 'canceled' && (
+            <button className="btn btn-status danger" onClick={async()=>{ await api('/billing/subscription/cancel',{ uid, subscriptionId: user.subscriptionId }); window.location.reload(); }}>Cancel</button>
+          )}
         </div>
       </div>
+      )}
 
       {/* Stacked panels */}
+      {mode === 'create' && (
       <div className="panel-grid single">
         <div className="glass-panel panel-themed">
           <div className="panel-head">
@@ -247,6 +267,7 @@ const BillingUserPage: React.FC = () => {
         </div>
 
       </div>
+      )}
     </div>
   );
 };
