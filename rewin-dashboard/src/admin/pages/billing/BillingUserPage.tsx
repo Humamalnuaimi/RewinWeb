@@ -54,6 +54,8 @@ const BillingUserPage: React.FC = () => {
   const [monthlyUsd, setMonthlyUsd] = useState<string>('');
   const [yearlyUsd, setYearlyUsd] = useState<string>('');
   const [productName, setProductName] = useState<string>('');
+  const [plans, setPlans] = useState<any[]>([]);
+  const [selectedPlanId, setSelectedPlanId] = useState<string>('');
 
   useEffect(() => {
     const load = async () => {
@@ -72,6 +74,16 @@ const BillingUserPage: React.FC = () => {
   }, [uid]);
 
   // invoices removed in simplified page
+
+  useEffect(() => {
+    const loadPlans = async () => {
+      try {
+        const r = await api('/billing/plans', {});
+        setPlans(r.plans || []);
+      } catch {}
+    };
+    loadPlans();
+  }, []);
 
   const ensureCustomer = async () => {
     const res = await api('/billing/create-customer', { uid, email: user?.email, name: user?.displayName });
@@ -175,7 +187,24 @@ const BillingUserPage: React.FC = () => {
               <h3 className="panel-title">Create plan</h3>
               <p className="panel-caption">Set simple monthly/yearly prices in USD</p>
             </div>
-            <label className="field-label">Plan name (optional)</label>
+            <label className="field-label">Choose existing plan (optional)</label>
+            <select
+              className="glass-input"
+              value={selectedPlanId}
+              onChange={(e)=>{
+                const id = e.target.value; setSelectedPlanId(id);
+                const p = plans.find(pl=>pl.productId===id);
+                setPriceMonthlyId(p?.monthlyPriceId || '');
+                setPriceYearlyId(p?.yearlyPriceId || '');
+              }}
+            >
+              <option value="">-- Select a plan --</option>
+              {plans.map((p:any)=> (
+                <option key={p.productId} value={p.productId}>{p.productName} {p.monthlyPriceId? '(Monthly)':''} {p.yearlyPriceId? '(Yearly)':''}</option>
+              ))}
+            </select>
+
+            <label className="field-label" style={{ marginTop: 8 }}>Plan name (optional)</label>
             <input className="glass-input" value={productName} onChange={e=>setProductName(e.target.value)} placeholder="e.g. Starter" />
 
             <div className="interval-switch" role="group" aria-label="Billing Interval">
