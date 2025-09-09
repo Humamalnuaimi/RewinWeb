@@ -155,7 +155,7 @@ const BillingUserPage: React.FC = () => {
     <div className="billing-page">
       <div className="billing-header-bar header-grid">
         <div className="header-left">
-          <button className="back-btn prominent back-abs" onClick={() => navigate(-1)}><ArrowLeft size={16}/> Back</button>
+          <button className="back-btn prominent back-wide" onClick={() => navigate(-1)}><ArrowLeft size={16}/> Back</button>
         </div>
         <div className="header-center">
           <h2 className="billing-title title-lg title-gradient">Billing</h2>
