@@ -506,9 +506,9 @@ if (stripe) {
       const grouped = new Map();
       for (const pr of prices.data) {
         const prod = typeof pr.product === 'string' ? { id: pr.product, name: pr.nickname || pr.id } : pr.product;
-        const g = grouped.get(prod.id) || { productId: prod.id, productName: prod.name || prod.id, monthlyPriceId: null, yearlyPriceId: null };
-        if (pr.recurring?.interval === 'month') g.monthlyPriceId = pr.id;
-        if (pr.recurring?.interval === 'year') g.yearlyPriceId = pr.id;
+        const g = grouped.get(prod.id) || { productId: prod.id, productName: prod.name || prod.id, monthlyPriceId: null, yearlyPriceId: null, monthlyAmount: null, yearlyAmount: null, currency: pr.currency };
+        if (pr.recurring?.interval === 'month') { g.monthlyPriceId = pr.id; g.monthlyAmount = pr.unit_amount; g.currency = pr.currency; }
+        if (pr.recurring?.interval === 'year') { g.yearlyPriceId = pr.id; g.yearlyAmount = pr.unit_amount; g.currency = pr.currency; }
         grouped.set(prod.id, g);
       }
       res.json({ success: true, plans: Array.from(grouped.values()) });
