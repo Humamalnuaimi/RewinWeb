@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase.service';
-import { CreditCard, ExternalLink, ArrowLeft, Copy } from 'lucide-react';
+import { ArrowLeft, Copy } from 'lucide-react';
 import '../../styles/billing.css';
 
 const api = async (path: string, body: any) => {
@@ -43,11 +43,9 @@ const BillingUserPage: React.FC = () => {
   const [interval, setInterval] = useState<'month'|'year'>('month');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [invoices, setInvoices] = useState<any[]>([]);
-  const [itemAmount, setItemAmount] = useState<string>('');
-  const [itemDesc, setItemDesc] = useState<string>('');
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [tab, setTab] = useState<'overview' | 'invoices' | 'charges' | 'portal'>('overview');
+  const [monthlyUsd, setMonthlyUsd] = useState<string>('');
+  const [yearlyUsd, setYearlyUsd] = useState<string>('');
+  const [productName, setProductName] = useState<string>('');
 
   useEffect(() => {
     const load = async () => {
@@ -65,15 +63,7 @@ const BillingUserPage: React.FC = () => {
     load();
   }, [uid]);
 
-  const refreshInvoices = async () => {
-    if (!uid) return;
-    try {
-      const res = await api('/billing/invoices/list', { uid, limit: 10 });
-      setInvoices(res.invoices || []);
-    } catch {}
-  };
-
-  useEffect(() => { refreshInvoices(); }, [uid]);
+  // invoices removed in simplified page
 
   const ensureCustomer = async () => {
     const res = await api('/billing/create-customer', { uid, email: user?.email, name: user?.displayName });
@@ -82,29 +72,39 @@ const BillingUserPage: React.FC = () => {
   };
 
   const savePlan = async () => {
+    if (!uid) return;
+    const m = Number(monthlyUsd || 0);
+    const y = Number(yearlyUsd || 0);
+    if (!m && !y) {
+      alert('Enter a monthly and/or yearly price');
+      return;
+    }
     setSaving(true);
     try {
-      await api('/billing/set-plan', { uid, priceId, priceMonthlyId, priceYearlyId, billingInterval: interval });
-      setUser((p: any) => ({ ...p, priceId, priceMonthlyId, priceYearlyId, billingInterval: interval }));
+      const r = await api('/billing/create-plan', { uid, name: productName || undefined, monthlyUsd: m, yearlyUsd: y });
+      setPriceMonthlyId(r.priceMonthlyId || '');
+      setPriceYearlyId(r.priceYearlyId || '');
+      setPriceId(r.priceId || '');
+      setUser((p: any) => ({ ...p, priceMonthlyId: r.priceMonthlyId || null, priceYearlyId: r.priceYearlyId || null, priceId: r.priceId || null, billingInterval: r.billingInterval }));
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
-    } catch (e) {
-      try {
-        await setDoc(doc(db, 'users', uid!), { priceId, priceMonthlyId, priceYearlyId, billingInterval: interval }, { merge: true });
-        setUser((p: any) => ({ ...p, priceId, priceMonthlyId, priceYearlyId, billingInterval: interval }));
-        setSaved(true);
-        setTimeout(() => setSaved(false), 1500);
-      } catch (ee) {
-        alert('Failed to save: ' + ((e as any)?.message || (ee as any)?.message));
-      }
+    } catch (e:any) {
+      alert(e?.message || 'Failed to create plan');
     } finally {
       setSaving(false);
     }
   };
 
   const startCheckout = async () => {
-    const selectedPrice = interval === 'year' ? (priceYearlyId || priceId) : (priceMonthlyId || priceId);
-    if (!selectedPrice) return alert('Set a Stripe priceId first');
+    let selectedPrice = interval === 'year' ? (priceYearlyId || '') : (priceMonthlyId || '');
+    if (!selectedPrice) {
+      await savePlan();
+      selectedPrice = interval === 'year' ? (priceYearlyId || '') : (priceMonthlyId || '');
+    }
+    if (!selectedPrice) {
+      alert('Create the plan first');
+      return;
+    }
     const successUrl = window.location.origin + `/admin/billing/${uid}`;
     const cancelUrl = successUrl;
     const res = await api('/billing/checkout', { uid, priceId: selectedPrice, mode: 'subscription', successUrl, cancelUrl });
