@@ -17,7 +17,17 @@ const PORT = process.env.PORT || 3001;
 // Stripe setup
 let stripe = null;
 try {
-  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  // Resolve from multiple envs and validate
+  let stripeKey = process.env.STRIPE_SECRET_KEY || process.env.Stripe_Secret_key || process.env.STRIPE_KEY || '';
+  if (stripeKey && stripeKey.startsWith('REPLACE_')) {
+    // Builder placeholder not resolved in this runtime
+    console.warn('⚠️ Stripe key placeholder detected; billing routes will be disabled');
+    stripeKey = '';
+  }
+  if (stripeKey && !/^sk_(test|live)_/i.test(stripeKey)) {
+    console.warn('⚠️ STRIPE key does not look like sk_...; disabling billing');
+    stripeKey = '';
+  }
   if (stripeKey) {
     stripe = require('stripe')(stripeKey);
     console.log('✅ Stripe initialized');
