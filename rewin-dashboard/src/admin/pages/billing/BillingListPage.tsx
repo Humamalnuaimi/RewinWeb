@@ -59,7 +59,7 @@ const BillingListPage: React.FC = () => {
           <div>Customer</div>
         </div>
         {loading ? (
-          <div style={{ padding: '1.25rem' }}>Loading...</div>
+          <div className="billing-loading">Loading...</div>
         ) : (
           users.map(u => (
             <div key={u.uid} onClick={() => navigate(`/admin/billing/${u.uid}`)} className="billing-row">
