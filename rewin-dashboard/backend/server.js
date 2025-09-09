@@ -7,6 +7,8 @@ const express = require('express');
 const cors = require('cors');
 const { google } = require('googleapis');
 const admin = require('firebase-admin');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -34,23 +36,37 @@ app.use(express.json());
 
 // Initialize Firebase Admin SDK (matching old admin panel approach)
 try {
-  // Try to load from secure location first, then fallback to environment variable
+  // Load service account from several locations to support different setups
   let serviceAccount;
-  const keyPath = process.env.FIREBASE_SERVICE_ACCOUNT_KEY_PATH || `${require('os').homedir()}/firebase-keys/serviceAccountKey.json`;
-  
-  try {
-    serviceAccount = require(keyPath);
-    console.log('✅ Service account loaded from:', keyPath);
-  } catch (fileError) {
-    // Fallback to environment variable (for production deployment)
-    if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-      console.log('✅ Service account loaded from environment variable');
-    } else {
-      throw new Error('No service account key found. Please set FIREBASE_SERVICE_ACCOUNT_KEY_PATH or FIREBASE_SERVICE_ACCOUNT_KEY environment variable.');
-    }
+  const candidatePaths = [
+    process.env.FIREBASE_SERVICE_ACCOUNT_KEY_PATH,
+    path.join(require('os').homedir(), 'firebase-keys', 'serviceAccountKey.json'),
+    path.resolve(__dirname, 'serviceAccountKey.json'),
+    path.resolve(process.cwd(), 'serviceAccountKey.json'),
+    path.resolve(__dirname, 'firebase-service-account.json'),
+    path.resolve(process.cwd(), 'firebase-service-account.json'),
+  ].filter(Boolean);
+
+  for (const p of candidatePaths) {
+    try {
+      if (p && fs.existsSync(p)) {
+        // eslint-disable-next-line import/no-dynamic-require, global-require
+        serviceAccount = require(p);
+        console.log('✅ Service account loaded from:', p);
+        break;
+      }
+    } catch {}
   }
-  
+
+  if (!serviceAccount && process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+    console.log('✅ Service account loaded from environment variable');
+  }
+
+  if (!serviceAccount) {
+    throw new Error('No service account key found via path or env');
+  }
+
   if (!admin.apps.length) {
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
@@ -60,8 +76,7 @@ try {
   }
 } catch (error) {
   console.error('❌ Firebase Admin SDK initialization failed:', error);
-  console.error('💡 Make sure your service account key is at ~/firebase-keys/serviceAccountKey.json');
-  console.error('💡 Or set FIREBASE_SERVICE_ACCOUNT_KEY environment variable');
+  console.error('💡 Provide FIREBASE_SERVICE_ACCOUNT_KEY or a serviceAccountKey.json next to backend/server.js');
 }
 
 // Gmail API configuration
@@ -485,6 +500,19 @@ if (stripe) {
       res.json({ success: true, url: session.url });
     } catch (err) {
       console.error('portal error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Admin sets user's plan (priceId) securely via Admin SDK
+  app.post('/api/billing/set-plan', async (req, res) => {
+    try {
+      const { uid, priceId } = req.body;
+      if (!uid) return res.status(400).json({ success: false, error: 'uid required' });
+      await db.doc(`users/${uid}`).set({ priceId: priceId || null }, { merge: true });
+      res.json({ success: true });
+    } catch (err) {
+      console.error('set-plan error:', err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
