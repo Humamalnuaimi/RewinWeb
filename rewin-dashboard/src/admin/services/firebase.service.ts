@@ -4,7 +4,7 @@
 // LAST MODIFIED: January 28, 2025
 
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, signOut, type User, createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithCredential, GoogleAuthProvider as GoogleAuthProviderType } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signInWithEmailAndPassword, signOut, type User, createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithCredential, GoogleAuthProvider as GoogleAuthProviderType } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, orderBy, serverTimestamp, deleteDoc, writeBatch } from 'firebase/firestore';
 import BackendEmailService from './backend-email.service';
 
@@ -118,43 +118,44 @@ export class AuthService {
   static async signInWithGoogle(loginType: 'admin' | 'user' = 'admin') {
     try {
       const result = await signInWithPopup(auth, googleProvider);
-      
-      // Only check admin status if trying to access admin panel
+
       let isAdmin = false;
       if (loginType === 'admin') {
         isAdmin = await this.isUserAdmin(result.user);
-        
-        // If trying to access admin panel but not admin, deny access
         if (!isAdmin) {
           await signOut(auth);
-          return {
-            success: false,
-            user: null,
-            error: 'Access denied. Admin privileges required.'
-          };
+          return { success: false, user: null, error: 'Access denied. Admin privileges required.' };
         }
-        
-        // Create/update admin record for admin users
         await this.createAdminRecord(result.user);
       }
 
-      // For user login, allow any authenticated user (no admin check needed)
-
-      return {
-        success: true,
-        user: result.user,
-        isAdmin,
-        loginType,
-        error: null
-      };
+      return { success: true, user: result.user, isAdmin, loginType, error: null };
     } catch (error: any) {
-      return {
-        success: false,
-        user: null,
-        isAdmin: false,
-        error: error.message
-      };
+      // Fallback to redirect in embedded/blocked popup contexts
+      const code = error?.code || '';
+      if (code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user' || code === 'auth/operation-not-supported-in-this-environment') {
+        await signInWithRedirect(auth, googleProvider);
+        return { success: true, user: null as any, isAdmin: false, loginType, error: null };
+      }
+      return { success: false, user: null, isAdmin: false, error: error.message };
     }
+  }
+
+  // Handle redirect result on app load
+  static async handleGoogleRedirect(loginType: 'admin' | 'user' = 'admin') {
+    const redirected = await getRedirectResult(auth).catch(() => null);
+    if (!redirected || !redirected.user) return null;
+
+    let isAdmin = false;
+    if (loginType === 'admin') {
+      isAdmin = await this.isUserAdmin(redirected.user);
+      if (!isAdmin) {
+        await signOut(auth);
+        return { success: false, user: null, error: 'Access denied. Admin privileges required.' };
+      }
+      await this.createAdminRecord(redirected.user);
+    }
+    return { success: true, user: redirected.user, isAdmin, loginType, error: null };
   }
 
   // Sign out
@@ -441,7 +442,7 @@ export class AuthService {
   // Delete user with complete data cleanup (reverses the creation process)
   static async deleteUser(userId: string) {
     try {
-      console.log(`🗑️ Starting user deletion for: ${userId}`);
+      console.log(`��️ Starting user deletion for: ${userId}`);
       
       // 1. Check if user document exists in Firestore
       const userDocRef = doc(db, 'users', userId);
