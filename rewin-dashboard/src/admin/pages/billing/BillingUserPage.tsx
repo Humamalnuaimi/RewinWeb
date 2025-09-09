@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase.service';
-import { Copy } from 'lucide-react';
+import { Copy, ArrowLeft } from 'lucide-react';
 import '../../styles/billing.css';
 
 const api = async (path: string, body: any) => {
@@ -42,6 +42,7 @@ const api = async (path: string, body: any) => {
 
 const BillingUserPage: React.FC = () => {
   const { uid } = useParams();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [priceId, setPriceId] = useState<string>('');
@@ -152,9 +153,12 @@ const BillingUserPage: React.FC = () => {
   return (
     <div className="billing-page">
       <div className="billing-header">
-        <div>
-          <h2 className="billing-title">Billing</h2>
-          <div className="billing-subtitle">Manage plan assignment and prices</div>
+        <div className="header-left">
+          <button className="back-btn" onClick={() => navigate(-1)}><ArrowLeft size={16}/> Back</button>
+          <div>
+            <h2 className="billing-title">Billing</h2>
+            <div className="billing-subtitle">Manage plan assignment and prices</div>
+          </div>
         </div>
         <div className="user-right">
           <div className="user-left">
@@ -213,7 +217,7 @@ const BillingUserPage: React.FC = () => {
           </div>
           <label className="field-label field-strong">Choose existing plan</label>
           <select
-            className="glass-input input-themed select-glass select-caret-left"
+            className="glass-input input-themed select-glass select-elevated select-large select-caret-right"
             value={selectedPlanId}
             onChange={(e)=>{
               const id = e.target.value; setSelectedPlanId(id);
