@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase.service';
 import { Copy, ArrowLeft } from 'lucide-react';
-import CustomSelect, { SelectOption } from '../../shared/components/ui/CustomSelect';
+import CustomSelect from '../../shared/components/ui/CustomSelect';
 import '../../styles/billing.css';
 
 const api = async (path: string, body: any) => {
