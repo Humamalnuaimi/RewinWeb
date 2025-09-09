@@ -313,7 +313,8 @@
 /* Name text sizing */
 .name-sm { font-size: .95rem; }
 .name-lg { font-size: 1.1rem; }
-.name-xl { font-size: 1.15rem; font-weight: 800; }
+.name-xl { font-size: 1.25rem; font-weight: 900; }
+.header-right .email-text { opacity: .85; font-size: .95rem; }
 
 /* Chosen plan preview spacing */
 .chosen-plan-preview { margin: 10px 0 0 0; }
