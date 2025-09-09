@@ -63,7 +63,7 @@ const BillingUserPage: React.FC = () => {
 
       <div className="page-breadcrumb">
         <CreditCard size={22} />
-        <h2 className="billing-title" style={{ fontSize: '1.6rem' }}>Billing • {user.displayName || user.uid}</h2>
+        <h2 className="billing-title billing-title-sm">Billing • {user.displayName || user.uid}</h2>
       </div>
 
       <div className="panel-grid">
