@@ -488,11 +488,30 @@ if (stripe) {
     }
   });
 
+  // List existing Stripe products and monthly/yearly prices
+  app.post('/api/billing/plans', requireAdmin, async (req, res) => {
+    try {
+      if (!stripe) return res.status(500).json({ success: false, error: 'Stripe not configured on server' });
+      const prices = await stripe.prices.list({ active: true, type: 'recurring', expand: ['data.product'], limit: 100 });
+      const grouped = new Map();
+      for (const pr of prices.data) {
+        const prod = typeof pr.product === 'string' ? { id: pr.product, name: pr.nickname || pr.id } : pr.product;
+        const g = grouped.get(prod.id) || { productId: prod.id, productName: prod.name || prod.id, monthlyPriceId: null, yearlyPriceId: null };
+        if (pr.recurring?.interval === 'month') g.monthlyPriceId = pr.id;
+        if (pr.recurring?.interval === 'year') g.yearlyPriceId = pr.id;
+        grouped.set(prod.id, g);
+      }
+      res.json({ success: true, plans: Array.from(grouped.values()) });
+    } catch (err) {
+      console.error('plans list error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // Create Stripe product and monthly/yearly prices from USD amounts, and save to user
   app.post('/api/billing/create-plan', requireAdmin, async (req, res) => {
     try {
       if (!stripe) return res.status(500).json({ success: false, error: 'Stripe not configured on server' });
-      if (!admin.apps.length) return res.status(500).json({ success: false, error: 'Firebase Admin not initialized on server' });
 
       const { uid, name, monthlyUsd = 0, yearlyUsd = 0, currency = 'usd' } = req.body;
       if (!uid) return res.status(400).json({ success: false, error: 'uid required' });
