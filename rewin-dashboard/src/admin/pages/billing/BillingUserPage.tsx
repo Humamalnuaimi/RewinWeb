@@ -57,13 +57,21 @@ const BillingUserPage: React.FC = () => {
     const successUrl = window.location.origin + `/admin/billing/${uid}`;
     const cancelUrl = successUrl;
     const res = await api('/billing/checkout', { uid, priceId, mode: 'subscription', successUrl, cancelUrl });
-    window.location.href = res.url;
+    try {
+      (window.top || window).location.href = res.url;
+    } catch {
+      window.open(res.url, '_blank');
+    }
   };
 
   const openPortal = async () => {
     const returnUrl = window.location.origin + `/admin/billing/${uid}`;
     const res = await api('/billing/portal', { uid, returnUrl });
-    window.location.href = res.url;
+    try {
+      (window.top || window).location.href = res.url;
+    } catch {
+      window.open(res.url, '_blank');
+    }
   };
 
   if (loading) return <div className="billing-page">Loading...</div>;
