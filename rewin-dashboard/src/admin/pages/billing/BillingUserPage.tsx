@@ -153,23 +153,22 @@ const BillingUserPage: React.FC = () => {
 
   return (
     <div className="billing-page">
-      <div className="billing-header-bar">
+      <div className="billing-header-bar header-grid">
         <div className="header-left">
-          <button className="back-btn prominent back-abs" onClick={() => navigate(-1)}><ArrowLeft size={16}/> Back</button>
-          <div>
-            <h2 className="billing-title title-offset">Billing</h2>
-            <div className="billing-subtitle subtitle-offset">Manage plan assignment and prices</div>
-          </div>
+          <button className="back-btn prominent" onClick={() => navigate(-1)}><ArrowLeft size={16}/> Back</button>
+        </div>
+        <div className="header-center">
+          <h2 className="billing-title title-lg title-gradient">Billing</h2>
+          <div className="billing-subtitle subtitle-center">Manage plan assignment and prices</div>
         </div>
         <div className="header-right">
           <div className="user-left">
             <div className="avatar-circle avatar-sm">{(user.displayName || user.email || user.uid).slice(0,1).toUpperCase()}</div>
             <div>
-              <div className="name-text name-sm">{user.displayName || user.uid}</div>
+              <div className="name-text name-xl">{user.displayName || user.uid}</div>
               <div className="email-text">{user.email}</div>
             </div>
           </div>
-          <span className={`status-badge ${`is-${statusKey}`}`}>{statusKey === 'past_due' ? 'Past Due' : statusKey.charAt(0).toUpperCase() + statusKey.slice(1)}</span>
         </div>
       </div>
 
