@@ -219,6 +219,14 @@
 
 .panel-grid.single { grid-template-columns: 1fr; }
 
+.billing-columns { display:grid; grid-template-columns: 1.4fr .9fr; gap: 1rem; }
+.left-col, .right-col { display:grid; gap: 1rem; align-content:start; }
+
+.panel-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:.5rem; }
+.panel-caption { margin:0; color: rgba(255,255,255,0.7); font-size: 12px; }
+
+@media (max-width: 900px) { .billing-columns { grid-template-columns: 1fr; } }
+
 .glass-panel {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.12);
