@@ -42,7 +42,6 @@ const api = async (path: string, body: any) => {
 
 const BillingUserPage: React.FC = () => {
   const { uid } = useParams();
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [priceId, setPriceId] = useState<string>('');
