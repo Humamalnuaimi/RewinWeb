@@ -1625,7 +1625,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
     }, (error) => {
       console.log('❌ Customers data not available:', error.message);
       console.log('🔍 Error details:', error);
-      console.log('🔍 User authentication status:', user?.uid, user?.email);
+      console.log('��� User authentication status:', user?.uid, user?.email);
       setData(prev => ({ ...prev, customers: 0 }));
     });
     unsubscribes.push(unsubscribeCustomers);
@@ -9317,13 +9317,30 @@ const AppRoutes: React.FC = () => {
           </AdminProtectedRoute>
         } 
       />
-      <Route 
-        path="/admin/users/:userId" 
+      {/* Admin Billing Routes */}
+      <Route
+        path="/admin/billing"
+        element={
+          <AdminProtectedRoute>
+            <AdminBillingListPage />
+          </AdminProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/billing/:uid"
+        element={
+          <AdminProtectedRoute>
+            <AdminBillingUserPage />
+          </AdminProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/users/:userId"
         element={
           <AdminProtectedRoute>
             <AdminUserDetailsPage />
           </AdminProtectedRoute>
-        } 
+        }
       />
       
       {/* User Dashboard Route */}
