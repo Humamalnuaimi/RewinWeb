@@ -119,6 +119,10 @@ const BillingUserPage: React.FC = () => {
           <h3 className="panel-title">Plan</h3>
           <label className="field-label">Stripe priceId</label>
           <input className="glass-input" value={priceId} onChange={e => setPriceId(e.target.value)} placeholder="price_..." />
+          {priceId && !priceId.startsWith('price_') && (
+            <div className="muted-text mb-2">Hint: Use a price_... ID, not prod_...</div>
+          )}
+          {saved && <div className="muted-text mb-2">Saved</div>}
           <div className="field-actions">
             <button className="btn btn-secondary" disabled={saving} onClick={savePlan}>{saving ? 'Saving…' : 'Save Plan'}</button>
             <button className="btn btn-primary" onClick={startCheckout}>Start Checkout</button>
