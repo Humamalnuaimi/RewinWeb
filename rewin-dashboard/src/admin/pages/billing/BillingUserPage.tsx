@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase.service';
 import { Copy, ArrowLeft } from 'lucide-react';
+import CustomSelect, { SelectOption } from '../../shared/components/ui/CustomSelect';
 import '../../styles/billing.css';
 
 const api = async (path: string, body: any) => {
@@ -152,15 +153,15 @@ const BillingUserPage: React.FC = () => {
 
   return (
     <div className="billing-page">
-      <div className="billing-header">
+      <div className="billing-header-bar">
         <div className="header-left">
-          <button className="back-btn" onClick={() => navigate(-1)}><ArrowLeft size={16}/> Back</button>
+          <button className="back-btn prominent" onClick={() => navigate(-1)}><ArrowLeft size={16}/> Back</button>
           <div>
             <h2 className="billing-title">Billing</h2>
             <div className="billing-subtitle">Manage plan assignment and prices</div>
           </div>
         </div>
-        <div className="user-right">
+        <div className="header-right">
           <div className="user-left">
             <div className="avatar-circle avatar-sm">{(user.displayName || user.email || user.uid).slice(0,1).toUpperCase()}</div>
             <div>
@@ -168,29 +169,11 @@ const BillingUserPage: React.FC = () => {
               <div className="email-text">{user.email}</div>
             </div>
           </div>
+          <span className={`status-badge ${`is-${statusKey}`}`}>{statusKey === 'past_due' ? 'Past Due' : statusKey.charAt(0).toUpperCase() + statusKey.slice(1)}</span>
         </div>
       </div>
 
-      {/* User summary */}
-      <div className="user-summary">
-        <div className="user-left">
-          <div className="avatar-circle avatar-lg">
-            {(user.displayName || user.email || user.uid).slice(0,1).toUpperCase()}
-          </div>
-          <div>
-            <div className="name-text name-lg">{user.displayName || user.uid}</div>
-            <div className="email-text">{user.email}</div>
-          </div>
-        </div>
-        <div className="user-right">
-          <span className={`status-badge ${`is-${statusKey}`}`}>{statusKey === 'past_due' ? 'Past Due' : statusKey.charAt(0).toUpperCase() + statusKey.slice(1)}</span>
-          {user.stripeCustomerId && (
-            <button className="icon-btn" title="Copy customer ID" onClick={() => navigator.clipboard.writeText(user.stripeCustomerId)}>
-              <Copy size={14} />
-            </button>
-          )}
-        </div>
-      </div>
+      {/* Header shows user info; removed duplicate summary */}
 
       {/* Status overview card */}
       <div className="status-card mb-3">
@@ -216,21 +199,17 @@ const BillingUserPage: React.FC = () => {
             <p className="panel-caption">Set simple monthly/yearly prices in USD</p>
           </div>
           <label className="field-label field-strong">Choose existing plan</label>
-          <select
-            className="glass-input input-themed select-glass select-elevated select-large select-caret-right"
+          <CustomSelect
             value={selectedPlanId}
-            onChange={(e)=>{
-              const id = e.target.value; setSelectedPlanId(id);
-              const p = plans.find(pl=>pl.productId===id) || null; setSelectedPlan(p);
+            onChange={(id, opt) => {
+              setSelectedPlanId(id);
+              const p = plans.find(pl => pl.productId === id) || null; setSelectedPlan(p);
               setPriceMonthlyId(p?.monthlyPriceId || '');
               setPriceYearlyId(p?.yearlyPriceId || '');
             }}
-          >
-            <option value="">-- Select a plan --</option>
-            {plans.map((p:any)=> (
-              <option key={p.productId} value={p.productId}>{p.productName} • {fmt(p.monthlyAmount,p.currency)} / {fmt(p.yearlyAmount,p.currency)}</option>
-            ))}
-          </select>
+            options={(plans || []).map((p:any) => ({ value: p.productId, label: p.productName, subLabel: `${fmt(p.monthlyAmount,p.currency)} / ${fmt(p.yearlyAmount,p.currency)}` }))}
+            placeholder="Select a plan"
+          />
 
           {selectedPlanId && (
             <div className="chosen-plan-preview">
