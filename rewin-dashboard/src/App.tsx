@@ -39,6 +39,8 @@ import AdminLoginPage from './admin/pages/auth/LoginPage';
 import AdminDashboardPage from './admin/pages/dashboard/DashboardPage';
 import AdminUsersPage from './admin/pages/users/UsersPage';
 import AdminUserDetailsPage from './admin/pages/users/UserDetailsPage';
+import AdminBillingListPage from './admin/pages/billing/BillingListPage';
+import AdminBillingUserPage from './admin/pages/billing/BillingUserPage';
 import UserDashboard from './UserDashboard';
 import './admin/styles/globals.css';
 
