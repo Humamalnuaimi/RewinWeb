@@ -507,9 +507,15 @@ if (stripe) {
   // Admin sets user's plan (priceId) securely via Admin SDK
   app.post('/api/billing/set-plan', async (req, res) => {
     try {
-      const { uid, priceId } = req.body;
+      const { uid, priceId, priceMonthlyId, priceYearlyId, billingInterval } = req.body;
       if (!uid) return res.status(400).json({ success: false, error: 'uid required' });
-      await db.doc(`users/${uid}`).set({ priceId: priceId || null }, { merge: true });
+      const payload = {
+        priceId: priceId || null,
+        priceMonthlyId: priceMonthlyId || null,
+        priceYearlyId: priceYearlyId || null,
+        billingInterval: billingInterval === 'year' ? 'year' : (billingInterval === 'month' ? 'month' : null),
+      };
+      await db.doc(`users/${uid}`).set(payload, { merge: true });
       res.json({ success: true });
     } catch (err) {
       console.error('set-plan error:', err);
