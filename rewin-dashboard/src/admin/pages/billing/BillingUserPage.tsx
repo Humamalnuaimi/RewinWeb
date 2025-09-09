@@ -31,6 +31,7 @@ const BillingUserPage: React.FC = () => {
   const [invoices, setInvoices] = useState<any[]>([]);
   const [itemAmount, setItemAmount] = useState<string>('');
   const [itemDesc, setItemDesc] = useState<string>('');
+  const [tab, setTab] = useState<'overview' | 'invoices' | 'charges' | 'portal'>('overview');
 
   useEffect(() => {
     const load = async () => {
@@ -138,76 +139,97 @@ const BillingUserPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="panel-grid">
-        <div className="glass-panel">
-          <h3 className="panel-title">Subscription</h3>
-          <div className="muted-text mb-2">Status: <strong>{user.subscriptionStatus || 'none'}</strong></div>
-          <div className="muted-text mb-3">Customer: <code>{user.stripeCustomerId || '-'}</code></div>
-          <div className="inline-actions">
-            {!user.stripeCustomerId && (
-              <button className="btn btn-secondary" onClick={ensureCustomer}>Create Customer</button>
-            )}
-            <button className="btn btn-secondary" onClick={openPortal}>
-              Manage in Portal <ExternalLink size={16} />
-            </button>
-          </div>
-          <div className="inline-actions" style={{ marginTop: 8 }}>
-            <button className="btn btn-secondary" onClick={async()=>{ await api('/billing/subscription/pause',{uid}); await refreshInvoices(); }}>Pause</button>
-            <button className="btn btn-secondary" onClick={async()=>{ await api('/billing/subscription/resume',{uid}); await refreshInvoices(); }}>Resume</button>
-            <button className="btn btn-secondary" onClick={async()=>{ if(confirm('Cancel subscription?')){ await api('/billing/subscription/cancel',{uid, atPeriodEnd:true}); await refreshInvoices(); } }}>Cancel at period end</button>
-          </div>
-        </div>
-
-        <div className="glass-panel">
-          <h3 className="panel-title">Plan</h3>
-          <label className="field-label">Stripe priceId</label>
-          <input className="glass-input" value={priceId} onChange={e => setPriceId(e.target.value)} placeholder="price_..." />
-          {priceId && !priceId.startsWith('price_') && (
-            <div className="muted-text mb-2">Hint: Use a price_... ID, not prod_...</div>
-          )}
-          {saved && <div className="muted-text mb-2">Saved</div>}
-          <div className="field-actions">
-            <button className="btn btn-secondary" disabled={saving} onClick={savePlan}>{saving ? 'Saving…' : 'Save Plan'}</button>
-            <button className="btn btn-primary" onClick={startCheckout}>Start Checkout</button>
-          </div>
-        </div>
+      {/* Tabs */}
+      <div className="billing-tabs">
+        <button className={`tab ${tab==='overview'?'active':''}`} onClick={()=>setTab('overview')}>Overview</button>
+        <button className={`tab ${tab==='invoices'?'active':''}`} onClick={()=>{setTab('invoices'); refreshInvoices();}}>Invoices</button>
+        <button className={`tab ${tab==='charges'?'active':''}`} onClick={()=>setTab('charges')}>One‑off charges</button>
+        <button className={`tab ${tab==='portal'?'active':''}`} onClick={()=>{openPortal();}}>Portal</button>
       </div>
 
-      <div className="panel-grid" style={{ marginTop: '1rem' }}>
-        <div className="glass-panel">
-          <h3 className="panel-title">One‑off invoice</h3>
-          <label className="field-label">Amount (cents)</label>
-          <input className="glass-input" value={itemAmount} onChange={e=>setItemAmount(e.target.value)} placeholder="e.g. 500 for $5.00" />
-          <label className="field-label" style={{ marginTop: 8 }}>Description</label>
-          <input className="glass-input" value={itemDesc} onChange={e=>setItemDesc(e.target.value)} placeholder="Line item description" />
-          <div className="field-actions">
-            <button className="btn btn-secondary" onClick={async()=>{ await api('/billing/invoice-item',{uid, amount:Number(itemAmount||0), description:itemDesc}); alert('Item added to upcoming invoice'); }}>Add Item</button>
-            <button className="btn btn-secondary" onClick={async()=>{ const r=await api('/billing/invoice/create-draft',{uid}); alert('Draft created: '+r.invoice?.id); }}>Create Draft</button>
-            <button className="btn btn-primary" onClick={async()=>{ const id=user.pendingInvoiceId || prompt('Enter invoice ID to finalize'); if(!id) return; await api('/billing/invoice/finalize',{invoiceId:id, send:true}); alert('Invoice finalized and sent'); await refreshInvoices(); }}>Finalize + Send</button>
-          </div>
-        </div>
-
-        <div className="glass-panel">
-          <h3 className="panel-title">Recent invoices</h3>
-          {invoices.length===0 ? (
-            <div className="muted-text">No invoices</div>
-          ) : (
-            <div style={{ display:'grid', gap:8 }}>
-              {invoices.map((inv:any)=> (
-                <div key={inv.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 10px', background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:10 }}>
-                  <div>
-                    <div className="billing-cell-code">{inv.id}</div>
-                    <div className="muted-text">{inv.status} • ${(inv.amount_due/100).toFixed(2)}</div>
-                  </div>
-                  {inv.hosted_invoice_url && (
-                    <a href={inv.hosted_invoice_url} target="_top" rel="noreferrer" className="btn btn-secondary">Open</a>
-                  )}
-                </div>
-              ))}
+      {tab==='overview' && (
+        <div className="panel-grid">
+          <div className="glass-panel">
+            <h3 className="panel-title">Subscription</h3>
+            <ol className="steps">
+              <li><span className="step-badge">1</span> Status: <strong>{user.subscriptionStatus || 'none'}</strong></li>
+              <li><span className="step-badge">2</span> Customer: <code>{user.stripeCustomerId || '-'}</code></li>
+            </ol>
+            <div className="inline-actions">
+              {!user.stripeCustomerId && (
+                <button className="btn btn-secondary" onClick={ensureCustomer}>Create Customer</button>
+              )}
+              <button className="btn btn-secondary" onClick={openPortal}>
+                Manage in Portal <ExternalLink size={16} />
+              </button>
             </div>
-          )}
+            <div className="inline-actions" style={{ marginTop: 8 }}>
+              <button className="btn btn-secondary" onClick={async()=>{ await api('/billing/subscription/pause',{uid}); }}>Pause</button>
+              <button className="btn btn-secondary" onClick={async()=>{ await api('/billing/subscription/resume',{uid}); }}>Resume</button>
+              <button className="btn btn-secondary" onClick={async()=>{ if(confirm('Cancel subscription?')){ await api('/billing/subscription/cancel',{uid, atPeriodEnd:true}); } }}>Cancel at period end</button>
+            </div>
+          </div>
+
+          <div className="glass-panel">
+            <h3 className="panel-title">Plan</h3>
+            <label className="field-label">Stripe priceId</label>
+            <input className="glass-input" value={priceId} onChange={e => setPriceId(e.target.value)} placeholder="price_..." />
+            {priceId && !priceId.startsWith('price_') && (
+              <div className="muted-text mb-2">Hint: Use a price_... ID, not prod_...</div>
+            )}
+            {saved && <div className="muted-text mb-2">Saved</div>}
+            <div className="field-actions">
+              <button className="btn btn-secondary" disabled={saving} onClick={savePlan}>{saving ? 'Saving…' : 'Save Plan'}</button>
+              <button className="btn btn-primary" onClick={startCheckout}>Start Checkout</button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {tab==='charges' && (
+        <div className="panel-grid single">
+          <div className="glass-panel">
+            <h3 className="panel-title">One‑off invoice</h3>
+            <label className="field-label">Amount (cents)</label>
+            <input className="glass-input" value={itemAmount} onChange={e=>setItemAmount(e.target.value)} placeholder="e.g. 500 for $5.00" />
+            <label className="field-label" style={{ marginTop: 8 }}>Description</label>
+            <input className="glass-input" value={itemDesc} onChange={e=>setItemDesc(e.target.value)} placeholder="Line item description" />
+            <div className="field-actions">
+              <button className="btn btn-secondary" onClick={async()=>{ await api('/billing/invoice-item',{uid, amount:Number(itemAmount||0), description:itemDesc}); alert('Item added to upcoming invoice'); }}>Add Item</button>
+              <button className="btn btn-secondary" onClick={async()=>{ const r=await api('/billing/invoice/create-draft',{uid}); alert('Draft created: '+r.invoice?.id); }}>Create Draft</button>
+              <button className="btn btn-primary" onClick={async()=>{ const id=user.pendingInvoiceId || prompt('Enter invoice ID to finalize'); if(!id) return; await api('/billing/invoice/finalize',{invoiceId:id, send:true}); alert('Invoice finalized and sent'); }}>Finalize + Send</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab==='invoices' && (
+        <div className="panel-grid single">
+          <div className="glass-panel">
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <h3 className="panel-title">Recent invoices</h3>
+              <button className="btn btn-secondary" onClick={refreshInvoices}>Refresh</button>
+            </div>
+            {invoices.length===0 ? (
+              <div className="muted-text">No invoices</div>
+            ) : (
+              <div style={{ display:'grid', gap:8 }}>
+                {invoices.map((inv:any)=> (
+                  <div key={inv.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 10px', background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:10 }}>
+                    <div>
+                      <div className="billing-cell-code">{inv.id}</div>
+                      <div className="muted-text">{inv.status} • ${(inv.amount_due/100).toFixed(2)}</div>
+                    </div>
+                    {inv.hosted_invoice_url && (
+                      <a href={inv.hosted_invoice_url} target="_top" rel="noreferrer" className="btn btn-secondary">Open</a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
