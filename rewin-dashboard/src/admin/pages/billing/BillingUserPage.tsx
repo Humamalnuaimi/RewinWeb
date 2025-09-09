@@ -6,9 +6,17 @@ import { ArrowLeft, Copy } from 'lucide-react';
 import '../../styles/billing.css';
 
 const api = async (path: string, body: any) => {
+  let token: string | undefined;
+  try {
+    const { auth } = await import('../../services/firebase.service');
+    // @ts-ignore
+    token = await auth.currentUser?.getIdToken?.();
+  } catch {}
+  const headers: any = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(`/api${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body)
   });
 
