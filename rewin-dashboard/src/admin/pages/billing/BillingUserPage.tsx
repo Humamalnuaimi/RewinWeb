@@ -69,8 +69,8 @@ const BillingUserPage: React.FC = () => {
       <div className="panel-grid">
         <div className="glass-panel">
           <h3 className="panel-title">Subscription</h3>
-          <div className="muted-text" style={{ marginBottom: '.5rem' }}>Status: <strong>{user.subscriptionStatus || 'none'}</strong></div>
-          <div className="muted-text" style={{ marginBottom: '.75rem' }}>Customer: <code>{user.stripeCustomerId || '-'}</code></div>
+          <div className="muted-text mb-2">Status: <strong>{user.subscriptionStatus || 'none'}</strong></div>
+          <div className="muted-text mb-3">Customer: <code>{user.stripeCustomerId || '-'}</code></div>
           <div className="inline-actions">
             {!user.stripeCustomerId && (
               <button className="btn btn-secondary" onClick={ensureCustomer}>Create Customer</button>
