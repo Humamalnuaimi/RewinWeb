@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebase.service';
-import { CreditCard } from 'lucide-react';
+import { CreditCard, Search, ChevronRight, Copy } from 'lucide-react';
 import '../../styles/billing.css';
 
 interface BillingUser {
@@ -23,10 +23,16 @@ const statusBadge = (status?: string) => {
   return <span className={`status-badge ${`is-${key}`}`}>{label}</span>;
 };
 
+const filters = ['all','active','past_due','paused','canceled','none'] as const;
+
+type FilterKey = typeof filters[number];
+
 const BillingListPage: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<BillingUser[]>([]);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<FilterKey>('all');
 
   useEffect(() => {
     const load = async () => {
@@ -42,6 +48,27 @@ const BillingListPage: React.FC = () => {
     load();
   }, []);
 
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    let arr = users;
+    if (filter !== 'all') {
+      arr = arr.filter(u => (u.subscriptionStatus ?? 'none') === filter);
+    }
+    if (q) {
+      arr = arr.filter(u =>
+        (u.displayName || '').toLowerCase().includes(q) ||
+        (u.email || '').toLowerCase().includes(q) ||
+        u.uid.toLowerCase().includes(q) ||
+        (u.stripeCustomerId || '').toLowerCase().includes(q)
+      );
+    }
+    return arr.sort((a, b) => (a.displayName || a.email || a.uid).localeCompare(b.displayName || b.email || b.uid));
+  }, [users, query, filter]);
+
+  const copy = async (text: string) => {
+    try { await navigator.clipboard.writeText(text); } catch {}
+  };
+
   return (
     <div className="billing-page">
       <div className="billing-header">
@@ -51,22 +78,47 @@ const BillingListPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Toolbar */}
+      <div className="billing-toolbar">
+        <div className="search-input">
+          <Search size={16} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, email or customer ID" />
+        </div>
+        <div className="filter-pills">
+          {filters.map(f => (
+            <button key={f} className={`pill ${filter === f ? 'active' : ''}`} onClick={() => setFilter(f)}>
+              {f === 'all' ? 'All' : f.replace('_',' ')}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="billing-table">
-        <div className="billing-table-head">
+        <div className="billing-table-head three-cols">
           <div>User</div>
-          <div>Email</div>
           <div>Status</div>
           <div>Customer</div>
         </div>
         {loading ? (
           <div className="billing-loading">Loading...</div>
         ) : (
-          users.map(u => (
-            <div key={u.uid} onClick={() => navigate(`/admin/billing/${u.uid}`)} className="billing-row">
-              <div className="billing-cell-strong">{u.displayName || u.uid}</div>
-              <div className="billing-cell-dim">{u.email || '-'}</div>
+          filtered.map(u => (
+            <div key={u.uid} className="billing-row three-cols" onClick={() => navigate(`/admin/billing/${u.uid}`)}>
+              <div className="user-cell">
+                <div className="avatar-circle">{(u.displayName || u.email || u.uid).slice(0,1).toUpperCase()}</div>
+                <div className="user-ident">
+                  <div className="name-text">{u.displayName || u.uid}</div>
+                  <div className="email-text">{u.email || '—'}</div>
+                </div>
+              </div>
               <div>{statusBadge(u.subscriptionStatus)}</div>
-              <div className="billing-cell-code">{u.stripeCustomerId || '-'}</div>
+              <div className="customer-cell" onClick={(e)=>e.stopPropagation()}>
+                <code className="billing-cell-code">{u.stripeCustomerId || '—'}</code>
+                {u.stripeCustomerId && (
+                  <button className="icon-btn" title="Copy" onClick={() => copy(u.stripeCustomerId!)}><Copy size={14}/></button>
+                )}
+                <ChevronRight size={16} className="chevron" />
+              </div>
             </div>
           ))
         )}
