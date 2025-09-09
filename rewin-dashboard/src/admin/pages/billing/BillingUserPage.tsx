@@ -52,6 +52,7 @@ const BillingUserPage: React.FC = () => {
   const [interval, setInterval] = useState<'month'|'year'>('month');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [mode, setMode] = useState<'current' | 'create'>('current');
   const [monthlyUsd, setMonthlyUsd] = useState<string>('');
   const [yearlyUsd, setYearlyUsd] = useState<string>('');
   const [productName, setProductName] = useState<string>('');
