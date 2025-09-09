@@ -193,7 +193,7 @@ const BillingUserPage: React.FC = () => {
         <div>
           <h3 className="status-title">Plan status</h3>
           <p className="status-desc">{(user.priceMonthlyId || user.priceYearlyId || user.priceId) ? 'Plan assigned to this account' : 'No plan assigned yet'}</p>
-          <div className="info-row">
+          <div className="info-row prominent">
             <div className="info-chip"><span className="info-label">Interval</span><span className="info-value">{user.billingInterval || '-'}</span></div>
             <div className="info-chip price-chip"><span className="info-label">Monthly</span><span className="info-value price-value">{fmt(monthlyAmt, currency)}</span></div>
             <div className="info-chip price-chip"><span className="info-label">Yearly</span><span className="info-value price-value">{fmt(yearlyAmt, currency)}</span></div>
@@ -211,9 +211,9 @@ const BillingUserPage: React.FC = () => {
             <h3 className="panel-title">Create plan</h3>
             <p className="panel-caption">Set simple monthly/yearly prices in USD</p>
           </div>
-          <label className="field-label">Choose existing plan</label>
+          <label className="field-label field-strong">Choose existing plan</label>
           <select
-            className="glass-input select-glass select-caret-left"
+            className="glass-input input-themed select-glass select-caret-left"
             value={selectedPlanId}
             onChange={(e)=>{
               const id = e.target.value; setSelectedPlanId(id);
@@ -230,7 +230,7 @@ const BillingUserPage: React.FC = () => {
 
           {selectedPlanId && (
             <div className="chosen-plan-preview">
-              <div className="info-row">
+              <div className="info-row prominent">
                 <div className="info-chip"><span className="info-label">Plan</span><span className="info-value">{selectedPlan?.productName || '-'}</span></div>
                 <div className="info-chip price-chip"><span className="info-label">Monthly</span><span className="info-value price-value">{fmt(selectedPlan?.monthlyAmount, selectedPlan?.currency)}</span></div>
                 <div className="info-chip price-chip"><span className="info-label">Yearly</span><span className="info-value price-value">{fmt(selectedPlan?.yearlyAmount, selectedPlan?.currency)}</span></div>
@@ -240,13 +240,13 @@ const BillingUserPage: React.FC = () => {
 
           {!selectedPlanId && (
             <>
-              <label className="field-label mt-2">Plan name (optional)</label>
-              <input className="glass-input" value={productName} onChange={e=>setProductName(e.target.value)} placeholder="e.g. Starter" />
+              <label className="field-label field-strong mt-2">Plan name (optional)</label>
+              <input className="glass-input input-themed" value={productName} onChange={e=>setProductName(e.target.value)} placeholder="e.g. Starter" />
 
-              <label className="field-label">Monthly price ($)</label>
-              <input className="glass-input" inputMode="decimal" value={monthlyUsd} onChange={e=>setMonthlyUsd(e.target.value)} placeholder="e.g. 19.99" />
-              <label className="field-label mt-2">Yearly price ($)</label>
-              <input className="glass-input" inputMode="decimal" value={yearlyUsd} onChange={e=>setYearlyUsd(e.target.value)} placeholder="e.g. 199" />
+              <label className="field-label field-strong">Monthly price ($)</label>
+              <input className="glass-input input-themed" inputMode="decimal" value={monthlyUsd} onChange={e=>setMonthlyUsd(e.target.value)} placeholder="e.g. 19.99" />
+              <label className="field-label field-strong mt-2">Yearly price ($)</label>
+              <input className="glass-input input-themed" inputMode="decimal" value={yearlyUsd} onChange={e=>setYearlyUsd(e.target.value)} placeholder="e.g. 199" />
             </>
           )}
           {saved && <div className="muted-text mb-2">Saved</div>}
