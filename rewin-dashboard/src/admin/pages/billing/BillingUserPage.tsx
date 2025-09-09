@@ -115,7 +115,7 @@ const BillingUserPage: React.FC = () => {
     }
     const successUrl = window.location.origin + `/admin/billing/${uid}`;
     const cancelUrl = successUrl;
-    const res = await api('/billing/checkout', { uid, priceId: selectedPrice, mode: 'subscription', successUrl, cancelUrl });
+    const res = await api('/billing/checkout', { uid, priceId: selectedPrice, mode: 'subscription', successUrl, cancelUrl, email: user?.email });
     try {
       (window.top || window).location.href = res.url;
     } catch {
