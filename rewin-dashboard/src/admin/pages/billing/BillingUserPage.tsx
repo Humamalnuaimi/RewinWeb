@@ -42,6 +42,11 @@ const BillingUserPage: React.FC = () => {
     setSaving(true);
     try {
       await setDoc(doc(db, 'users', uid!), { priceId }, { merge: true });
+      setUser((p: any) => ({ ...p, priceId }));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
+    } catch (e) {
+      alert('Failed to save: ' + (e as any)?.message);
     } finally {
       setSaving(false);
     }
