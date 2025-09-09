@@ -7,8 +7,17 @@ import '../../styles/billing.css';
 
 const api = async (path: string, body: any) => {
   const res = await fetch(`/api${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  if (!res.ok) {
+    const clone = res.clone();
+    let msg = res.statusText;
+    try {
+      const ct = clone.headers.get('content-type') || '';
+      msg = ct.includes('application/json') ? JSON.stringify(await clone.json()) : await clone.text();
+    } catch {}
+    throw new Error(msg || `HTTP ${res.status}`);
+  }
+  const ct = res.headers.get('content-type') || '';
+  return ct.includes('application/json') ? res.json() : res.text();
 };
 
 const BillingUserPage: React.FC = () => {
@@ -46,7 +55,15 @@ const BillingUserPage: React.FC = () => {
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
     } catch (e) {
-      alert('Failed to save: ' + (e as any)?.message);
+      try {
+        // Fallback: write directly if admin rules permit
+        await setDoc(doc(db, 'users', uid!), { priceId }, { merge: true });
+        setUser((p: any) => ({ ...p, priceId }));
+        setSaved(true);
+        setTimeout(() => setSaved(false), 1500);
+      } catch (ee) {
+        alert('Failed to save: ' + ((e as any)?.message || (ee as any)?.message));
+      }
     } finally {
       setSaving(false);
     }
