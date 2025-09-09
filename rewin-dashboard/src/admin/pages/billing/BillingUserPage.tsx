@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase.service';
-import { CreditCard, ExternalLink, ArrowLeft } from 'lucide-react';
+import { CreditCard, ExternalLink, ArrowLeft, Copy } from 'lucide-react';
 import '../../styles/billing.css';
 
 const api = async (path: string, body: any) => {
@@ -17,6 +17,7 @@ const BillingUserPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [priceId, setPriceId] = useState<string>('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -36,6 +37,15 @@ const BillingUserPage: React.FC = () => {
     setUser((p: any) => ({ ...p, stripeCustomerId: res.customerId }));
   };
 
+  const savePlan = async () => {
+    setSaving(true);
+    try {
+      await setDoc(doc(db, 'users', uid!), { priceId }, { merge: true });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const startCheckout = async () => {
     if (!priceId) return alert('Set a Stripe priceId first');
     const successUrl = window.location.origin + `/admin/billing/${uid}`;
@@ -53,6 +63,8 @@ const BillingUserPage: React.FC = () => {
   if (loading) return <div className="billing-page">Loading...</div>;
   if (!user) return <div className="billing-page">User not found</div>;
 
+  const statusKey = user.subscriptionStatus ?? 'none';
+
   return (
     <div className="billing-page">
       <div className="back-row">
@@ -61,9 +73,25 @@ const BillingUserPage: React.FC = () => {
         </button>
       </div>
 
-      <div className="page-breadcrumb">
-        <CreditCard size={22} />
-        <h2 className="billing-title billing-title-sm">Billing • {user.displayName || user.uid}</h2>
+      {/* User summary */}
+      <div className="user-summary">
+        <div className="user-left">
+          <div className="avatar-circle" style={{ width: 44, height: 44 }}>
+            {(user.displayName || user.email || user.uid).slice(0,1).toUpperCase()}
+          </div>
+          <div>
+            <div className="name-text" style={{ fontSize: '1.1rem' }}>{user.displayName || user.uid}</div>
+            <div className="email-text">{user.email}</div>
+          </div>
+        </div>
+        <div className="user-right">
+          <span className={`status-badge ${`is-${statusKey}`}`}>{statusKey === 'past_due' ? 'Past Due' : statusKey.charAt(0).toUpperCase() + statusKey.slice(1)}</span>
+          {user.stripeCustomerId && (
+            <button className="icon-btn" title="Copy customer ID" onClick={() => navigator.clipboard.writeText(user.stripeCustomerId)}>
+              <Copy size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="panel-grid">
@@ -86,6 +114,7 @@ const BillingUserPage: React.FC = () => {
           <label className="field-label">Stripe priceId</label>
           <input className="glass-input" value={priceId} onChange={e => setPriceId(e.target.value)} placeholder="price_..." />
           <div className="field-actions">
+            <button className="btn btn-secondary" disabled={saving} onClick={savePlan}>{saving ? 'Saving…' : 'Save Plan'}</button>
             <button className="btn btn-primary" onClick={startCheckout}>Start Checkout</button>
           </div>
         </div>
