@@ -173,68 +173,80 @@ const BillingUserPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Basic plan creation */}
-      <div className="billing-columns">
-        <div className="left-col">
-          <div className="glass-panel">
-            <div className="panel-head">
-              <h3 className="panel-title">Create plan</h3>
-              <p className="panel-caption">Set simple monthly/yearly prices in USD</p>
-            </div>
-            <label className="field-label">Choose existing plan (optional)</label>
-            <select
-              className="glass-input"
-              value={selectedPlanId}
-              onChange={(e)=>{
-                const id = e.target.value; setSelectedPlanId(id);
-                const p = plans.find(pl=>pl.productId===id);
-                setPriceMonthlyId(p?.monthlyPriceId || '');
-                setPriceYearlyId(p?.yearlyPriceId || '');
-              }}
-            >
-              <option value="">-- Select a plan --</option>
-              {plans.map((p:any)=> (
-                <option key={p.productId} value={p.productId}>{p.productName} {p.monthlyPriceId? '(Monthly)':''} {p.yearlyPriceId? '(Yearly)':''}</option>
-              ))}
-            </select>
-
-            <label className="field-label" style={{ marginTop: 8 }}>Plan name (optional)</label>
-            <input className="glass-input" value={productName} onChange={e=>setProductName(e.target.value)} placeholder="e.g. Starter" />
-
-            <div className="interval-switch" role="group" aria-label="Billing Interval">
-              <button className={`switch ${interval==='month'?'active':''}`} onClick={()=>setInterval('month')}>Monthly</button>
-              <button className={`switch ${interval==='year'?'active':''}`} onClick={()=>setInterval('year')}>Yearly</button>
-            </div>
-
-            <label className="field-label">Monthly price ($)</label>
-            <input className="glass-input" inputMode="decimal" value={monthlyUsd} onChange={e=>setMonthlyUsd(e.target.value)} placeholder="e.g. 19.99" />
-            <label className="field-label" style={{ marginTop: 8 }}>Yearly price ($)</label>
-            <input className="glass-input" inputMode="decimal" value={yearlyUsd} onChange={e=>setYearlyUsd(e.target.value)} placeholder="e.g. 199" />
-            {saved && <div className="muted-text mb-2">Saved</div>}
-            <div className="field-actions">
-              <button className="btn btn-secondary" disabled={saving} onClick={savePlan}>{saving ? 'Saving…' : 'Create/Update Plan'}</button>
-              <button className="btn btn-primary" onClick={assignPlan}>Assign Plan to User</button>
-            </div>
-
-            {(priceMonthlyId || priceYearlyId) && (
-              <div className="muted-text" style={{ marginTop: 8 }}>
-                Created prices: {priceMonthlyId ? `M: ${priceMonthlyId}` : ''} {priceYearlyId ? `Y: ${priceYearlyId}` : ''}
-              </div>
-            )}
+      {/* Status overview card */}
+      <div className="status-card mb-3">
+        <div>
+          <h3 className="status-title">Plan status</h3>
+          <p className="status-desc">{(user.priceMonthlyId || user.priceYearlyId || user.priceId) ? 'Plan assigned to this account' : 'No plan assigned yet'}</p>
+          <div className="info-row">
+            <div className="info-chip"><span className="info-label">Interval</span><span className="info-value">{user.billingInterval || '-'}</span></div>
+            <div className="info-chip"><span className="info-label">Monthly</span><span className="info-value">{user.priceMonthlyId || '-'}</span></div>
+            <div className="info-chip"><span className="info-label">Yearly</span><span className="info-value">{user.priceYearlyId || '-'}</span></div>
           </div>
         </div>
+        <div className="status-bubble">
+          <div className={`status-dot ${ (user.priceMonthlyId || user.priceYearlyId || user.priceId) ? 'green' : 'red' }`} />
+        </div>
+      </div>
 
-        <div className="right-col">
-          <div className="glass-panel">
-            <div className="panel-head">
-              <h3 className="panel-title">Customer</h3>
-              <p className="panel-caption">ID: <code>{user.stripeCustomerId || '-'}</code></p>
+      {/* Stacked panels */}
+      <div className="panel-grid single">
+        <div className="glass-panel">
+          <div className="panel-head">
+            <h3 className="panel-title">Create plan</h3>
+            <p className="panel-caption">Set simple monthly/yearly prices in USD</p>
+          </div>
+          <label className="field-label">Choose existing plan (optional)</label>
+          <select
+            className="glass-input"
+            value={selectedPlanId}
+            onChange={(e)=>{
+              const id = e.target.value; setSelectedPlanId(id);
+              const p = plans.find(pl=>pl.productId===id);
+              setPriceMonthlyId(p?.monthlyPriceId || '');
+              setPriceYearlyId(p?.yearlyPriceId || '');
+            }}
+          >
+            <option value="">-- Select a plan --</option>
+            {plans.map((p:any)=> (
+              <option key={p.productId} value={p.productId}>{p.productName} {p.monthlyPriceId? '(Monthly)':''} {p.yearlyPriceId? '(Yearly)':''}</option>
+            ))}
+          </select>
+
+          <label className="field-label" style={{ marginTop: 8 }}>Plan name (optional)</label>
+          <input className="glass-input" value={productName} onChange={e=>setProductName(e.target.value)} placeholder="e.g. Starter" />
+
+          <div className="interval-switch" role="group" aria-label="Billing Interval">
+            <button className={`switch ${interval==='month'?'active':''}`} onClick={()=>setInterval('month')}>Monthly</button>
+            <button className={`switch ${interval==='year'?'active':''}`} onClick={()=>setInterval('year')}>Yearly</button>
+          </div>
+
+          <label className="field-label">Monthly price ($)</label>
+          <input className="glass-input" inputMode="decimal" value={monthlyUsd} onChange={e=>setMonthlyUsd(e.target.value)} placeholder="e.g. 19.99" />
+          <label className="field-label" style={{ marginTop: 8 }}>Yearly price ($)</label>
+          <input className="glass-input" inputMode="decimal" value={yearlyUsd} onChange={e=>setYearlyUsd(e.target.value)} placeholder="e.g. 199" />
+          {saved && <div className="muted-text mb-2">Saved</div>}
+          <div className="field-actions">
+            <button className="btn btn-secondary" disabled={saving} onClick={savePlan}>{saving ? 'Saving…' : 'Create/Update Plan'}</button>
+            <button className="btn btn-primary" onClick={assignPlan}>Assign Plan to User</button>
+          </div>
+
+          {(priceMonthlyId || priceYearlyId) && (
+            <div className="muted-text" style={{ marginTop: 8 }}>
+              Created prices: {priceMonthlyId ? `M: ${priceMonthlyId}` : ''} {priceYearlyId ? `Y: ${priceYearlyId}` : ''}
             </div>
-            <div className="inline-actions">
-              {!user.stripeCustomerId && (
-                <button className="btn btn-secondary" onClick={ensureCustomer}>Create Customer</button>
-              )}
-            </div>
+          )}
+        </div>
+
+        <div className="glass-panel">
+          <div className="panel-head">
+            <h3 className="panel-title">Customer</h3>
+            <p className="panel-caption">ID: <code>{user.stripeCustomerId || '-'}</code></p>
+          </div>
+          <div className="inline-actions">
+            {!user.stripeCustomerId && (
+              <button className="btn btn-secondary" onClick={ensureCustomer}>Create Customer</button>
+            )}
           </div>
         </div>
       </div>
