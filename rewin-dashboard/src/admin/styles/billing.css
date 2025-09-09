@@ -374,7 +374,7 @@
   .panel-grid { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 720px) { .title-lg { font-size: 1.8rem; }
   .billing-table { overflow-x: auto; }
   .billing-table-head, .billing-row { min-width: 720px; }
 }
