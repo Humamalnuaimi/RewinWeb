@@ -57,8 +57,6 @@ const BillingUserPage: React.FC = () => {
   const [plans, setPlans] = useState<any[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
-  const [plans, setPlans] = useState<any[]>([]);
-  const [selectedPlanId, setSelectedPlanId] = useState<string>('');
 
   useEffect(() => {
     const load = async () => {
@@ -77,16 +75,6 @@ const BillingUserPage: React.FC = () => {
   }, [uid]);
 
   // invoices removed in simplified page
-
-  useEffect(() => {
-    const loadPlans = async () => {
-      try {
-        const r = await api('/billing/plans', {});
-        setPlans(r.plans || []);
-      } catch {}
-    };
-    loadPlans();
-  }, []);
 
   useEffect(() => {
     const loadPlans = async () => {
