@@ -21,6 +21,10 @@
   font-weight: 800;
 }
 
+.billing-title-sm {
+  font-size: 1.6rem;
+}
+
 .billing-subtitle {
   color: rgba(255, 255, 255, 0.7);
   font-size: 0.875rem;
