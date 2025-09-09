@@ -284,6 +284,23 @@
 .status-dot.yellow { color: #f59e0b; background: #f59e0b; }
 .status-dot.red { color: #ef4444; background: #ef4444; }
 
+/* Header status ring */
+.header-status { width: 26px; height: 26px; border-radius: 999px; display:grid; place-items:center; margin-left: 8px; box-shadow: inset 0 0 0 4px rgba(255,255,255,0.08); position: relative; }
+.header-status::after { content:''; width: 10px; height: 10px; border-radius: 50%; display:block; }
+.header-status.active::after { background:#10b981; box-shadow: 0 0 12px #10b981; }
+.header-status.past_due::after { background:#f59e0b; box-shadow: 0 0 12px #f59e0b; }
+.header-status.paused::after { background:#f59e0b; box-shadow: 0 0 12px #f59e0b; }
+.header-status.canceled::after { background:#ef4444; box-shadow: 0 0 12px #ef4444; }
+.header-status.none::after { background:#6b7280; box-shadow: 0 0 12px #6b7280; }
+
+/* Status actions */
+.status-actions { display:flex; gap:10px; margin-left:auto; }
+.btn-status { padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color:#fff; cursor:pointer; }
+.btn-status.pause { background: linear-gradient(135deg, #f59e0b44, #f59e0b22); border-color: rgba(245,158,11,0.35); }
+.btn-status.resume { background: linear-gradient(135deg, #10b98144, #10b98122); border-color: rgba(16,185,129,0.35); }
+.btn-status.danger { background: linear-gradient(135deg, #ef444444, #ef444422); border-color: rgba(239,68,68,0.35); }
+.btn-status:hover { filter: brightness(1.1); }
+
 /* Info rows under status */
 .info-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
 .info-row.prominent .info-chip { padding: 14px 14px; }
