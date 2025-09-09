@@ -115,24 +115,18 @@ const BillingUserPage: React.FC = () => {
     }
   };
 
-  const startCheckout = async () => {
-    let selectedPrice = interval === 'year' ? (priceYearlyId || '') : (priceMonthlyId || '');
-    if (!selectedPrice) {
-      await savePlan();
-      selectedPrice = interval === 'year' ? (priceYearlyId || '') : (priceMonthlyId || '');
-    }
-    if (!selectedPrice) {
-      alert('Create the plan first');
+  const assignPlan = async () => {
+    if (!uid) return;
+    const selectedPrice = interval === 'year' ? (priceYearlyId || '') : (priceMonthlyId || '');
+    if (!selectedPrice && !priceMonthlyId && !priceYearlyId && !priceId) {
+      alert('Select an existing plan or create one first');
       return;
     }
-    const successUrl = window.location.origin + `/admin/billing/${uid}`;
-    const cancelUrl = successUrl;
-    const res = await api('/billing/checkout', { uid, priceId: selectedPrice, mode: 'subscription', successUrl, cancelUrl, email: user?.email });
-    try {
-      (window.top || window).location.href = res.url;
-    } catch {
-      window.open(res.url, '_blank');
-    }
+    const r = await api('/billing/set-plan', { uid, priceId: priceId || selectedPrice || null, priceMonthlyId: priceMonthlyId || null, priceYearlyId: priceYearlyId || null, billingInterval: interval });
+    await setDoc(doc(db, 'users', uid!), { priceId: r.priceId, priceMonthlyId: r.priceMonthlyId, priceYearlyId: r.priceYearlyId, billingInterval: r.billingInterval }, { merge: true });
+    setUser((p:any)=> ({ ...p, priceId: r.priceId, priceMonthlyId: r.priceMonthlyId, priceYearlyId: r.priceYearlyId, billingInterval: r.billingInterval }));
+    setSaved(true);
+    setTimeout(()=>setSaved(false), 1500);
   };
 
   const openPortal = async () => {
@@ -219,7 +213,7 @@ const BillingUserPage: React.FC = () => {
             {saved && <div className="muted-text mb-2">Saved</div>}
             <div className="field-actions">
               <button className="btn btn-secondary" disabled={saving} onClick={savePlan}>{saving ? 'Saving…' : 'Create/Update Plan'}</button>
-              <button className="btn btn-primary" onClick={startCheckout}>Start Checkout</button>
+              <button className="btn btn-primary" onClick={assignPlan}>Assign Plan to User</button>
             </div>
 
             {(priceMonthlyId || priceYearlyId) && (
@@ -240,7 +234,6 @@ const BillingUserPage: React.FC = () => {
               {!user.stripeCustomerId && (
                 <button className="btn btn-secondary" onClick={ensureCustomer}>Create Customer</button>
               )}
-              <button className="btn btn-secondary" onClick={openPortal}>Open Portal</button>
             </div>
           </div>
         </div>
