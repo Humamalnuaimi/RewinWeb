@@ -56,6 +56,9 @@ const BillingUserPage: React.FC = () => {
   const [productName, setProductName] = useState<string>('');
   const [plans, setPlans] = useState<any[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
+  const [selectedPlan, setSelectedPlan] = useState<any>(null);
+  const [plans, setPlans] = useState<any[]>([]);
+  const [selectedPlanId, setSelectedPlanId] = useState<string>('');
 
   useEffect(() => {
     const load = async () => {
@@ -74,6 +77,16 @@ const BillingUserPage: React.FC = () => {
   }, [uid]);
 
   // invoices removed in simplified page
+
+  useEffect(() => {
+    const loadPlans = async () => {
+      try {
+        const r = await api('/billing/plans', {});
+        setPlans(r.plans || []);
+      } catch {}
+    };
+    loadPlans();
+  }, []);
 
   useEffect(() => {
     const loadPlans = async () => {
@@ -143,13 +156,28 @@ const BillingUserPage: React.FC = () => {
   if (!user) return <div className="billing-page">User not found</div>;
 
   const statusKey = user.subscriptionStatus ?? 'none';
+  const fmt = (cents?: number|null, curr: string = 'usd') => (typeof cents === 'number' ? `$${(cents/100).toFixed(2)} ${curr.toUpperCase()}` : '-');
+  const planFromUser = plans.find(p => p.monthlyPriceId === user.priceMonthlyId || p.yearlyPriceId === user.priceYearlyId) || null;
+  const monthlyAmt = planFromUser?.monthlyAmount || null;
+  const yearlyAmt = planFromUser?.yearlyAmount || null;
+  const currency = planFromUser?.currency || 'usd';
 
   return (
     <div className="billing-page">
-      <div className="back-row">
-        <button className="btn btn-secondary" onClick={() => navigate('/admin/billing')}>
-          <ArrowLeft size={16} /> Back
-        </button>
+      <div className="billing-header">
+        <div>
+          <h2 className="billing-title">Billing</h2>
+          <div className="billing-subtitle">Manage plan assignment and prices</div>
+        </div>
+        <div className="user-right">
+          <div className="user-left">
+            <div className="avatar-circle" style={{ width: 32, height: 32 }}>{(user.displayName || user.email || user.uid).slice(0,1).toUpperCase()}</div>
+            <div>
+              <div className="name-text" style={{ fontSize: '0.95rem' }}>{user.displayName || user.uid}</div>
+              <div className="email-text">{user.email}</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* User summary */}
@@ -180,8 +208,8 @@ const BillingUserPage: React.FC = () => {
           <p className="status-desc">{(user.priceMonthlyId || user.priceYearlyId || user.priceId) ? 'Plan assigned to this account' : 'No plan assigned yet'}</p>
           <div className="info-row">
             <div className="info-chip"><span className="info-label">Interval</span><span className="info-value">{user.billingInterval || '-'}</span></div>
-            <div className="info-chip"><span className="info-label">Monthly</span><span className="info-value">{user.priceMonthlyId || '-'}</span></div>
-            <div className="info-chip"><span className="info-label">Yearly</span><span className="info-value">{user.priceYearlyId || '-'}</span></div>
+            <div className="info-chip"><span className="info-label">Monthly</span><span className="info-value">{fmt(monthlyAmt, currency)}</span></div>
+            <div className="info-chip"><span className="info-label">Yearly</span><span className="info-value">{fmt(yearlyAmt, currency)}</span></div>
           </div>
         </div>
         <div className="status-bubble">
@@ -196,38 +224,39 @@ const BillingUserPage: React.FC = () => {
             <h3 className="panel-title">Create plan</h3>
             <p className="panel-caption">Set simple monthly/yearly prices in USD</p>
           </div>
-          <label className="field-label">Choose existing plan (optional)</label>
+          <label className="field-label">Choose existing plan</label>
           <select
-            className="glass-input"
+            className="glass-input select-glass"
             value={selectedPlanId}
             onChange={(e)=>{
               const id = e.target.value; setSelectedPlanId(id);
-              const p = plans.find(pl=>pl.productId===id);
+              const p = plans.find(pl=>pl.productId===id) || null; setSelectedPlan(p);
               setPriceMonthlyId(p?.monthlyPriceId || '');
               setPriceYearlyId(p?.yearlyPriceId || '');
             }}
           >
             <option value="">-- Select a plan --</option>
             {plans.map((p:any)=> (
-              <option key={p.productId} value={p.productId}>{p.productName} {p.monthlyPriceId? '(Monthly)':''} {p.yearlyPriceId? '(Yearly)':''}</option>
+              <option key={p.productId} value={p.productId}>{p.productName} • {fmt(p.monthlyAmount,p.currency)} / {fmt(p.yearlyAmount,p.currency)}</option>
             ))}
           </select>
 
-          <label className="field-label" style={{ marginTop: 8 }}>Plan name (optional)</label>
-          <input className="glass-input" value={productName} onChange={e=>setProductName(e.target.value)} placeholder="e.g. Starter" />
+          {!selectedPlanId && (
+            <>
+              <label className="field-label" style={{ marginTop: 8 }}>Plan name (optional)</label>
+              <input className="glass-input" value={productName} onChange={e=>setProductName(e.target.value)} placeholder="e.g. Starter" />
 
-          <div className="interval-switch" role="group" aria-label="Billing Interval">
-            <button className={`switch ${interval==='month'?'active':''}`} onClick={()=>setInterval('month')}>Monthly</button>
-            <button className={`switch ${interval==='year'?'active':''}`} onClick={()=>setInterval('year')}>Yearly</button>
-          </div>
-
-          <label className="field-label">Monthly price ($)</label>
-          <input className="glass-input" inputMode="decimal" value={monthlyUsd} onChange={e=>setMonthlyUsd(e.target.value)} placeholder="e.g. 19.99" />
-          <label className="field-label" style={{ marginTop: 8 }}>Yearly price ($)</label>
-          <input className="glass-input" inputMode="decimal" value={yearlyUsd} onChange={e=>setYearlyUsd(e.target.value)} placeholder="e.g. 199" />
+              <label className="field-label">Monthly price ($)</label>
+              <input className="glass-input" inputMode="decimal" value={monthlyUsd} onChange={e=>setMonthlyUsd(e.target.value)} placeholder="e.g. 19.99" />
+              <label className="field-label" style={{ marginTop: 8 }}>Yearly price ($)</label>
+              <input className="glass-input" inputMode="decimal" value={yearlyUsd} onChange={e=>setYearlyUsd(e.target.value)} placeholder="e.g. 199" />
+            </>
+          )}
           {saved && <div className="muted-text mb-2">Saved</div>}
           <div className="field-actions">
-            <button className="btn btn-secondary" disabled={saving} onClick={savePlan}>{saving ? 'Saving…' : 'Create/Update Plan'}</button>
+            {!selectedPlanId && (
+              <button className="btn btn-secondary" disabled={saving} onClick={savePlan}>{saving ? 'Saving…' : 'Create/Update Plan'}</button>
+            )}
             <button className="btn btn-primary" onClick={assignPlan}>Assign Plan to User</button>
           </div>
 
