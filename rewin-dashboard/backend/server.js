@@ -517,6 +517,108 @@ if (stripe) {
     }
   });
 
+  // Subscription controls
+  async function getUserData(uid) {
+    const snap = await db.doc(`users/${uid}`).get();
+    return snap.exists ? snap.data() : {};
+  }
+
+  app.post('/api/billing/subscription/pause', async (req, res) => {
+    try {
+      const { uid } = req.body;
+      const data = await getUserData(uid);
+      if (!data.subscriptionId) return res.status(400).json({ success: false, error: 'No subscriptionId' });
+      const sub = await stripe.subscriptions.update(data.subscriptionId, { pause_collection: { behavior: 'mark_uncollectible' } });
+      await db.doc(`users/${uid}`).set({ subscriptionStatus: 'paused' }, { merge: true });
+      res.json({ success: true, subscription: sub });
+    } catch (err) {
+      console.error('pause error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/billing/subscription/resume', async (req, res) => {
+    try {
+      const { uid } = req.body;
+      const data = await getUserData(uid);
+      if (!data.subscriptionId) return res.status(400).json({ success: false, error: 'No subscriptionId' });
+      const sub = await stripe.subscriptions.update(data.subscriptionId, { pause_collection: '' });
+      await db.doc(`users/${uid}`).set({ subscriptionStatus: 'active' }, { merge: true });
+      res.json({ success: true, subscription: sub });
+    } catch (err) {
+      console.error('resume error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/billing/subscription/cancel', async (req, res) => {
+    try {
+      const { uid, atPeriodEnd = true } = req.body;
+      const data = await getUserData(uid);
+      if (!data.subscriptionId) return res.status(400).json({ success: false, error: 'No subscriptionId' });
+      const sub = await stripe.subscriptions.update(data.subscriptionId, { cancel_at_period_end: !!atPeriodEnd });
+      await db.doc(`users/${uid}`).set({ subscriptionStatus: atPeriodEnd ? 'active' : 'canceled' }, { merge: true });
+      res.json({ success: true, subscription: sub });
+    } catch (err) {
+      console.error('cancel error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Invoice actions
+  app.post('/api/billing/invoice-item', async (req, res) => {
+    try {
+      const { uid, amount, description, currency = 'usd' } = req.body;
+      const data = await getUserData(uid);
+      if (!data.stripeCustomerId) return res.status(400).json({ success: false, error: 'No stripeCustomerId' });
+      const item = await stripe.invoiceItems.create({ customer: data.stripeCustomerId, amount: Math.round(amount), currency, description });
+      res.json({ success: true, item });
+    } catch (err) {
+      console.error('invoice-item error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/billing/invoice/create-draft', async (req, res) => {
+    try {
+      const { uid, auto_advance = false, collection_method = 'send_invoice', days_until_due = 7 } = req.body;
+      const data = await getUserData(uid);
+      if (!data.stripeCustomerId) return res.status(400).json({ success: false, error: 'No stripeCustomerId' });
+      const invoice = await stripe.invoices.create({ customer: data.stripeCustomerId, auto_advance, collection_method, days_until_due });
+      await db.doc(`users/${uid}`).set({ pendingInvoiceId: invoice.id }, { merge: true });
+      res.json({ success: true, invoice });
+    } catch (err) {
+      console.error('create-draft error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/billing/invoice/finalize', async (req, res) => {
+    try {
+      const { invoiceId, send = true } = req.body;
+      if (!invoiceId) return res.status(400).json({ success: false, error: 'invoiceId required' });
+      const finalized = await stripe.invoices.finalizeInvoice(invoiceId);
+      if (send) await stripe.invoices.sendInvoice(finalized.id);
+      res.json({ success: true, invoice: finalized });
+    } catch (err) {
+      console.error('finalize error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/billing/invoices/list', async (req, res) => {
+    try {
+      const { uid, limit = 10 } = req.body;
+      const data = await getUserData(uid);
+      if (!data.stripeCustomerId) return res.status(400).json({ success: false, error: 'No stripeCustomerId' });
+      const invoices = await stripe.invoices.list({ customer: data.stripeCustomerId, limit });
+      res.json({ success: true, invoices: invoices.data });
+    } catch (err) {
+      console.error('list invoices error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // Stripe Webhook
   app.post('/api/billing/webhook', async (req, res) => {
     const sig = req.headers['stripe-signature'];
