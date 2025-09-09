@@ -155,10 +155,10 @@ const BillingUserPage: React.FC = () => {
     <div className="billing-page">
       <div className="billing-header-bar">
         <div className="header-left">
-          <button className="back-btn prominent" onClick={() => navigate(-1)}><ArrowLeft size={16}/> Back</button>
+          <button className="back-btn prominent back-abs" onClick={() => navigate(-1)}><ArrowLeft size={16}/> Back</button>
           <div>
-            <h2 className="billing-title">Billing</h2>
-            <div className="billing-subtitle">Manage plan assignment and prices</div>
+            <h2 className="billing-title title-offset">Billing</h2>
+            <div className="billing-subtitle subtitle-offset">Manage plan assignment and prices</div>
           </div>
         </div>
         <div className="header-right">
@@ -241,9 +241,7 @@ const BillingUserPage: React.FC = () => {
           </div>
 
           {(priceMonthlyId || priceYearlyId) && (
-            <div className="muted-text mt-2">
-              Created prices: {priceMonthlyId ? `M: ${priceMonthlyId}` : ''} {priceYearlyId ? `Y: ${priceYearlyId}` : ''}
-            </div>
+            <div className="mt-2" />
           )}
         </div>
 
