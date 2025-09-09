@@ -426,7 +426,12 @@ function createEmailMessage({ from, to, subject, htmlBody, textBody }) {
 // BILLING (Stripe) ENDPOINTS
 // =========================
 if (stripe) {
-  const db = admin.firestore();
+  let db = null;
+  try {
+    db = admin.firestore();
+  } catch (e) {
+    console.error('⚠️ Firestore unavailable: Firebase Admin not initialized');
+  }
 
   // Create/retrieve Stripe customer for a user
   app.post('/api/billing/create-customer', async (req, res) => {
