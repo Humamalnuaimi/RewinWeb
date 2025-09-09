@@ -623,7 +623,7 @@ if (stripe) {
     }
   });
 
-  // Admin sets user's plan (priceId) securely via Admin SDK
+  // Admin sets user's plan (assign Stripe price IDs to user document)
   app.post('/api/billing/set-plan', requireAdmin, async (req, res) => {
     try {
       const { uid, priceId, priceMonthlyId, priceYearlyId, billingInterval } = req.body;
@@ -634,8 +634,8 @@ if (stripe) {
         priceYearlyId: priceYearlyId || null,
         billingInterval: billingInterval === 'year' ? 'year' : (billingInterval === 'month' ? 'month' : null),
       };
-      await db.doc(`users/${uid}`).set(payload, { merge: true });
-      res.json({ success: true });
+      if (db) await db.doc(`users/${uid}`).set(payload, { merge: true });
+      res.json({ success: true, ...payload });
     } catch (err) {
       console.error('set-plan error:', err);
       res.status(500).json({ success: false, error: err.message });
