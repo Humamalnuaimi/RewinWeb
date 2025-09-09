@@ -26,11 +26,15 @@ const BillingUserPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [priceId, setPriceId] = useState<string>('');
+  const [priceMonthlyId, setPriceMonthlyId] = useState<string>('');
+  const [priceYearlyId, setPriceYearlyId] = useState<string>('');
+  const [interval, setInterval] = useState<'month'|'year'>('month');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [itemAmount, setItemAmount] = useState<string>('');
   const [itemDesc, setItemDesc] = useState<string>('');
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [tab, setTab] = useState<'overview' | 'invoices' | 'charges' | 'portal'>('overview');
 
   useEffect(() => {
@@ -38,8 +42,12 @@ const BillingUserPage: React.FC = () => {
       if (!uid) return;
       const ref = doc(db, 'users', uid);
       const snap = await getDoc(ref);
-      setUser({ uid, ...(snap.data() || {}) });
-      setPriceId((snap.data() as any)?.priceId || '');
+      const data = snap.data() as any || {};
+      setUser({ uid, ...data });
+      setPriceId(data?.priceId || '');
+      setPriceMonthlyId(data?.priceMonthlyId || '');
+      setPriceYearlyId(data?.priceYearlyId || '');
+      setInterval(data?.billingInterval === 'year' ? 'year' : 'month');
       setLoading(false);
     };
     load();
@@ -64,15 +72,14 @@ const BillingUserPage: React.FC = () => {
   const savePlan = async () => {
     setSaving(true);
     try {
-      await api('/billing/set-plan', { uid, priceId });
-      setUser((p: any) => ({ ...p, priceId }));
+      await api('/billing/set-plan', { uid, priceId, priceMonthlyId, priceYearlyId, billingInterval: interval });
+      setUser((p: any) => ({ ...p, priceId, priceMonthlyId, priceYearlyId, billingInterval: interval }));
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
     } catch (e) {
       try {
-        // Fallback: write directly if admin rules permit
-        await setDoc(doc(db, 'users', uid!), { priceId }, { merge: true });
-        setUser((p: any) => ({ ...p, priceId }));
+        await setDoc(doc(db, 'users', uid!), { priceId, priceMonthlyId, priceYearlyId, billingInterval: interval }, { merge: true });
+        setUser((p: any) => ({ ...p, priceId, priceMonthlyId, priceYearlyId, billingInterval: interval }));
         setSaved(true);
         setTimeout(() => setSaved(false), 1500);
       } catch (ee) {
@@ -84,10 +91,11 @@ const BillingUserPage: React.FC = () => {
   };
 
   const startCheckout = async () => {
-    if (!priceId) return alert('Set a Stripe priceId first');
+    const selectedPrice = interval === 'year' ? (priceYearlyId || priceId) : (priceMonthlyId || priceId);
+    if (!selectedPrice) return alert('Set a Stripe priceId first');
     const successUrl = window.location.origin + `/admin/billing/${uid}`;
     const cancelUrl = successUrl;
-    const res = await api('/billing/checkout', { uid, priceId, mode: 'subscription', successUrl, cancelUrl });
+    const res = await api('/billing/checkout', { uid, priceId: selectedPrice, mode: 'subscription', successUrl, cancelUrl });
     try {
       (window.top || window).location.href = res.url;
     } catch {
@@ -145,12 +153,20 @@ const BillingUserPage: React.FC = () => {
           <div className="glass-panel">
             <div className="panel-head">
               <h3 className="panel-title">Plan</h3>
-              <p className="panel-caption">Select price and start subscription</p>
+              <p className="panel-caption">Monthly/Yearly with per-user prices</p>
             </div>
-            <label className="field-label">Stripe priceId</label>
+            <div className="interval-switch" role="group" aria-label="Billing Interval">
+              <button className={`switch ${interval==='month'?'active':''}`} onClick={()=>setInterval('month')}>Monthly</button>
+              <button className={`switch ${interval==='year'?'active':''}`} onClick={()=>setInterval('year')}>Yearly</button>
+            </div>
+            <label className="field-label">Monthly priceId</label>
+            <input className="glass-input" value={priceMonthlyId} onChange={e => setPriceMonthlyId(e.target.value)} placeholder="price_..." />
+            <label className="field-label" style={{ marginTop: 8 }}>Yearly priceId</label>
+            <input className="glass-input" value={priceYearlyId} onChange={e => setPriceYearlyId(e.target.value)} placeholder="price_..." />
+            <label className="field-label" style={{ marginTop: 8 }}>Fallback (any)</label>
             <input className="glass-input" value={priceId} onChange={e => setPriceId(e.target.value)} placeholder="price_..." />
-            {priceId && !priceId.startsWith('price_') && (
-              <div className="muted-text mb-2">Hint: Use a price_... ID, not prod_...</div>
+            {(priceId || priceMonthlyId || priceYearlyId) && [priceId, priceMonthlyId, priceYearlyId].some(v=>v && !v.startsWith('price_')) && (
+              <div className="muted-text mb-2">Hint: Use price_... IDs (not prod_...)</div>
             )}
             {saved && <div className="muted-text mb-2">Saved</div>}
             <div className="field-actions">
@@ -169,6 +185,20 @@ const BillingUserPage: React.FC = () => {
               <button className="btn btn-secondary" onClick={async()=>{ await api('/billing/subscription/resume',{uid}); }}>Resume</button>
               <button className="btn btn-secondary" onClick={async()=>{ if(confirm('Cancel subscription?')){ await api('/billing/subscription/cancel',{uid, atPeriodEnd:true}); } }}>Cancel at period end</button>
             </div>
+            <button className="btn btn-secondary" style={{ marginTop: 8 }} onClick={()=>setAdvancedOpen(v=>!v)}>{advancedOpen ? 'Hide advanced' : 'Show advanced'}</button>
+            {advancedOpen && (
+              <div style={{ marginTop: 8 }}>
+                <label className="field-label">Amount (cents)</label>
+                <input className="glass-input" value={itemAmount} onChange={e=>setItemAmount(e.target.value)} placeholder="e.g. 500 for $5.00" />
+                <label className="field-label" style={{ marginTop: 8 }}>Description</label>
+                <input className="glass-input" value={itemDesc} onChange={e=>setItemDesc(e.target.value)} placeholder="Line item description" />
+                <div className="field-actions">
+                  <button className="btn btn-secondary" onClick={async()=>{ await api('/billing/invoice-item',{uid, amount:Number(itemAmount||0), description:itemDesc}); alert('Item added'); }}>Add Item</button>
+                  <button className="btn btn-secondary" onClick={async()=>{ const r=await api('/billing/invoice/create-draft',{uid}); alert('Draft created: '+r.invoice?.id); }}>Create Draft</button>
+                  <button className="btn btn-primary" onClick={async()=>{ const id=user.pendingInvoiceId || prompt('Enter invoice ID to finalize'); if(!id) return; await api('/billing/invoice/finalize',{invoiceId:id, send:true}); alert('Invoice sent'); }}>Finalize + Send</button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="glass-panel">
