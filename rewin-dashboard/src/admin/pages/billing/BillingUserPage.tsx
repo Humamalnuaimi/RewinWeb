@@ -170,6 +170,7 @@ const BillingUserPage: React.FC = () => {
               <div className="email-text">{user.email}</div>
             </div>
           </div>
+          <div className={`header-status ${statusKey}`} aria-label={`Status: ${statusKey}`} />
         </div>
       </div>
 
