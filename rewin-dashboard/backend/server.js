@@ -432,7 +432,7 @@ if (stripe) {
   app.post('/api/billing/create-customer', async (req, res) => {
     try {
       const { uid, email, name } = req.body;
-      if (!uid || !email) return res.status(400).json({ success: false, error: 'uid and email required' });
+      if (!uid) return res.status(400).json({ success: false, error: 'uid required' });
 
       const userRef = db.doc(`users/${uid}`);
       const snap = await userRef.get();
@@ -440,7 +440,7 @@ if (stripe) {
 
       let customerId = data?.stripeCustomerId;
       if (!customerId) {
-        const customer = await stripe.customers.create({ email, name: name || email, metadata: { uid } });
+        const customer = await stripe.customers.create({ email: email || data?.email || undefined, name: name || data?.displayName || email || undefined, metadata: { uid } });
         customerId = customer.id;
         await userRef.set({ stripeCustomerId: customerId }, { merge: true });
       }
@@ -448,6 +448,61 @@ if (stripe) {
       res.json({ success: true, customerId });
     } catch (err) {
       console.error('create-customer error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Create Stripe product and monthly/yearly prices from USD amounts, and save to user
+  app.post('/api/billing/create-plan', async (req, res) => {
+    try {
+      const { uid, name, monthlyUsd = 0, yearlyUsd = 0, currency = 'usd' } = req.body;
+      if (!uid) return res.status(400).json({ success: false, error: 'uid required' });
+      const m = Number(monthlyUsd) || 0;
+      const y = Number(yearlyUsd) || 0;
+      if (m <= 0 && y <= 0) return res.status(400).json({ success: false, error: 'Provide monthlyUsd and/or yearlyUsd > 0' });
+
+      const product = await stripe.products.create({
+        name: name || `User ${uid} Plan`,
+        metadata: { uid }
+      });
+
+      let priceMonthlyId = null;
+      let priceYearlyId = null;
+
+      if (m > 0) {
+        const p = await stripe.prices.create({
+          unit_amount: Math.round(m * 100),
+          currency,
+          recurring: { interval: 'month' },
+          product: product.id,
+          metadata: { uid, kind: 'monthly' }
+        });
+        priceMonthlyId = p.id;
+      }
+
+      if (y > 0) {
+        const p = await stripe.prices.create({
+          unit_amount: Math.round(y * 100),
+          currency,
+          recurring: { interval: 'year' },
+          product: product.id,
+          metadata: { uid, kind: 'yearly' }
+        });
+        priceYearlyId = p.id;
+      }
+
+      const payload = {
+        productId: product.id,
+        priceMonthlyId,
+        priceYearlyId,
+        priceId: priceMonthlyId || priceYearlyId,
+        billingInterval: priceMonthlyId ? 'month' : 'year'
+      };
+      await db.doc(`users/${uid}`).set(payload, { merge: true });
+
+      res.json({ success: true, ...payload });
+    } catch (err) {
+      console.error('create-plan error:', err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
