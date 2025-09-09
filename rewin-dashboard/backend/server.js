@@ -34,6 +34,25 @@ app.use(cors());
 app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
+// Admin auth middleware using Firebase ID tokens
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'alnuaimi.humam@gmail.com').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+async function requireAdmin(req, res, next) {
+  try {
+    if (!admin.apps.length) return res.status(500).json({ success: false, error: 'Firebase Admin not initialized on server' });
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!token) return res.status(401).json({ success: false, error: 'Missing auth token' });
+    const decoded = await admin.auth().verifyIdToken(token);
+    const email = (decoded.email || '').toLowerCase();
+    const isAdmin = decoded.admin === true || ADMIN_EMAILS.includes(email);
+    if (!isAdmin) return res.status(403).json({ success: false, error: 'Forbidden' });
+    req.user = { uid: decoded.uid, email, isAdmin };
+    next();
+  } catch (e) {
+    res.status(401).json({ success: false, error: 'Invalid or expired token' });
+  }
+}
+
 // Initialize Firebase Admin SDK (matching old admin panel approach)
 try {
   // Load service account from several locations to support different setups
@@ -434,7 +453,7 @@ if (stripe) {
   }
 
   // Create/retrieve Stripe customer for a user
-  app.post('/api/billing/create-customer', async (req, res) => {
+  app.post('/api/billing/create-customer', requireAdmin, async (req, res) => {
     try {
       const { uid, email, name } = req.body;
       if (!uid) return res.status(400).json({ success: false, error: 'uid required' });
@@ -458,7 +477,7 @@ if (stripe) {
   });
 
   // Create Stripe product and monthly/yearly prices from USD amounts, and save to user
-  app.post('/api/billing/create-plan', async (req, res) => {
+  app.post('/api/billing/create-plan', requireAdmin, async (req, res) => {
     try {
       if (!stripe) return res.status(500).json({ success: false, error: 'Stripe not configured on server' });
       if (!admin.apps.length) return res.status(500).json({ success: false, error: 'Firebase Admin not initialized on server' });
@@ -517,7 +536,7 @@ if (stripe) {
   });
 
   // Create Checkout Session (subscription by default)
-  app.post('/api/billing/checkout', async (req, res) => {
+  app.post('/api/billing/checkout', requireAdmin, async (req, res) => {
     try {
       const { uid, priceId, mode = 'subscription', successUrl, cancelUrl } = req.body;
       if (!uid || !priceId || !successUrl || !cancelUrl) return res.status(400).json({ success: false, error: 'uid, priceId, successUrl, cancelUrl required' });
@@ -552,7 +571,7 @@ if (stripe) {
   });
 
   // Create Customer Portal Session
-  app.post('/api/billing/portal', async (req, res) => {
+  app.post('/api/billing/portal', requireAdmin, async (req, res) => {
     try {
       const { uid, returnUrl } = req.body;
       if (!uid || !returnUrl) return res.status(400).json({ success: false, error: 'uid and returnUrl required' });
@@ -569,7 +588,7 @@ if (stripe) {
   });
 
   // Admin sets user's plan (priceId) securely via Admin SDK
-  app.post('/api/billing/set-plan', async (req, res) => {
+  app.post('/api/billing/set-plan', requireAdmin, async (req, res) => {
     try {
       const { uid, priceId, priceMonthlyId, priceYearlyId, billingInterval } = req.body;
       if (!uid) return res.status(400).json({ success: false, error: 'uid required' });
@@ -593,7 +612,7 @@ if (stripe) {
     return snap.exists ? snap.data() : {};
   }
 
-  app.post('/api/billing/subscription/pause', async (req, res) => {
+  app.post('/api/billing/subscription/pause', requireAdmin, async (req, res) => {
     try {
       const { uid } = req.body;
       const data = await getUserData(uid);
@@ -607,7 +626,7 @@ if (stripe) {
     }
   });
 
-  app.post('/api/billing/subscription/resume', async (req, res) => {
+  app.post('/api/billing/subscription/resume', requireAdmin, async (req, res) => {
     try {
       const { uid } = req.body;
       const data = await getUserData(uid);
@@ -621,7 +640,7 @@ if (stripe) {
     }
   });
 
-  app.post('/api/billing/subscription/cancel', async (req, res) => {
+  app.post('/api/billing/subscription/cancel', requireAdmin, async (req, res) => {
     try {
       const { uid, atPeriodEnd = true } = req.body;
       const data = await getUserData(uid);
@@ -636,7 +655,7 @@ if (stripe) {
   });
 
   // Invoice actions
-  app.post('/api/billing/invoice-item', async (req, res) => {
+  app.post('/api/billing/invoice-item', requireAdmin, async (req, res) => {
     try {
       const { uid, amount, description, currency = 'usd' } = req.body;
       const data = await getUserData(uid);
@@ -649,7 +668,7 @@ if (stripe) {
     }
   });
 
-  app.post('/api/billing/invoice/create-draft', async (req, res) => {
+  app.post('/api/billing/invoice/create-draft', requireAdmin, async (req, res) => {
     try {
       const { uid, auto_advance = false, collection_method = 'send_invoice', days_until_due = 7 } = req.body;
       const data = await getUserData(uid);
@@ -663,7 +682,7 @@ if (stripe) {
     }
   });
 
-  app.post('/api/billing/invoice/finalize', async (req, res) => {
+  app.post('/api/billing/invoice/finalize', requireAdmin, async (req, res) => {
     try {
       const { invoiceId, send = true } = req.body;
       if (!invoiceId) return res.status(400).json({ success: false, error: 'invoiceId required' });
@@ -676,7 +695,7 @@ if (stripe) {
     }
   });
 
-  app.post('/api/billing/invoices/list', async (req, res) => {
+  app.post('/api/billing/invoices/list', requireAdmin, async (req, res) => {
     try {
       const { uid, limit = 10 } = req.body;
       const data = await getUserData(uid);
