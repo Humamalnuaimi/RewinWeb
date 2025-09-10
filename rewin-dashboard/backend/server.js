@@ -658,12 +658,23 @@ if (stripe) {
     return snap.exists ? snap.data() : {};
   }
 
+  async function ensureSubscriptionId(uid) {
+    const data = await getUserData(uid);
+    if (data.subscriptionId) return data.subscriptionId;
+    if (!data.stripeCustomerId) return null;
+    const list = await stripe.subscriptions.list({ customer: data.stripeCustomerId, status: 'all', limit: 3 });
+    const sub = list.data.find(s => s.status !== 'canceled') || list.data[0] || null;
+    const subId = sub?.id || null;
+    if (subId) await db.doc(`users/${uid}`).set({ subscriptionId: subId, subscriptionStatus: sub.pause_collection ? 'paused' : (sub.status === 'active' ? 'active' : sub.status) }, { merge: true });
+    return subId;
+  }
+
   app.post('/api/billing/subscription/pause', requireAdmin, async (req, res) => {
     try {
       const { uid } = req.body;
-      const data = await getUserData(uid);
-      if (!data.subscriptionId) return res.status(400).json({ success: false, error: 'No subscriptionId' });
-      const sub = await stripe.subscriptions.update(data.subscriptionId, { pause_collection: { behavior: 'mark_uncollectible' } });
+      const subId = await ensureSubscriptionId(uid);
+      if (!subId) return res.status(400).json({ success: false, error: 'No subscriptionId' });
+      const sub = await stripe.subscriptions.update(subId, { pause_collection: { behavior: 'mark_uncollectible' } });
       await db.doc(`users/${uid}`).set({ subscriptionStatus: 'paused' }, { merge: true });
       res.json({ success: true, subscription: sub });
     } catch (err) {
@@ -675,9 +686,9 @@ if (stripe) {
   app.post('/api/billing/subscription/resume', requireAdmin, async (req, res) => {
     try {
       const { uid } = req.body;
-      const data = await getUserData(uid);
-      if (!data.subscriptionId) return res.status(400).json({ success: false, error: 'No subscriptionId' });
-      const sub = await stripe.subscriptions.update(data.subscriptionId, { pause_collection: '' });
+      const subId = await ensureSubscriptionId(uid);
+      if (!subId) return res.status(400).json({ success: false, error: 'No subscriptionId' });
+      const sub = await stripe.subscriptions.update(subId, { pause_collection: '' });
       await db.doc(`users/${uid}`).set({ subscriptionStatus: 'active' }, { merge: true });
       res.json({ success: true, subscription: sub });
     } catch (err) {
@@ -689,9 +700,9 @@ if (stripe) {
   app.post('/api/billing/subscription/cancel', requireAdmin, async (req, res) => {
     try {
       const { uid, atPeriodEnd = true } = req.body;
-      const data = await getUserData(uid);
-      if (!data.subscriptionId) return res.status(400).json({ success: false, error: 'No subscriptionId' });
-      const sub = await stripe.subscriptions.update(data.subscriptionId, { cancel_at_period_end: !!atPeriodEnd });
+      const subId = await ensureSubscriptionId(uid);
+      if (!subId) return res.status(400).json({ success: false, error: 'No subscriptionId' });
+      const sub = await stripe.subscriptions.update(subId, { cancel_at_period_end: !!atPeriodEnd });
       await db.doc(`users/${uid}`).set({ subscriptionStatus: atPeriodEnd ? 'active' : 'canceled' }, { merge: true });
       res.json({ success: true, subscription: sub });
     } catch (err) {
