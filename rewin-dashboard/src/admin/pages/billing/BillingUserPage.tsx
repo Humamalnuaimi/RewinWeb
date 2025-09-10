@@ -4,6 +4,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase.service';
 import { Copy, ArrowLeft } from 'lucide-react';
 import CustomSelect from '../../shared/components/ui/CustomSelect';
+import ConfirmDialog from '../../shared/components/ui/ConfirmDialog';
 import '../../styles/billing.css';
 
 const api = async (path: string, body: any) => {
@@ -59,6 +60,9 @@ const BillingUserPage: React.FC = () => {
   const [plans, setPlans] = useState<any[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
+  const [showPause, setShowPause] = useState(false);
+  const [showCancel, setShowCancel] = useState(false);
+  const [actionLoading, setActionLoading] = useState<'pause'|'resume'|'cancel'|null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -201,13 +205,13 @@ const BillingUserPage: React.FC = () => {
         <div className="status-actions">
           {statusKey !== 'canceled' && (
             statusKey === 'paused' ? (
-              <button className="btn btn-status resume" onClick={async()=>{ await api('/billing/subscription/resume',{ uid, subscriptionId: user.subscriptionId }); window.location.reload(); }}>Resume</button>
+              <button className="btn btn-status resume" disabled={!user.subscriptionId} onClick={()=> setShowPause(true)}>Resume</button>
             ) : (
-              <button className="btn btn-status pause" onClick={async()=>{ await api('/billing/subscription/pause',{ uid, subscriptionId: user.subscriptionId }); window.location.reload(); }}>Pause</button>
+              <button className="btn btn-status pause" disabled={!user.subscriptionId} onClick={()=> setShowPause(true)}>Pause</button>
             )
           )}
           {statusKey !== 'canceled' && (
-            <button className="btn btn-status danger" onClick={async()=>{ await api('/billing/subscription/cancel',{ uid, subscriptionId: user.subscriptionId }); window.location.reload(); }}>Cancel</button>
+            <button className="btn btn-status danger" disabled={!user.subscriptionId} onClick={()=> setShowCancel(true)}>Cancel</button>
           )}
         </div>
       </div>
@@ -273,6 +277,40 @@ const BillingUserPage: React.FC = () => {
 
       </div>
       )}
+      <ConfirmDialog
+        open={showPause}
+        title={statusKey === 'paused' ? 'Resume subscription?' : 'Pause subscription?'}
+        message={statusKey === 'paused' ? 'The user’s subscription will resume billing.' : 'While paused, invoices will not be collected.'}
+        confirmText={statusKey === 'paused' ? 'Resume' : 'Pause'}
+        tone={statusKey === 'paused' ? 'warning' : 'warning'}
+        loading={actionLoading !== null}
+        onClose={()=>{ if(!actionLoading) setShowPause(false);} }
+        onConfirm={async()=>{
+          if (!user.subscriptionId) { setShowPause(false); return; }
+          setActionLoading(statusKey === 'paused' ? 'resume' : 'pause');
+          try {
+            if (statusKey === 'paused') await api('/billing/subscription/resume',{ uid, subscriptionId: user.subscriptionId });
+            else await api('/billing/subscription/pause',{ uid, subscriptionId: user.subscriptionId });
+            window.location.reload();
+          } finally { setActionLoading(null); }
+        }}
+      />
+
+      <ConfirmDialog
+        open={showCancel}
+        title={'Cancel subscription?'}
+        message={'This will cancel at period end and stop future billing.'}
+        confirmText={'Cancel subscription'}
+        tone={'danger'}
+        loading={actionLoading !== null}
+        onClose={()=>{ if(!actionLoading) setShowCancel(false);} }
+        onConfirm={async()=>{
+          if (!user.subscriptionId) { setShowCancel(false); return; }
+          setActionLoading('cancel');
+          try { await api('/billing/subscription/cancel',{ uid, subscriptionId: user.subscriptionId }); window.location.reload(); }
+          finally { setActionLoading(null); }
+        }}
+      />
     </div>
   );
 };
