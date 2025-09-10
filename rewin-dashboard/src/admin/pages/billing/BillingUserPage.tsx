@@ -146,6 +146,8 @@ const BillingUserPage: React.FC = () => {
   if (!user) return <div className="billing-page">User not found</div>;
 
   const statusKey = user.subscriptionStatus ?? 'none';
+  const hasAssignedPlan = !!(user.priceMonthlyId || user.priceYearlyId || user.priceId);
+  const visStatus = (statusKey === 'active') ? 'active' : (statusKey === 'paused') ? 'paused' : (statusKey === 'canceled') ? 'canceled' : (hasAssignedPlan ? 'active' : 'none');
   const fmt = (cents?: number|null, curr: string = 'usd') => (typeof cents === 'number' ? `$${(cents/100).toFixed(2)} ${curr.toUpperCase()}` : '-');
   const planFromUser = plans.find(p => p.monthlyPriceId === user.priceMonthlyId || p.yearlyPriceId === user.priceYearlyId) || null;
   const monthlyAmt = planFromUser?.monthlyAmount || null;
@@ -170,7 +172,7 @@ const BillingUserPage: React.FC = () => {
               <div className="email-text">{user.email}</div>
             </div>
           </div>
-          <div className={`header-status ${statusKey}`} aria-label={`Status: ${statusKey}`} />
+          <div className={`header-status ${visStatus}`} aria-label={`Status: ${visStatus}`} />
         </div>
       </div>
 
@@ -194,7 +196,7 @@ const BillingUserPage: React.FC = () => {
           </div>
         </div>
         <div className="status-bubble">
-          <div className={`status-dot ${ statusKey === 'active' ? 'green' : statusKey === 'paused' ? 'yellow' : statusKey === 'canceled' ? 'red' : 'red' }`} />
+          <div className={`status-dot ${ visStatus === 'active' ? 'green' : visStatus === 'paused' ? 'yellow' : visStatus === 'canceled' ? 'red' : 'red' }`} />
         </div>
         <div className="status-actions">
           {statusKey !== 'canceled' && (
@@ -223,12 +225,15 @@ const BillingUserPage: React.FC = () => {
           <CustomSelect
             value={selectedPlanId}
             onChange={(id, opt) => {
+              if (id === '__create__') {
+                setSelectedPlanId(''); setSelectedPlan(null); setPriceMonthlyId(''); setPriceYearlyId(''); setMode('create'); return;
+              }
               setSelectedPlanId(id);
               const p = plans.find(pl => pl.productId === id) || null; setSelectedPlan(p);
               setPriceMonthlyId(p?.monthlyPriceId || '');
               setPriceYearlyId(p?.yearlyPriceId || '');
             }}
-            options={(plans || []).map((p:any) => ({ value: p.productId, label: p.productName, subLabel: `${fmt(p.monthlyAmount,p.currency)} / ${fmt(p.yearlyAmount,p.currency)}` }))}
+            options={[{ value: '__create__', label: 'Create a new plan', subLabel: 'Enter custom prices' }, ...((plans || []).map((p:any) => ({ value: p.productId, label: p.productName, subLabel: `${fmt(p.monthlyAmount,p.currency)} / ${fmt(p.yearlyAmount,p.currency)}` })))]}
             placeholder="Select a plan"
           />
 
