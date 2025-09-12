@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { auth, firestore } from '../../firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import './PromotionDetailsPage.css';
+import './UserBillingPage.css';
 
 const fmtMoney = (amount: number | undefined, currency: string | undefined) => {
   if (amount == null) return '—';
@@ -77,55 +79,49 @@ const UserBillingPage: React.FC = () => {
   };
 
   return (
-    <div style={{ minHeight: '100vh', padding: '24px', color: 'white' }}>
+    <div className="billing-page">
       <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          background: 'linear-gradient(135deg, rgba(9,9,121,0.3), rgba(116,75,162,0.28))',
-          border: '1px solid rgba(255,255,255,0.16)', borderRadius: 16, padding: '12px 16px', marginBottom: 16
-        }}>
-          <div style={{ textAlign: 'center', flex: 1 }}>
-            <h2 style={{ margin: 0, fontSize: '2rem', fontWeight: 900, background: 'linear-gradient(135deg, #fff, #c5a7ff)', WebkitBackgroundClip: 'text', color: 'transparent' }}>Billing</h2>
-            <div style={{ opacity: .9 }}>Manage your subscription and payments</div>
+        <div className="billing-header">
+          <div className="header-center">
+            <h1 className="title">Billing</h1>
+            <p className="sub">Manage your subscription and payments</p>
           </div>
         </div>
 
         {/* Plan */}
-        <div style={{ background: 'linear-gradient(135deg, rgba(9,9,121,0.25), rgba(116,75,162,0.25))', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 20, padding: 20, marginBottom: 16, position: 'relative' }}>
-          <div>
-            <h3 style={{ margin: 0, fontSize: '1.25rem' }}>Plan</h3>
-            <div style={{ opacity: .85, marginTop: 6 }}>Your current subscription</div>
-          </div>
+        <div className="billing-card plan">
+          <h3 className="section-title">Plan</h3>
+          <p className="info-meta">Your current subscription</p>
           {loading ? (
-            <div style={{ marginTop: 10, opacity: .85 }}>Loading…</div>
+            <div className="loading-text">Loading…</div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 10 }}>
-              <div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', padding: '10px 12px', borderRadius: 12 }}>
-                <div style={{ opacity: .85 }}>Status</div>
-                <div style={{ fontWeight: 800 }}>{planSummary?.status}</div>
+            <div className="kv-grid">
+              <div className="kv-box">
+                <p className="kv-label">Status</p>
+                <p className="kv-value">{planSummary?.status}</p>
               </div>
-              <div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', padding: '10px 12px', borderRadius: 12 }}>
-                <div style={{ opacity: .85 }}>Interval</div>
-                <div style={{ fontWeight: 800 }}>{planSummary?.interval}</div>
+              <div className="kv-box">
+                <p className="kv-label">Interval</p>
+                <p className="kv-value">{planSummary?.interval}</p>
               </div>
-              <div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', padding: '10px 12px', borderRadius: 12 }}>
-                <div style={{ opacity: .85 }}>Monthly</div>
-                <div style={{ fontWeight: 900, fontSize: '1.1rem' }}>{fmtMoney(planSummary?.monthly || null as any, planSummary?.currency)}</div>
+              <div className="kv-box">
+                <p className="kv-label">Monthly</p>
+                <p className="kv-value money">{fmtMoney(planSummary?.monthly || (null as any), planSummary?.currency)}</p>
               </div>
             </div>
           )}
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 12 }}>
+          <div className="actions-right">
             <button className="btn btn-secondary" onClick={openPortal}>Manage payment methods</button>
           </div>
         </div>
 
         {/* Preferences */}
-        <div style={{ background: 'linear-gradient(135deg, rgba(9,9,121,0.25), rgba(116,75,162,0.25))', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 20, padding: 20, marginBottom: 16 }}>
-          <h3 style={{ margin: 0, fontSize: '1.25rem' }}>Preferences</h3>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
-            <div>
-              <div style={{ fontWeight: 700 }}>Auto pay</div>
-              <div style={{ opacity: .85 }}>Automatically pay invoices when due</div>
+        <div className="billing-card prefs">
+          <h3 className="section-title">Preferences</h3>
+          <div className="pref-row">
+            <div className="pref-meta">
+              <div className="title">Auto pay</div>
+              <div className="desc">Automatically pay invoices when due</div>
             </div>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
               <input type="checkbox" checked={autoPay} onChange={(e)=> setAutoPay(e.target.checked)} />
@@ -135,16 +131,16 @@ const UserBillingPage: React.FC = () => {
         </div>
 
         {/* Invoices */}
-        <div style={{ background: 'linear-gradient(135deg, rgba(9,9,121,0.25), rgba(116,75,162,0.25))', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 20, padding: 20 }}>
-          <h3 style={{ margin: 0, fontSize: '1.25rem' }}>Invoices</h3>
+        <div className="billing-card invoices">
+          <h3 className="section-title">Invoices</h3>
           {invoiceLoading ? (
-            <div style={{ marginTop: 10, opacity: .85 }}>Loading invoices…</div>
+            <div className="loading-text">Loading invoices…</div>
           ) : invoices.length === 0 ? (
-            <div style={{ marginTop: 10, opacity: .85 }}>No invoices yet</div>
+            <div className="loading-text">No invoices yet</div>
           ) : (
-            <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+            <div className="invoice-list">
               {invoices.map((inv:any)=> (
-                <div key={inv.id} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 8, alignItems: 'center', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: '10px 12px' }}>
+                <div key={inv.id} className="invoice-row">
                   <div>#{inv.number || inv.id.slice(-8)}</div>
                   <div style={{ textTransform: 'capitalize' }}>{inv.status}</div>
                   <div>{fmtMoney(inv.total, inv.currency)}</div>
