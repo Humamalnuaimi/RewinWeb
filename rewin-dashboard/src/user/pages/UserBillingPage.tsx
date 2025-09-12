@@ -11,11 +11,12 @@ const fmtMoney = (amount: number | undefined, currency: string | undefined) => {
 };
 
 const api = async (path: string, body: any) => {
-  // Use backend permissive mode (ALLOW_NO_ADMIN_AUTH) for user endpoints
-  const res = await fetch(`/api/billing${path}`, {
+  const origin = window.location.origin.replace(/\/$/, '');
+  const url = `${origin}/api/billing${path}`;
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body || {})
+    body: JSON.stringify(body || {}),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const ct = res.headers.get('content-type') || '';
