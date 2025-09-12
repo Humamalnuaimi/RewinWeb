@@ -142,7 +142,7 @@ const UserBillingPage: React.FC = () => {
               {invoices.map((inv:any)=> (
                 <div key={inv.id} className="invoice-row">
                   <div>#{inv.number || inv.id.slice(-8)}</div>
-                  <div style={{ textTransform: 'capitalize' }}>{inv.status}</div>
+                  <div className="text-capitalize">{inv.status}</div>
                   <div>{fmtMoney(inv.total, inv.currency)}</div>
                   <div>{inv.created ? new Date(inv.created*1000).toLocaleDateString() : ''}</div>
                 </div>
