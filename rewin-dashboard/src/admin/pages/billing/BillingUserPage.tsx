@@ -42,6 +42,10 @@ const api = async (path: string, body: any) => {
   return ct.includes('application/json') ? res.json() : res.text();
 };
 
+const apiNoThrow = async (path: string, body: any) => {
+  try { return await api(path, body); } catch { return null; }
+};
+
 const BillingUserPage: React.FC = () => {
   const { uid } = useParams();
   const navigate = useNavigate();
@@ -287,17 +291,17 @@ const BillingUserPage: React.FC = () => {
         onClose={()=>{ if(!actionLoading) setShowPause(false);} }
         onConfirm={async()=>{
           setActionLoading(statusKey === 'paused' ? 'resume' : 'pause');
-          try {
-            if (statusKey === 'paused') await api('/billing/subscription/resume',{ uid });
-            else await api('/billing/subscription/pause',{ uid });
-            window.location.reload();
-          } catch {
-            // Fallback: update Firestore directly when backend cannot manage subscription
+          const res = statusKey === 'paused'
+            ? await apiNoThrow('/billing/subscription/resume',{ uid })
+            : await apiNoThrow('/billing/subscription/pause',{ uid });
+          if (res) { window.location.reload(); }
+          else {
             try {
               await setDoc(doc(db, 'users', uid!), { subscriptionStatus: statusKey === 'paused' ? 'active' : 'paused' }, { merge: true });
               setUser((u:any)=> ({ ...u, subscriptionStatus: statusKey === 'paused' ? 'active' : 'paused' }));
             } catch {}
-          } finally { setActionLoading(null); setShowPause(false); }
+          }
+          setActionLoading(null); setShowPause(false);
         }}
       />
 
@@ -311,11 +315,12 @@ const BillingUserPage: React.FC = () => {
         onClose={()=>{ if(!actionLoading) setShowCancel(false);} }
         onConfirm={async()=>{
           setActionLoading('cancel');
-          try { await api('/billing/subscription/cancel',{ uid, atPeriodEnd: true }); window.location.reload(); }
-          catch {
+          const res = await apiNoThrow('/billing/subscription/cancel',{ uid, atPeriodEnd: true });
+          if (res) { window.location.reload(); }
+          else {
             try { await setDoc(doc(db, 'users', uid!), { subscriptionStatus: 'canceled' }, { merge: true }); setUser((u:any)=> ({ ...u, subscriptionStatus: 'canceled' })); } catch {}
           }
-          finally { setActionLoading(null); setShowCancel(false); }
+          setActionLoading(null); setShowCancel(false);
         }}
       />
     </div>
