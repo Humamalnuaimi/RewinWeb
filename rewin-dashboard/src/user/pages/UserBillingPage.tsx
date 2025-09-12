@@ -26,6 +26,7 @@ const UserBillingPage: React.FC = () => {
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [autoPay, setAutoPay] = useState<boolean>(true);
   const [savingPref, setSavingPref] = useState(false);
+  const [plans, setPlans] = useState<any[] | null>(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -34,7 +35,15 @@ const UserBillingPage: React.FC = () => {
       setLoading(true);
       try {
         const snap = await getDoc(doc(firestore, 'users', u.uid));
-        const data = snap.exists() ? snap.data() : {};
+        let data = snap.exists() ? snap.data() : {};
+        // Ensure Stripe customer exists for this user so invoices/portal work
+        if (!data.stripeCustomerId) {
+          const created = await apiNoThrow('/create-customer', { uid: u.uid, email: u.email, name: u.displayName });
+          if (created?.customerId) {
+            data = { ...data, stripeCustomerId: created.customerId };
+            await setDoc(doc(firestore, 'users', u.uid), { stripeCustomerId: created.customerId }, { merge: true });
+          }
+        }
         setUserDoc(data);
         setAutoPay(data.autoPay !== false); // default true
       } finally { setLoading(false); }
@@ -51,22 +60,43 @@ const UserBillingPage: React.FC = () => {
       setInvoiceLoading(false);
     };
     load();
-  }, [uid]);
+  }, [uid, userDoc?.stripeCustomerId]);
+
+  // Fetch available plans to resolve price amounts if not present on user doc
+  useEffect(() => {
+    const fetchPlans = async () => {
+      if (plans !== null) return; // already loaded
+      const res = await apiNoThrow('/plans', {});
+      if (res?.plans) setPlans(res.plans);
+    };
+    fetchPlans();
+  }, [plans]);
 
   const planSummary = useMemo(() => {
     if (!userDoc) return null;
+    let monthly = userDoc.monthlyAmount || null;
+    let yearly = userDoc.yearlyAmount || null;
+    let currency = userDoc.currency || 'usd';
+
+    if ((!monthly && !yearly) && plans) {
+      const p = plans.find((pl: any) => pl.monthlyPriceId === userDoc.priceMonthlyId || pl.yearlyPriceId === userDoc.priceYearlyId || pl.monthlyPriceId === userDoc.priceId || pl.yearlyPriceId === userDoc.priceId);
+      if (p) { monthly = p.monthlyAmount ?? monthly; yearly = p.yearlyAmount ?? yearly; currency = p.currency || currency; }
+    }
+
     return {
       status: userDoc.subscriptionStatus || 'none',
-      interval: userDoc.billingInterval || '-',
-      monthly: userDoc.monthlyAmount || null,
-      yearly: userDoc.yearlyAmount || null,
-      currency: userDoc.currency || 'usd',
+      interval: userDoc.billingInterval || (userDoc.priceYearlyId ? 'year' : userDoc.priceMonthlyId ? 'month' : '-'),
+      monthly,
+      yearly,
+      currency,
     };
-  }, [userDoc]);
+  }, [userDoc, plans]);
 
   const openPortal = async () => {
     if (!uid) return;
     const returnUrl = window.location.origin + '/billing';
+    // Ensure customer exists before opening portal
+    if (!userDoc?.stripeCustomerId) await apiNoThrow('/create-customer', { uid, email: auth.currentUser?.email, name: auth.currentUser?.displayName });
     const res = await apiNoThrow('/portal', { uid, returnUrl });
     if (res?.url) window.location.href = res.url;
   };
