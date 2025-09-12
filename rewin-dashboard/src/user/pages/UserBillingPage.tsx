@@ -11,7 +11,13 @@ const fmtMoney = (amount: number | undefined, currency: string | undefined) => {
 };
 
 const api = async (path: string, body: any) => {
-  const res = await fetch(`/api/billing${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  let token = '';
+  try { token = await auth.currentUser?.getIdToken?.() || ''; } catch {}
+  const res = await fetch(`/api/billing${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(body || {})
+  });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const ct = res.headers.get('content-type') || '';
   return ct.includes('application/json') ? res.json() : res.text();
