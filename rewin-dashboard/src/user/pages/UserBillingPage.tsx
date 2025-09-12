@@ -32,6 +32,8 @@ const UserBillingPage: React.FC = () => {
   const [autoPay, setAutoPay] = useState<boolean>(true);
   const [savingPref, setSavingPref] = useState(false);
   const [plans, setPlans] = useState<any[] | null>(null);
+  const [changingPlan, setChangingPlan] = useState(false);
+  const [portalError, setPortalError] = useState<string | null>(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -99,11 +101,17 @@ const UserBillingPage: React.FC = () => {
 
   const openPortal = async () => {
     if (!uid) return;
+    setPortalError(null);
     const returnUrl = window.location.origin + '/billing';
-    // Ensure customer exists before opening portal
     if (!userDoc?.stripeCustomerId) await apiNoThrow('/create-customer', { uid, email: auth.currentUser?.email, name: auth.currentUser?.displayName });
-    const res = await apiNoThrow('/portal', { uid, returnUrl });
-    if (res?.url) window.location.href = res.url;
+    try {
+      const res = await api('/portal', { uid, returnUrl });
+      if (res?.url) window.location.href = res.url;
+    } catch (e:any) {
+      const msg = String(e?.message || 'Unable to open payment portal');
+      setPortalError(msg);
+      alert('Stripe Customer Portal is not configured. Please enable a default configuration in Stripe Dashboard > Settings > Billing > Customer portal (test mode).');
+    }
   };
 
   const saveAutoPay = async () => {
@@ -149,6 +157,44 @@ const UserBillingPage: React.FC = () => {
             <button className="btn btn-secondary" onClick={openPortal}>Manage payment methods</button>
           </div>
         </div>
+
+        {/* Manage plan */}
+        {(userDoc?.priceMonthlyId || userDoc?.priceYearlyId || userDoc?.priceId) && (
+          <div className="billing-card prefs">
+            <h3 className="section-title">Manage plan</h3>
+            <div className="pref-row">
+              <div className="pref-meta">
+                <div className="title">Switch billing interval</div>
+                <div className="desc">Choose monthly or yearly</div>
+              </div>
+              <div style={{ display:'inline-flex', alignItems:'center', gap:12 }}>
+                <label style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
+                  <input type="radio" name="interval" defaultChecked={(planSummary?.interval||'month')==='month'} onChange={()=>{}} />
+                  <span>Monthly</span>
+                </label>
+                <label style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
+                  <input type="radio" name="interval" defaultChecked={(planSummary?.interval||'month')==='year'} onChange={()=>{}} />
+                  <span>Yearly</span>
+                </label>
+                <button className="btn btn-primary" disabled={changingPlan} onClick={async()=>{
+                  if (!uid) return;
+                  setChangingPlan(true);
+                  try {
+                    const wantYear = (document.querySelector('input[name="interval"]:checked') as HTMLInputElement)?.nextSibling?.textContent?.toLowerCase().includes('year');
+                    const priceId = wantYear ? (userDoc?.priceYearlyId || userDoc?.priceId) : (userDoc?.priceMonthlyId || userDoc?.priceId);
+                    if (!priceId) throw new Error('Plan price not available');
+                    const successUrl = window.location.origin + '/billing?updated=1';
+                    const cancelUrl = window.location.origin + '/billing?canceled=1';
+                    const res = await api('/checkout', { uid, priceId, mode: 'subscription', successUrl, cancelUrl, email: auth.currentUser?.email });
+                    if (res?.url) window.location.href = res.url;
+                  } catch (e:any) {
+                    alert(e?.message || 'Unable to change plan');
+                  } finally { setChangingPlan(false); }
+                }}>Change plan</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Preferences */}
         <div className="billing-card prefs">
