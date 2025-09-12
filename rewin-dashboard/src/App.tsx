@@ -1582,7 +1582,7 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
       console.log('📞 Unique phone numbers:', Array.from(uniquePhoneNumbers).slice(0, 5), '...');
       
       // Debug web_customers integration
-      console.log('🔍 WEB_CUSTOMERS INTEGRATION:');
+      console.log('�� WEB_CUSTOMERS INTEGRATION:');
       console.log('- Collection: web_customers ✅');
       console.log('- Multi-outlet support: visitedOutlets array ✅');
       
@@ -9344,25 +9344,35 @@ const AppRoutes: React.FC = () => {
       />
       
       {/* User Dashboard Route */}
-      <Route 
-        path="/dashboard" 
+      <Route
+        path="/dashboard"
         element={
           <UserProtectedRoute>
             <UserDashboard />
           </UserProtectedRoute>
-        } 
+        }
       />
-      
+      {/* User Billing Route */}
+      <Route
+        path="/billing"
+        element={
+          <UserProtectedRoute>
+            {/** lazy import to avoid circulars is not necessary here */}
+            {React.createElement(require('./user/pages/UserBillingPage').default)}
+          </UserProtectedRoute>
+        }
+      />
+
       {/* Root Route - Redirect based on user type */}
-      <Route 
-        path="/" 
+      <Route
+        path="/"
         element={
           user ? (
             isAdmin ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/dashboard" replace />
           ) : (
             <Navigate to="/login" replace />
           )
-        } 
+        }
       />
     </Routes>
   );
