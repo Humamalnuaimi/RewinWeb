@@ -29,6 +29,7 @@
 .invoice-list{display:grid;gap:.6rem;margin-top:.6rem}
 .invoice-row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:.6rem;align-items:center;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:.6rem .75rem}
 
+.text-capitalize{text-transform:capitalize}
 @media (max-width:700px){
   .invoice-row{grid-template-columns:1fr 1fr;}
 }
