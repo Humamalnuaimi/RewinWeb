@@ -205,13 +205,13 @@ const BillingUserPage: React.FC = () => {
         <div className="status-actions">
           {statusKey !== 'canceled' && (
             statusKey === 'paused' ? (
-              <button className="btn btn-status resume" disabled={!user.subscriptionId} onClick={()=> setShowPause(true)}>Resume</button>
+              <button className="btn btn-status resume" onClick={()=> setShowPause(true)}>Resume</button>
             ) : (
-              <button className="btn btn-status pause" disabled={!user.subscriptionId} onClick={()=> setShowPause(true)}>Pause</button>
+              <button className="btn btn-status pause" onClick={()=> setShowPause(true)}>Pause</button>
             )
           )}
           {statusKey !== 'canceled' && (
-            <button className="btn btn-status danger" disabled={!user.subscriptionId} onClick={()=> setShowCancel(true)}>Cancel</button>
+            <button className="btn btn-status danger" onClick={()=> setShowCancel(true)}>Cancel</button>
           )}
         </div>
       </div>
@@ -286,11 +286,10 @@ const BillingUserPage: React.FC = () => {
         loading={actionLoading !== null}
         onClose={()=>{ if(!actionLoading) setShowPause(false);} }
         onConfirm={async()=>{
-          if (!user.subscriptionId) { setShowPause(false); return; }
           setActionLoading(statusKey === 'paused' ? 'resume' : 'pause');
           try {
-            if (statusKey === 'paused') await api('/billing/subscription/resume',{ uid, subscriptionId: user.subscriptionId });
-            else await api('/billing/subscription/pause',{ uid, subscriptionId: user.subscriptionId });
+            if (statusKey === 'paused') await api('/billing/subscription/resume',{ uid });
+            else await api('/billing/subscription/pause',{ uid });
             window.location.reload();
           } finally { setActionLoading(null); }
         }}
@@ -305,9 +304,8 @@ const BillingUserPage: React.FC = () => {
         loading={actionLoading !== null}
         onClose={()=>{ if(!actionLoading) setShowCancel(false);} }
         onConfirm={async()=>{
-          if (!user.subscriptionId) { setShowCancel(false); return; }
           setActionLoading('cancel');
-          try { await api('/billing/subscription/cancel',{ uid, subscriptionId: user.subscriptionId }); window.location.reload(); }
+          try { await api('/billing/subscription/cancel',{ uid, atPeriodEnd: true }); window.location.reload(); }
           finally { setActionLoading(null); }
         }}
       />
