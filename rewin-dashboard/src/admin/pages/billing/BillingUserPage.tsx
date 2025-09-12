@@ -134,8 +134,44 @@ const BillingUserPage: React.FC = () => {
       return;
     }
     const r = await api('/billing/set-plan', { uid, priceId: priceId || selectedPrice || null, priceMonthlyId: priceMonthlyId || null, priceYearlyId: priceYearlyId || null, billingInterval: interval });
-    await setDoc(doc(db, 'users', uid!), { priceId: r.priceId, priceMonthlyId: r.priceMonthlyId, priceYearlyId: r.priceYearlyId, billingInterval: r.billingInterval }, { merge: true });
-    setUser((p:any)=> ({ ...p, priceId: r.priceId, priceMonthlyId: r.priceMonthlyId, priceYearlyId: r.priceYearlyId, billingInterval: r.billingInterval }));
+
+    // Determine amounts/currency
+    let monthlyAmount: number | null = null;
+    let yearlyAmount: number | null = null;
+    let currency: string | undefined = 'usd';
+
+    if (selectedPlan) {
+      monthlyAmount = selectedPlan?.monthlyAmount ?? null;
+      yearlyAmount = selectedPlan?.yearlyAmount ?? null;
+      currency = selectedPlan?.currency || 'usd';
+    } else if (!selectedPlanId && (priceMonthlyId || priceYearlyId)) {
+      const m = Number(monthlyUsd || 0);
+      const y = Number(yearlyUsd || 0);
+      monthlyAmount = Number.isFinite(m) && m > 0 ? Math.round(m * 100) : null;
+      yearlyAmount = Number.isFinite(y) && y > 0 ? Math.round(y * 100) : null;
+      currency = 'usd';
+    }
+
+    await setDoc(doc(db, 'users', uid!), {
+      priceId: r.priceId,
+      priceMonthlyId: r.priceMonthlyId,
+      priceYearlyId: r.priceYearlyId,
+      billingInterval: r.billingInterval,
+      ...(monthlyAmount != null ? { monthlyAmount } : {}),
+      ...(yearlyAmount != null ? { yearlyAmount } : {}),
+      ...(currency ? { currency } : {}),
+    }, { merge: true });
+
+    setUser((p:any)=> ({
+      ...p,
+      priceId: r.priceId,
+      priceMonthlyId: r.priceMonthlyId,
+      priceYearlyId: r.priceYearlyId,
+      billingInterval: r.billingInterval,
+      monthlyAmount: monthlyAmount ?? p.monthlyAmount,
+      yearlyAmount: yearlyAmount ?? p.yearlyAmount,
+      currency: currency || p.currency,
+    }));
     setSaved(true);
     setTimeout(()=>setSaved(false), 1500);
   };
