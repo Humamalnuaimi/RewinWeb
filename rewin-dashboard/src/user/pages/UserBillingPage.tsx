@@ -107,7 +107,10 @@ const UserBillingPage: React.FC = () => {
     if (!userDoc?.stripeCustomerId) await apiNoThrow('/create-customer', { uid, email: auth.currentUser?.email, name: auth.currentUser?.displayName });
     try {
       const res = await api('/portal', { uid, returnUrl });
-      if (res?.url) window.location.href = res.url;
+      if (res?.url) {
+        try { (window.top || window).location.href = res.url; }
+        catch { window.open(res.url, '_blank', 'noopener,noreferrer'); }
+      }
     } catch (e:any) {
       const msg = String(e?.message || 'Unable to open payment portal');
       setPortalError(msg);
@@ -187,7 +190,10 @@ const UserBillingPage: React.FC = () => {
                     const successUrl = window.location.origin + '/billing?updated=1';
                     const cancelUrl = window.location.origin + '/billing?canceled=1';
                     const res = await api('/checkout', { uid, priceId, mode: 'subscription', successUrl, cancelUrl, email: auth.currentUser?.email });
-                    if (res?.url) window.location.href = res.url;
+                    if (res?.url) {
+                      try { (window.top || window).location.href = res.url; }
+                      catch { window.open(res.url, '_blank', 'noopener,noreferrer'); }
+                    }
                   } catch (e:any) {
                     alert(e?.message || 'Unable to change plan');
                   } finally { setChangingPlan(false); }
