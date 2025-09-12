@@ -11,11 +11,10 @@ const fmtMoney = (amount: number | undefined, currency: string | undefined) => {
 };
 
 const api = async (path: string, body: any) => {
-  let token = '';
-  try { token = await auth.currentUser?.getIdToken?.() || ''; } catch {}
+  // Use backend permissive mode (ALLOW_NO_ADMIN_AUTH) for user endpoints
   const res = await fetch(`/api/billing${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body || {})
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
