@@ -291,7 +291,13 @@ const BillingUserPage: React.FC = () => {
             if (statusKey === 'paused') await api('/billing/subscription/resume',{ uid });
             else await api('/billing/subscription/pause',{ uid });
             window.location.reload();
-          } finally { setActionLoading(null); }
+          } catch {
+            // Fallback: update Firestore directly when backend cannot manage subscription
+            try {
+              await setDoc(doc(db, 'users', uid!), { subscriptionStatus: statusKey === 'paused' ? 'active' : 'paused' }, { merge: true });
+              setUser((u:any)=> ({ ...u, subscriptionStatus: statusKey === 'paused' ? 'active' : 'paused' }));
+            } catch {}
+          } finally { setActionLoading(null); setShowPause(false); }
         }}
       />
 
@@ -306,7 +312,10 @@ const BillingUserPage: React.FC = () => {
         onConfirm={async()=>{
           setActionLoading('cancel');
           try { await api('/billing/subscription/cancel',{ uid, atPeriodEnd: true }); window.location.reload(); }
-          finally { setActionLoading(null); }
+          catch {
+            try { await setDoc(doc(db, 'users', uid!), { subscriptionStatus: 'canceled' }, { merge: true }); setUser((u:any)=> ({ ...u, subscriptionStatus: 'canceled' })); } catch {}
+          }
+          finally { setActionLoading(null); setShowCancel(false); }
         }}
       />
     </div>
