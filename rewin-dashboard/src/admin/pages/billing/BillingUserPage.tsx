@@ -291,11 +291,15 @@ const BillingUserPage: React.FC = () => {
         onClose={()=>{ if(!actionLoading) setShowPause(false);} }
         onConfirm={async()=>{
           setActionLoading(statusKey === 'paused' ? 'resume' : 'pause');
-          const res = statusKey === 'paused'
-            ? await apiNoThrow('/billing/subscription/resume',{ uid })
-            : await apiNoThrow('/billing/subscription/pause',{ uid });
-          if (res) { window.location.reload(); }
-          else {
+          let didServer = false;
+          if (user?.subscriptionId) {
+            const res = statusKey === 'paused'
+              ? await apiNoThrow('/billing/subscription/resume',{ uid })
+              : await apiNoThrow('/billing/subscription/pause',{ uid });
+            didServer = !!res;
+            if (didServer) { window.location.reload(); }
+          }
+          if (!didServer) {
             try {
               await setDoc(doc(db, 'users', uid!), { subscriptionStatus: statusKey === 'paused' ? 'active' : 'paused' }, { merge: true });
               setUser((u:any)=> ({ ...u, subscriptionStatus: statusKey === 'paused' ? 'active' : 'paused' }));
@@ -315,9 +319,13 @@ const BillingUserPage: React.FC = () => {
         onClose={()=>{ if(!actionLoading) setShowCancel(false);} }
         onConfirm={async()=>{
           setActionLoading('cancel');
-          const res = await apiNoThrow('/billing/subscription/cancel',{ uid, atPeriodEnd: true });
-          if (res) { window.location.reload(); }
-          else {
+          let didServer = false;
+          if (user?.subscriptionId) {
+            const res = await apiNoThrow('/billing/subscription/cancel',{ uid, atPeriodEnd: true });
+            didServer = !!res;
+            if (didServer) { window.location.reload(); }
+          }
+          if (!didServer) {
             try { await setDoc(doc(db, 'users', uid!), { subscriptionStatus: 'canceled' }, { merge: true }); setUser((u:any)=> ({ ...u, subscriptionStatus: 'canceled' })); } catch {}
           }
           setActionLoading(null); setShowCancel(false);
