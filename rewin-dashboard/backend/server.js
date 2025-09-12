@@ -673,9 +673,12 @@ if (stripe) {
     try {
       const { uid } = req.body;
       const subId = await ensureSubscriptionId(uid);
-      if (!subId) return res.status(400).json({ success: false, error: 'No subscriptionId' });
+      if (!subId) {
+        if (db) await db.doc(`users/${uid}`).set({ subscriptionStatus: 'paused' }, { merge: true });
+        return res.json({ success: true, subscription: null, note: 'no-stripe-subscription' });
+      }
       const sub = await stripe.subscriptions.update(subId, { pause_collection: { behavior: 'mark_uncollectible' } });
-      await db.doc(`users/${uid}`).set({ subscriptionStatus: 'paused' }, { merge: true });
+      if (db) await db.doc(`users/${uid}`).set({ subscriptionStatus: 'paused' }, { merge: true });
       res.json({ success: true, subscription: sub });
     } catch (err) {
       console.error('pause error:', err);
@@ -687,9 +690,12 @@ if (stripe) {
     try {
       const { uid } = req.body;
       const subId = await ensureSubscriptionId(uid);
-      if (!subId) return res.status(400).json({ success: false, error: 'No subscriptionId' });
+      if (!subId) {
+        if (db) await db.doc(`users/${uid}`).set({ subscriptionStatus: 'active' }, { merge: true });
+        return res.json({ success: true, subscription: null, note: 'no-stripe-subscription' });
+      }
       const sub = await stripe.subscriptions.update(subId, { pause_collection: '' });
-      await db.doc(`users/${uid}`).set({ subscriptionStatus: 'active' }, { merge: true });
+      if (db) await db.doc(`users/${uid}`).set({ subscriptionStatus: 'active' }, { merge: true });
       res.json({ success: true, subscription: sub });
     } catch (err) {
       console.error('resume error:', err);
@@ -701,9 +707,12 @@ if (stripe) {
     try {
       const { uid, atPeriodEnd = true } = req.body;
       const subId = await ensureSubscriptionId(uid);
-      if (!subId) return res.status(400).json({ success: false, error: 'No subscriptionId' });
+      if (!subId) {
+        if (db) await db.doc(`users/${uid}`).set({ subscriptionStatus: 'canceled' }, { merge: true });
+        return res.json({ success: true, subscription: null, note: 'no-stripe-subscription' });
+      }
       const sub = await stripe.subscriptions.update(subId, { cancel_at_period_end: !!atPeriodEnd });
-      await db.doc(`users/${uid}`).set({ subscriptionStatus: atPeriodEnd ? 'active' : 'canceled' }, { merge: true });
+      if (db) await db.doc(`users/${uid}`).set({ subscriptionStatus: atPeriodEnd ? 'active' : 'canceled' }, { merge: true });
       res.json({ success: true, subscription: sub });
     } catch (err) {
       console.error('cancel error:', err);
