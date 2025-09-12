@@ -9288,6 +9288,9 @@ const UserProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children 
   return user ? <>{children}</> : <Navigate to="/login" replace />;
 };
 
+// Lazy loaded pages
+const UserBillingPageLazy = React.lazy(() => import('./user/pages/UserBillingPage'));
+
 // App Routes Component
 const AppRoutes: React.FC = () => {
   const { user, isAdmin } = useAuth();
@@ -9357,8 +9360,9 @@ const AppRoutes: React.FC = () => {
         path="/billing"
         element={
           <UserProtectedRoute>
-            {/** lazy import to avoid circulars is not necessary here */}
-            {React.createElement(require('./user/pages/UserBillingPage').default)}
+            <React.Suspense fallback={<div className="loading-spinner"><div className="spinner"></div></div>}>
+              <UserBillingPageLazy />
+            </React.Suspense>
           </UserProtectedRoute>
         }
       />
