@@ -1,0 +1,34 @@
+.billing-page{padding:2rem;min-height:100vh;color:white;background:transparent;font-family:Inter,system-ui,Avenir,Helvetica,Arial,sans-serif}
+
+/* Header uses same look & feel as other user pages */
+.billing-header{margin-bottom:1.5rem;display:flex;align-items:center;justify-content:center;position:relative;background:rgba(255,255,255,0.1);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.2);border-radius:20px;padding:1rem 1.25rem;box-shadow:0 8px 40px rgba(0,0,0,0.1)}
+.billing-header .title{font-size:2rem;font-weight:800;margin:0 0 .25rem 0;letter-spacing:.5px;text-shadow:2px 2px 4px rgba(0,0,0,.3)}
+.billing-header .sub{margin:0;color:rgba(255,255,255,.9);font-weight:500}
+
+/* Cards */
+.billing-card{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:16px;padding:1.25rem;margin-bottom:1.5rem;backdrop-filter:blur(18px);box-shadow:0 8px 32px rgba(0,0,0,.12)}
+.billing-card.plan{border-top:4px solid #64748b}
+.billing-card.prefs{border-top:4px solid #10b981}
+.billing-card.invoices{border-top:4px solid #3b82f6}
+.section-title{color:white;margin:0 0 .75rem 0;font-size:1.1rem}
+
+/* Key/Value grid */
+.kv-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem}
+.kv-box{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);padding:.75rem .9rem;border-radius:12px}
+.kv-label{color:rgba(255,255,255,.8);font-size:.9rem;margin:0 0 .25rem 0}
+.kv-value{color:#fff;font-weight:800}
+.kv-value.money{font-size:1.1rem}
+.actions-right{display:flex;gap:10px;justify-content:flex-end;margin-top:.75rem}
+
+/* Preferences */
+.pref-row{display:flex;align-items:center;justify-content:space-between;gap:1rem}
+.pref-meta .title{font-weight:700}
+.pref-meta .desc{color:rgba(255,255,255,.85)}
+
+/* Invoices */
+.invoice-list{display:grid;gap:.6rem;margin-top:.6rem}
+.invoice-row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:.6rem;align-items:center;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:.6rem .75rem}
+
+@media (max-width:700px){
+  .invoice-row{grid-template-columns:1fr 1fr;}
+}
