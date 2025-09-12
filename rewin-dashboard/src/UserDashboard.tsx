@@ -8832,8 +8832,26 @@ const Dashboard = ({ user, onLogout }: { user: User; onLogout: () => void }) => 
                 <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>Click to manage outlets →</div>
               </div>
               
+              {/* Billing Card */}
+              <div
+                onClick={() => { window.location.href = '/billing'; }}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  color: 'white', padding: '2.5rem', borderRadius: '20px', boxShadow: '0 8px 40px rgba(0, 0, 0, 0.1)', position: 'relative', overflow: 'hidden', backdropFilter: 'blur(20px)', border: '1px solid rgba(255, 255, 255, 0.2)', borderTop: '4px solid #22c55e', cursor: 'pointer', transition: 'all 0.3s ease', transform: 'translateY(0)'
+                }}
+                onMouseEnter={(e) => { const card = e.currentTarget as HTMLElement; card.style.transform = 'translateY(-2px)'; card.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.15), 0 0 40px rgba(34,197,94,0.3)'; }}
+                onMouseLeave={(e) => { const card = e.currentTarget as HTMLElement; card.style.transform = 'translateY(0)'; card.style.boxShadow = '0 8px 40px rgba(0, 0, 0, 0.1)'; }}
+              >
+                <div data-role="icon" style={{ position: 'absolute', top: '20px', right: '20px', width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255, 255, 255, 0.1)', color: '#22c55e', zIndex: 2 }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4H4V6h16v2zM4 10h16v8H4v-8zm4 3h4v2H8v-2z"/></svg>
+                </div>
+                <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', opacity: 0.9 }}>Billing</h3>
+                <p style={{ fontSize: '1.8rem', fontWeight: '700', margin: 0, color: '#22c55e' }}>Subscription • Invoices</p>
+                <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>View your plan and payments →</div>
+              </div>
+
               {/* Three-Tier Rewards System Card */}
-              <div 
+              <div
               onClick={() => handleCardClick('sms-marketing')}
               style={{
                 background: 'rgba(255, 255, 255, 0.1)',
