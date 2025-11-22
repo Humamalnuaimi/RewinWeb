@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore } from "firebase/firestore";
 import { getDatabase } from "firebase/database";
 import { getFunctions } from "firebase/functions";
 
@@ -21,8 +21,11 @@ const app = initializeApp(firebaseConfig);
 
 // Initialize Firebase services
 export const auth = getAuth(app);
-export const firestore = getFirestore(app);
+export const firestore = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+  useFetchStreams: false
+});
 export const database = getDatabase(app);
 export const functions = getFunctions(app, 'us-central1');
 
-export default app; 
+export default app;

@@ -15,7 +15,8 @@ import {
   ArrowUpRight,
   Eye,
   ShoppingBag,
-  LogOut
+  LogOut,
+  CreditCard
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import AuthService from '../../services/firebase.service';
@@ -766,6 +767,50 @@ const DashboardPage: React.FC = () => {
               <ShoppingBag size={28} color="#f59e0b" />
             </div>
             <span>Manage Customers</span>
+          </button>
+
+          {/* Billing */}
+          <button onClick={() => navigate('/admin/billing')} style={{
+            width: '100%',
+            padding: '1.5rem',
+            background: 'rgba(255, 255, 255, 0.08)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            borderRadius: '16px',
+            color: 'white',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '1rem',
+            transition: 'all 0.3s ease',
+            fontSize: '0.95rem',
+            fontWeight: '500',
+            backdropFilter: 'blur(10px)',
+            textDecoration: 'none'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+            e.currentTarget.style.transform = 'translateY(-5px)';
+            e.currentTarget.style.boxShadow = '0 10px 30px rgba(99,102,241,0.25)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}>
+            <div style={{
+              width: '60px',
+              height: '60px',
+              background: 'rgba(99,102,241, 0.2)',
+              borderRadius: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px solid rgba(99,102,241, 0.3)'
+            }}>
+              <CreditCard size={28} color="#818cf8" />
+            </div>
+            <span>Billing</span>
           </button>
         </div>
       </div>

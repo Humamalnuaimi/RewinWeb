@@ -44,9 +44,7 @@ export class PromotionService {
         throw new Error('Promotion title is required');
       }
       
-      if (!promotionData.description || !promotionData.description.trim()) {
-        throw new Error('Promotion description is required');
-      }
+      // Description is optional; default to empty string
       
       if (!promotionData.discountAmount || promotionData.discountAmount <= 0) {
         throw new Error('Discount amount must be greater than 0');
@@ -73,7 +71,7 @@ export class PromotionService {
       const payload = {
           // Required fields for mobile app
           title: promotionData.title,
-          description: promotionData.description || '',
+          description: (promotionData.description ?? '').toString(),
           discountType: promotionData.discountType, // "dollar" or "percentage"
           discountAmount: promotionData.discountAmount,
           minimumPurchase: promotionData.minimumPurchase || 0,
@@ -211,16 +209,59 @@ export class PromotionService {
     }
   }
 
-  // Delete promotion (app handles assignments automatically)
+  // Delete promotion and ALL assignments created from it
   static async deletePromotion(promotionId) {
     try {
       const user = auth.currentUser;
       if (!user) throw new Error('No authenticated user');
 
-      // Only delete the main promotion - mobile app handles assignment logic
+      // 1) Delete master promotion
       await deleteDoc(doc(firestore, 'users', user.uid, 'promotions', promotionId));
 
-      console.log('✅ Promotion deleted:', promotionId);
+      let deletedCount = 0;
+
+      // 2a) Delete flat assignments in users/{uid}/customerPromotions
+      {
+        const flatRef = collection(firestore, 'users', user.uid, 'customerPromotions');
+        const flatQuery = query(flatRef, where('masterPromotionId', '==', promotionId));
+        const flatSnap = await getDocs(flatQuery);
+        for (const d of flatSnap.docs) { await deleteDoc(d.ref); deletedCount++; }
+      }
+
+      // 2b) Delete nested assignments in users path (legacy structure)
+      {
+        const customersRef = collection(firestore, 'users', user.uid, 'customerPromotions');
+        const customersSnapshot = await getDocs(customersRef);
+        for (const customerDoc of customersSnapshot.docs) {
+          const customerId = customerDoc.id;
+          const promosRef = collection(firestore, 'users', user.uid, 'customerPromotions', customerId, 'promotions');
+          const q = query(promosRef, where('masterPromotionId', '==', promotionId));
+          const promosSnap = await getDocs(q);
+          for (const p of promosSnap.docs) {
+            await deleteDoc(p.ref);
+            deletedCount++;
+          }
+        }
+      }
+
+      // 3) Mirror delete in businesses path (for mobile app)
+      const bizId = await this.getBusinessIdForUser(user.uid);
+      if (bizId) {
+        const bizCustomersRef = collection(firestore, 'businesses', bizId, 'customerPromotions');
+        const bizCustomersSnap = await getDocs(bizCustomersRef);
+        for (const customerDoc of bizCustomersSnap.docs) {
+          const customerId = customerDoc.id;
+          const promosRef = collection(firestore, 'businesses', bizId, 'customerPromotions', customerId, 'promotions');
+          const q = query(promosRef, where('masterPromotionId', '==', promotionId));
+          const promosSnap = await getDocs(q);
+          for (const p of promosSnap.docs) {
+            await deleteDoc(p.ref);
+            deletedCount++;
+          }
+        }
+      }
+
+      console.log(`✅ Promotion deleted and ${deletedCount} customer assignments removed`);
     } catch (error) {
       console.error('❌ Error deleting promotion:', error);
       throw error;
@@ -283,20 +324,13 @@ export class PromotionService {
       reasons: []
     };
 
-    // Check outlet targeting
-    // If targetOutlets is empty array, it means "all outlets" are targeted
+    // Check outlet targeting (HOME OUTLET ONLY when specific outlets are chosen)
+    // - Empty targetOutlets [] = all outlets, INCLUDE customers even if they have no home outlet
+    const homeOutletId = customer.outletId || (customer.outlet && customer.outlet.id) || null;
     if (promotion.targetOutlets?.length > 0) {
-      const customerOutletId =
-        customer.outletId ||
-        customer.checkInOutletId ||
-        customer.preferredOutlet ||
-        customer.lastVisitOutlet ||
-        (customer.outlet && customer.outlet.id) ||
-        null;
-
-      if (!customerOutletId || !promotion.targetOutlets.includes(customerOutletId)) {
+      if (!homeOutletId || !promotion.targetOutlets.includes(homeOutletId)) {
         eligibility.eligible = false;
-        eligibility.reasons.push('Customer outlet not in target outlets');
+        eligibility.reasons.push('Customer home outlet not in target outlets');
       }
     }
 

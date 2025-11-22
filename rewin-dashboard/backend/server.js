@@ -7,34 +7,102 @@ const express = require('express');
 const cors = require('cors');
 const { google } = require('googleapis');
 const admin = require('firebase-admin');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Stripe setup
+let stripe = null;
+try {
+  // Resolve from multiple envs and validate
+  let stripeKey = process.env.STRIPE_SECRET_KEY || process.env.Stripe_Secret_key || process.env.STRIPE_KEY || '';
+  if (stripeKey && stripeKey.startsWith('REPLACE_')) {
+    // Builder placeholder not resolved in this runtime
+    console.warn('⚠️ Stripe key placeholder detected; billing routes will be disabled');
+    stripeKey = '';
+  }
+  if (stripeKey && !/^sk_(test|live)_/i.test(stripeKey)) {
+    console.warn('⚠️ STRIPE key does not look like sk_...; disabling billing');
+    stripeKey = '';
+  }
+  if (stripeKey) {
+    stripe = require('stripe')(stripeKey);
+    console.log('✅ Stripe initialized');
+  } else {
+    console.log('ℹ️ STRIPE_SECRET_KEY not set; billing routes will be disabled');
+  }
+} catch (e) {
+  console.error('❌ Stripe init error:', e);
+}
+
 // Middleware
 app.use(cors());
+// Use raw body for Stripe webhook verification
+app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
+
+// Admin auth middleware using Firebase ID tokens
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'alnuaimi.humam@gmail.com').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+async function requireAdmin(req, res, next) {
+  try {
+    if (!admin.apps.length) {
+      if (process.env.ALLOW_NO_ADMIN_AUTH === 'true') return next();
+      return res.status(500).json({ success: false, error: 'Firebase Admin not initialized on server' });
+    }
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!token) {
+      if (process.env.ALLOW_NO_ADMIN_AUTH === 'true') return next();
+      return res.status(401).json({ success: false, error: 'Missing auth token' });
+    }
+    const decoded = await admin.auth().verifyIdToken(token);
+    const email = (decoded.email || '').toLowerCase();
+    const isAdmin = decoded.admin === true || ADMIN_EMAILS.includes(email);
+    if (!isAdmin) return res.status(403).json({ success: false, error: 'Forbidden' });
+    req.user = { uid: decoded.uid, email, isAdmin };
+    next();
+  } catch (e) {
+    if (process.env.ALLOW_NO_ADMIN_AUTH === 'true') return next();
+    res.status(401).json({ success: false, error: 'Invalid or expired token' });
+  }
+}
 
 // Initialize Firebase Admin SDK (matching old admin panel approach)
 try {
-  // Try to load from secure location first, then fallback to environment variable
+  // Load service account from several locations to support different setups
   let serviceAccount;
-  const keyPath = process.env.FIREBASE_SERVICE_ACCOUNT_KEY_PATH || `${require('os').homedir()}/firebase-keys/serviceAccountKey.json`;
-  
-  try {
-    serviceAccount = require(keyPath);
-    console.log('✅ Service account loaded from:', keyPath);
-  } catch (fileError) {
-    // Fallback to environment variable (for production deployment)
-    if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-      console.log('✅ Service account loaded from environment variable');
-    } else {
-      throw new Error('No service account key found. Please set FIREBASE_SERVICE_ACCOUNT_KEY_PATH or FIREBASE_SERVICE_ACCOUNT_KEY environment variable.');
-    }
+  const candidatePaths = [
+    process.env.FIREBASE_SERVICE_ACCOUNT_KEY_PATH,
+    path.join(require('os').homedir(), 'firebase-keys', 'serviceAccountKey.json'),
+    path.resolve(__dirname, 'serviceAccountKey.json'),
+    path.resolve(process.cwd(), 'serviceAccountKey.json'),
+    path.resolve(__dirname, 'firebase-service-account.json'),
+    path.resolve(process.cwd(), 'firebase-service-account.json'),
+  ].filter(Boolean);
+
+  for (const p of candidatePaths) {
+    try {
+      if (p && fs.existsSync(p)) {
+        // eslint-disable-next-line import/no-dynamic-require, global-require
+        serviceAccount = require(p);
+        console.log('✅ Service account loaded from:', p);
+        break;
+      }
+    } catch {}
   }
-  
+
+  if (!serviceAccount && process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+    console.log('✅ Service account loaded from environment variable');
+  }
+
+  if (!serviceAccount) {
+    throw new Error('No service account key found via path or env');
+  }
+
   if (!admin.apps.length) {
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
@@ -44,8 +112,7 @@ try {
   }
 } catch (error) {
   console.error('❌ Firebase Admin SDK initialization failed:', error);
-  console.error('💡 Make sure your service account key is at ~/firebase-keys/serviceAccountKey.json');
-  console.error('💡 Or set FIREBASE_SERVICE_ACCOUNT_KEY environment variable');
+  console.error('💡 Provide FIREBASE_SERVICE_ACCOUNT_KEY or a serviceAccountKey.json next to backend/server.js');
 }
 
 // Gmail API configuration
@@ -389,6 +456,397 @@ function createEmailMessage({ from, to, subject, htmlBody, textBody }) {
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/, '');
+}
+
+// =========================
+// BILLING (Stripe) ENDPOINTS
+// =========================
+if (stripe) {
+  let db = null;
+  try {
+    db = admin.firestore();
+  } catch (e) {
+    console.error('⚠️ Firestore unavailable: Firebase Admin not initialized');
+  }
+
+  // Create/retrieve Stripe customer for a user
+  app.post('/api/billing/create-customer', requireAdmin, async (req, res) => {
+    try {
+      const { uid, email, name } = req.body;
+      if (!uid) return res.status(400).json({ success: false, error: 'uid required' });
+
+      let customerId = null;
+      if (db) {
+        const userRef = db.doc(`users/${uid}`);
+        const snap = await userRef.get();
+        const data = snap.exists ? snap.data() : {};
+        customerId = data?.stripeCustomerId || null;
+        if (!customerId) {
+          const customer = await stripe.customers.create({ email: email || data?.email || undefined, name: name || data?.displayName || email || undefined, metadata: { uid } });
+          customerId = customer.id;
+          await userRef.set({ stripeCustomerId: customerId }, { merge: true });
+        }
+      } else {
+        const customer = await stripe.customers.create({ email: email || undefined, name: name || email || undefined, metadata: { uid } });
+        customerId = customer.id;
+      }
+
+      res.json({ success: true, customerId });
+    } catch (err) {
+      console.error('create-customer error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // List existing Stripe products and monthly/yearly prices
+  app.post('/api/billing/plans', requireAdmin, async (req, res) => {
+    try {
+      if (!stripe) return res.status(500).json({ success: false, error: 'Stripe not configured on server' });
+      const prices = await stripe.prices.list({ active: true, type: 'recurring', expand: ['data.product'], limit: 100 });
+      const grouped = new Map();
+      for (const pr of prices.data) {
+        const prod = typeof pr.product === 'string' ? { id: pr.product, name: pr.nickname || pr.id } : pr.product;
+        const g = grouped.get(prod.id) || { productId: prod.id, productName: prod.name || prod.id, monthlyPriceId: null, yearlyPriceId: null, monthlyAmount: null, yearlyAmount: null, currency: pr.currency };
+        if (pr.recurring?.interval === 'month') { g.monthlyPriceId = pr.id; g.monthlyAmount = pr.unit_amount; g.currency = pr.currency; }
+        if (pr.recurring?.interval === 'year') { g.yearlyPriceId = pr.id; g.yearlyAmount = pr.unit_amount; g.currency = pr.currency; }
+        grouped.set(prod.id, g);
+      }
+      res.json({ success: true, plans: Array.from(grouped.values()) });
+    } catch (err) {
+      console.error('plans list error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Create Stripe product and monthly/yearly prices from USD amounts, and save to user
+  app.post('/api/billing/create-plan', requireAdmin, async (req, res) => {
+    try {
+      if (!stripe) return res.status(500).json({ success: false, error: 'Stripe not configured on server' });
+
+      const { uid, name, monthlyUsd = 0, yearlyUsd = 0, currency = 'usd' } = req.body;
+      if (!uid) return res.status(400).json({ success: false, error: 'uid required' });
+      const m = Number(monthlyUsd) || 0;
+      const y = Number(yearlyUsd) || 0;
+      if (m <= 0 && y <= 0) return res.status(400).json({ success: false, error: 'Provide monthlyUsd and/or yearlyUsd > 0' });
+
+      const product = await stripe.products.create({
+        name: name || `User ${uid} Plan`,
+        metadata: { uid }
+      });
+
+      let priceMonthlyId = null;
+      let priceYearlyId = null;
+
+      if (m > 0) {
+        const p = await stripe.prices.create({
+          unit_amount: Math.round(m * 100),
+          currency,
+          recurring: { interval: 'month' },
+          product: product.id,
+          metadata: { uid, kind: 'monthly' }
+        });
+        priceMonthlyId = p.id;
+      }
+
+      if (y > 0) {
+        const p = await stripe.prices.create({
+          unit_amount: Math.round(y * 100),
+          currency,
+          recurring: { interval: 'year' },
+          product: product.id,
+          metadata: { uid, kind: 'yearly' }
+        });
+        priceYearlyId = p.id;
+      }
+
+      const payload = {
+        productId: product.id,
+        priceMonthlyId,
+        priceYearlyId,
+        priceId: priceMonthlyId || priceYearlyId,
+        billingInterval: priceMonthlyId ? 'month' : 'year'
+      };
+      if (db) await db.doc(`users/${uid}`).set(payload, { merge: true });
+
+      res.json({ success: true, ...payload });
+    } catch (err) {
+      console.error('create-plan error:', err);
+      const message = err?.raw?.message || err?.message || 'Unknown error';
+      res.status(500).json({ success: false, error: message });
+    }
+  });
+
+  // Create Checkout Session (subscription by default)
+  app.post('/api/billing/checkout', requireAdmin, async (req, res) => {
+    try {
+      const { uid, priceId, mode = 'subscription', successUrl, cancelUrl, email } = req.body;
+      if (!uid || !priceId || !successUrl || !cancelUrl) return res.status(400).json({ success: false, error: 'uid, priceId, successUrl, cancelUrl required' });
+
+      let customerId = null;
+      if (db) {
+        const userRef = db.doc(`users/${uid}`);
+        const snap = await userRef.get();
+        const data = snap.exists ? snap.data() : {};
+        customerId = data?.stripeCustomerId || null;
+        if (!customerId) {
+          const customer = await stripe.customers.create({ email: data?.email || email || undefined, metadata: { uid } });
+          customerId = customer.id;
+          await userRef.set({ stripeCustomerId: customerId }, { merge: true });
+        }
+      } else {
+        const customer = await stripe.customers.create({ email: email || undefined, metadata: { uid } });
+        customerId = customer.id;
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        mode,
+        customer: customerId,
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        client_reference_id: uid,
+        metadata: { uid },
+        allow_promotion_codes: true,
+      });
+
+      res.json({ success: true, url: session.url, id: session.id });
+    } catch (err) {
+      console.error('checkout error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Create Customer Portal Session
+  app.post('/api/billing/portal', requireAdmin, async (req, res) => {
+    try {
+      const { uid, returnUrl } = req.body;
+      if (!uid || !returnUrl) return res.status(400).json({ success: false, error: 'uid and returnUrl required' });
+      const userRef = db.doc(`users/${uid}`);
+      const data = (await userRef.get()).data() || {};
+      if (!data.stripeCustomerId) return res.status(400).json({ success: false, error: 'No stripeCustomerId for user' });
+
+      const session = await stripe.billingPortal.sessions.create({ customer: data.stripeCustomerId, return_url: returnUrl });
+      res.json({ success: true, url: session.url });
+    } catch (err) {
+      console.error('portal error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Admin sets user's plan (assign Stripe price IDs to user document)
+  app.post('/api/billing/set-plan', requireAdmin, async (req, res) => {
+    try {
+      const { uid, priceId, priceMonthlyId, priceYearlyId, billingInterval } = req.body;
+      if (!uid) return res.status(400).json({ success: false, error: 'uid required' });
+      const payload = {
+        priceId: priceId || null,
+        priceMonthlyId: priceMonthlyId || null,
+        priceYearlyId: priceYearlyId || null,
+        billingInterval: billingInterval === 'year' ? 'year' : (billingInterval === 'month' ? 'month' : null),
+      };
+      if (db) await db.doc(`users/${uid}`).set(payload, { merge: true });
+      res.json({ success: true, ...payload });
+    } catch (err) {
+      console.error('set-plan error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Subscription controls
+  async function getUserData(uid) {
+    const snap = await db.doc(`users/${uid}`).get();
+    return snap.exists ? snap.data() : {};
+  }
+
+  async function ensureSubscriptionId(uid) {
+    const data = await getUserData(uid);
+    if (data.subscriptionId) return data.subscriptionId;
+    if (!data.stripeCustomerId) return null;
+    const list = await stripe.subscriptions.list({ customer: data.stripeCustomerId, status: 'all', limit: 3 });
+    const sub = list.data.find(s => s.status !== 'canceled') || list.data[0] || null;
+    const subId = sub?.id || null;
+    if (subId) await db.doc(`users/${uid}`).set({ subscriptionId: subId, subscriptionStatus: sub.pause_collection ? 'paused' : (sub.status === 'active' ? 'active' : sub.status) }, { merge: true });
+    return subId;
+  }
+
+  app.post('/api/billing/subscription/pause', requireAdmin, async (req, res) => {
+    try {
+      const { uid } = req.body;
+      const subId = await ensureSubscriptionId(uid);
+      if (!subId) {
+        if (db) await db.doc(`users/${uid}`).set({ subscriptionStatus: 'paused' }, { merge: true });
+        return res.json({ success: true, subscription: null, note: 'no-stripe-subscription' });
+      }
+      const sub = await stripe.subscriptions.update(subId, { pause_collection: { behavior: 'mark_uncollectible' } });
+      if (db) await db.doc(`users/${uid}`).set({ subscriptionStatus: 'paused' }, { merge: true });
+      res.json({ success: true, subscription: sub });
+    } catch (err) {
+      console.error('pause error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/billing/subscription/resume', requireAdmin, async (req, res) => {
+    try {
+      const { uid } = req.body;
+      const subId = await ensureSubscriptionId(uid);
+      if (!subId) {
+        if (db) await db.doc(`users/${uid}`).set({ subscriptionStatus: 'active' }, { merge: true });
+        return res.json({ success: true, subscription: null, note: 'no-stripe-subscription' });
+      }
+      const sub = await stripe.subscriptions.update(subId, { pause_collection: '' });
+      if (db) await db.doc(`users/${uid}`).set({ subscriptionStatus: 'active' }, { merge: true });
+      res.json({ success: true, subscription: sub });
+    } catch (err) {
+      console.error('resume error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/billing/subscription/cancel', requireAdmin, async (req, res) => {
+    try {
+      const { uid, atPeriodEnd = true } = req.body;
+      const subId = await ensureSubscriptionId(uid);
+      if (!subId) {
+        if (db) await db.doc(`users/${uid}`).set({ subscriptionStatus: 'canceled' }, { merge: true });
+        return res.json({ success: true, subscription: null, note: 'no-stripe-subscription' });
+      }
+      const sub = await stripe.subscriptions.update(subId, { cancel_at_period_end: !!atPeriodEnd });
+      if (db) await db.doc(`users/${uid}`).set({ subscriptionStatus: atPeriodEnd ? 'active' : 'canceled' }, { merge: true });
+      res.json({ success: true, subscription: sub });
+    } catch (err) {
+      console.error('cancel error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Invoice actions
+  app.post('/api/billing/invoice-item', requireAdmin, async (req, res) => {
+    try {
+      const { uid, amount, description, currency = 'usd' } = req.body;
+      const data = await getUserData(uid);
+      if (!data.stripeCustomerId) return res.status(400).json({ success: false, error: 'No stripeCustomerId' });
+      const item = await stripe.invoiceItems.create({ customer: data.stripeCustomerId, amount: Math.round(amount), currency, description });
+      res.json({ success: true, item });
+    } catch (err) {
+      console.error('invoice-item error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/billing/invoice/create-draft', requireAdmin, async (req, res) => {
+    try {
+      const { uid, auto_advance = false, collection_method = 'send_invoice', days_until_due = 7 } = req.body;
+      const data = await getUserData(uid);
+      if (!data.stripeCustomerId) return res.status(400).json({ success: false, error: 'No stripeCustomerId' });
+      const invoice = await stripe.invoices.create({ customer: data.stripeCustomerId, auto_advance, collection_method, days_until_due });
+      await db.doc(`users/${uid}`).set({ pendingInvoiceId: invoice.id }, { merge: true });
+      res.json({ success: true, invoice });
+    } catch (err) {
+      console.error('create-draft error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/billing/invoice/finalize', requireAdmin, async (req, res) => {
+    try {
+      const { invoiceId, send = true } = req.body;
+      if (!invoiceId) return res.status(400).json({ success: false, error: 'invoiceId required' });
+      const finalized = await stripe.invoices.finalizeInvoice(invoiceId);
+      if (send) await stripe.invoices.sendInvoice(finalized.id);
+      res.json({ success: true, invoice: finalized });
+    } catch (err) {
+      console.error('finalize error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/billing/invoices/list', requireAdmin, async (req, res) => {
+    try {
+      const { uid, limit = 10 } = req.body;
+      const data = await getUserData(uid);
+      if (!data.stripeCustomerId) return res.status(400).json({ success: false, error: 'No stripeCustomerId' });
+      const invoices = await stripe.invoices.list({ customer: data.stripeCustomerId, limit });
+      res.json({ success: true, invoices: invoices.data });
+    } catch (err) {
+      console.error('list invoices error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Stripe Webhook
+  app.post('/api/billing/webhook', async (req, res) => {
+    const sig = req.headers['stripe-signature'];
+    let event;
+    try {
+      event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    } catch (err) {
+      console.error('Webhook signature verification failed:', err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    try {
+      switch (event.type) {
+        case 'checkout.session.completed': {
+          const session = event.data.object;
+          const uid = session.client_reference_id || session.metadata?.uid;
+          if (uid) {
+            await db.doc(`users/${uid}`).set({
+              stripeCustomerId: session.customer,
+              subscriptionStatus: 'active',
+              subscriptionId: session.subscription || null
+            }, { merge: true });
+          }
+          break;
+        }
+        case 'invoice.payment_succeeded': {
+          const invoice = event.data.object;
+          const customerId = invoice.customer;
+          const uid = invoice.metadata?.uid || null;
+          await updateUserByCustomerId(db, customerId, { subscriptionStatus: 'active', lastInvoiceAt: new Date().toISOString() }, uid);
+          break;
+        }
+        case 'invoice.payment_failed': {
+          const invoice = event.data.object;
+          const customerId = invoice.customer;
+          const uid = invoice.metadata?.uid || null;
+          await updateUserByCustomerId(db, customerId, { subscriptionStatus: 'past_due' }, uid);
+          break;
+        }
+        case 'customer.subscription.updated': {
+          const sub = event.data.object;
+          const customerId = sub.customer;
+          const status = sub.pause_collection ? 'paused' : (sub.status === 'active' ? 'active' : sub.status);
+          await updateUserByCustomerId(db, customerId, { subscriptionStatus: status, subscriptionId: sub.id });
+          break;
+        }
+        case 'customer.subscription.deleted': {
+          const sub = event.data.object;
+          await updateUserByCustomerId(db, sub.customer, { subscriptionStatus: 'canceled' });
+          break;
+        }
+        default:
+          break;
+      }
+      res.json({ received: true });
+    } catch (e) {
+      console.error('Webhook handling error:', e);
+      res.status(500).send('Server error');
+    }
+  });
+}
+
+async function updateUserByCustomerId(db, customerId, updates, fallbackUid) {
+  if (!customerId) return;
+  const usersRef = db.collection('users');
+  const snap = await usersRef.where('stripeCustomerId', '==', customerId).get();
+  if (!snap.empty) {
+    for (const doc of snap.docs) {
+      await doc.ref.set(updates, { merge: true });
+    }
+  } else if (fallbackUid) {
+    await db.doc(`users/${fallbackUid}`).set(updates, { merge: true });
+  }
 }
 
 // Email templates

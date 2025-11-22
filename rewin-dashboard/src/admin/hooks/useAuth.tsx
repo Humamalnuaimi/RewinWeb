@@ -38,13 +38,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
-      
-      // Don't automatically check admin status - let login functions handle this
-      // This prevents unnecessary Firestore calls and permission errors
+
       if (!user) {
-        setIsAdmin(false);
+        // Attempt to complete Google redirect sign-in
+        const redirectResult = await AuthService.handleGoogleRedirect('admin').catch(() => null);
+        if (redirectResult?.success && redirectResult.user) {
+          setUser(redirectResult.user as any);
+          setIsAdmin(redirectResult.isAdmin || false);
+        } else {
+          setIsAdmin(false);
+        }
       }
-      
+
       setLoading(false);
     });
 

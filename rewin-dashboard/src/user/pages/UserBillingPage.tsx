@@ -1,0 +1,246 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { auth, firestore } from '../../firebase/config';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import './PromotionDetailsPage.css';
+import './UserBillingPage.css';
+
+const fmtMoney = (amount: number | undefined, currency: string | undefined) => {
+  if (amount == null) return '—';
+  try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: (currency || 'USD').toUpperCase() }).format(amount / 100); } catch { return `$${(amount/100).toFixed(2)}`; }
+};
+
+const api = async (path: string, body: any) => {
+  const origin = window.location.origin.replace(/\/$/, '');
+  const url = `${origin}/api/billing${path}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const ct = res.headers.get('content-type') || '';
+  return ct.includes('application/json') ? res.json() : res.text();
+};
+const apiNoThrow = async (path: string, body: any) => { try { return await api(path, body); } catch { return null; } };
+
+const UserBillingPage: React.FC = () => {
+  const [uid, setUid] = useState<string | null>(null);
+  const [userDoc, setUserDoc] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [autoPay, setAutoPay] = useState<boolean>(true);
+  const [savingPref, setSavingPref] = useState(false);
+  const [plans, setPlans] = useState<any[] | null>(null);
+  const [changingPlan, setChangingPlan] = useState(false);
+  const [portalError, setPortalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (!u) { setUid(null); setUserDoc(null); setLoading(false); return; }
+      setUid(u.uid);
+      setLoading(true);
+      try {
+        const snap = await getDoc(doc(firestore, 'users', u.uid));
+        let data = snap.exists() ? snap.data() : {};
+        // Ensure Stripe customer exists for this user so invoices/portal work
+        if (!data.stripeCustomerId) {
+          const created = await apiNoThrow('/create-customer', { uid: u.uid, email: u.email, name: u.displayName });
+          if (created?.customerId) {
+            data = { ...data, stripeCustomerId: created.customerId };
+            await setDoc(doc(firestore, 'users', u.uid), { stripeCustomerId: created.customerId }, { merge: true });
+          }
+        }
+        setUserDoc(data);
+        setAutoPay(data.autoPay !== false); // default true
+      } finally { setLoading(false); }
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!uid) return;
+    const load = async () => {
+      setInvoiceLoading(true);
+      const res = await apiNoThrow('/invoices/list', { uid, limit: 10 });
+      setInvoices(Array.isArray(res?.invoices) ? res.invoices : []);
+      setInvoiceLoading(false);
+    };
+    load();
+  }, [uid, userDoc?.stripeCustomerId]);
+
+  // Fetch available plans to resolve price amounts if not present on user doc
+  useEffect(() => {
+    const fetchPlans = async () => {
+      if (plans !== null) return; // already loaded
+      const res = await apiNoThrow('/plans', {});
+      if (res?.plans) setPlans(res.plans);
+    };
+    fetchPlans();
+  }, [plans]);
+
+  const planSummary = useMemo(() => {
+    if (!userDoc) return null;
+    let monthly = userDoc.monthlyAmount || null;
+    let yearly = userDoc.yearlyAmount || null;
+    let currency = userDoc.currency || 'usd';
+
+    if ((!monthly && !yearly) && plans) {
+      const p = plans.find((pl: any) => pl.monthlyPriceId === userDoc.priceMonthlyId || pl.yearlyPriceId === userDoc.priceYearlyId || pl.monthlyPriceId === userDoc.priceId || pl.yearlyPriceId === userDoc.priceId);
+      if (p) { monthly = p.monthlyAmount ?? monthly; yearly = p.yearlyAmount ?? yearly; currency = p.currency || currency; }
+    }
+
+    return {
+      status: userDoc.subscriptionStatus || 'none',
+      interval: userDoc.billingInterval || (userDoc.priceYearlyId ? 'year' : userDoc.priceMonthlyId ? 'month' : '-'),
+      monthly,
+      yearly,
+      currency,
+    };
+  }, [userDoc, plans]);
+
+  const openPortal = async () => {
+    if (!uid) return;
+    setPortalError(null);
+    const returnUrl = window.location.origin + '/billing';
+    if (!userDoc?.stripeCustomerId) await apiNoThrow('/create-customer', { uid, email: auth.currentUser?.email, name: auth.currentUser?.displayName });
+    try {
+      const res = await api('/portal', { uid, returnUrl });
+      if (res?.url) {
+        try { (window.top || window).location.href = res.url; }
+        catch { window.open(res.url, '_blank', 'noopener,noreferrer'); }
+      }
+    } catch (e:any) {
+      const msg = String(e?.message || 'Unable to open payment portal');
+      setPortalError(msg);
+      alert('Stripe Customer Portal is not configured. Please enable a default configuration in Stripe Dashboard > Settings > Billing > Customer portal (test mode).');
+    }
+  };
+
+  const saveAutoPay = async () => {
+    if (!uid) return;
+    setSavingPref(true);
+    try { await setDoc(doc(firestore, 'users', uid), { autoPay }, { merge: true }); }
+    finally { setSavingPref(false); }
+  };
+
+  return (
+    <div className="billing-page">
+      <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+        <div className="billing-header">
+          <div className="header-center">
+            <h1 className="title">Billing</h1>
+            <p className="sub">Manage your subscription and payments</p>
+          </div>
+        </div>
+
+        {/* Plan */}
+        <div className="billing-card plan">
+          <h3 className="section-title">Plan</h3>
+          <p className="info-meta">Your current subscription</p>
+          {loading ? (
+            <div className="loading-text">Loading…</div>
+          ) : (
+            <div className="kv-grid">
+              <div className="kv-box">
+                <p className="kv-label">Status</p>
+                <p className="kv-value">{planSummary?.status}</p>
+              </div>
+              <div className="kv-box">
+                <p className="kv-label">Interval</p>
+                <p className="kv-value">{planSummary?.interval}</p>
+              </div>
+              <div className="kv-box">
+                <p className="kv-label">Monthly</p>
+                <p className="kv-value money">{fmtMoney(planSummary?.monthly || (null as any), planSummary?.currency)}</p>
+              </div>
+            </div>
+          )}
+          <div className="actions-right">
+            <button className="btn btn-secondary" onClick={openPortal}>Manage payment methods</button>
+          </div>
+        </div>
+
+        {/* Manage plan */}
+        {(userDoc?.priceMonthlyId || userDoc?.priceYearlyId || userDoc?.priceId) && (
+          <div className="billing-card prefs">
+            <h3 className="section-title">Manage plan</h3>
+            <div className="pref-row">
+              <div className="pref-meta">
+                <div className="title">Switch billing interval</div>
+                <div className="desc">Choose monthly or yearly</div>
+              </div>
+              <div style={{ display:'inline-flex', alignItems:'center', gap:12 }}>
+                <label style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
+                  <input type="radio" name="interval" defaultChecked={(planSummary?.interval||'month')==='month'} onChange={()=>{}} />
+                  <span>Monthly</span>
+                </label>
+                <label style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
+                  <input type="radio" name="interval" defaultChecked={(planSummary?.interval||'month')==='year'} onChange={()=>{}} />
+                  <span>Yearly</span>
+                </label>
+                <button className="btn btn-primary" disabled={changingPlan} onClick={async()=>{
+                  if (!uid) return;
+                  setChangingPlan(true);
+                  try {
+                    const wantYear = (document.querySelector('input[name="interval"]:checked') as HTMLInputElement)?.nextSibling?.textContent?.toLowerCase().includes('year');
+                    const priceId = wantYear ? (userDoc?.priceYearlyId || userDoc?.priceId) : (userDoc?.priceMonthlyId || userDoc?.priceId);
+                    if (!priceId) throw new Error('Plan price not available');
+                    const successUrl = window.location.origin + '/billing?updated=1';
+                    const cancelUrl = window.location.origin + '/billing?canceled=1';
+                    const res = await api('/checkout', { uid, priceId, mode: 'subscription', successUrl, cancelUrl, email: auth.currentUser?.email });
+                    if (res?.url) {
+                      try { (window.top || window).location.href = res.url; }
+                      catch { window.open(res.url, '_blank', 'noopener,noreferrer'); }
+                    }
+                  } catch (e:any) {
+                    alert(e?.message || 'Unable to change plan');
+                  } finally { setChangingPlan(false); }
+                }}>Change plan</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Preferences */}
+        <div className="billing-card prefs">
+          <h3 className="section-title">Preferences</h3>
+          <div className="pref-row">
+            <div className="pref-meta">
+              <div className="title">Auto pay</div>
+              <div className="desc">Automatically pay invoices when due</div>
+            </div>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <input type="checkbox" checked={autoPay} onChange={(e)=> setAutoPay(e.target.checked)} />
+              <button className="btn btn-primary" disabled={savingPref} onClick={saveAutoPay}>{savingPref ? 'Saving…' : 'Save'}</button>
+            </label>
+          </div>
+        </div>
+
+        {/* Invoices */}
+        <div className="billing-card invoices">
+          <h3 className="section-title">Invoices</h3>
+          {invoiceLoading ? (
+            <div className="loading-text">Loading invoices…</div>
+          ) : invoices.length === 0 ? (
+            <div className="loading-text">No invoices yet</div>
+          ) : (
+            <div className="invoice-list">
+              {invoices.map((inv:any)=> (
+                <div key={inv.id} className="invoice-row">
+                  <div>#{inv.number || inv.id.slice(-8)}</div>
+                  <div className="text-capitalize">{inv.status}</div>
+                  <div>{fmtMoney(inv.total, inv.currency)}</div>
+                  <div>{inv.created ? new Date(inv.created*1000).toLocaleDateString() : ''}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default UserBillingPage;

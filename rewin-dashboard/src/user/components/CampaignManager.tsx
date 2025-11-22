@@ -15,7 +15,7 @@
  */
 import React, { useState, useEffect, useRef } from 'react';
 import { type User } from 'firebase/auth';
-import { Smartphone, Save, CheckCircle, AlertCircle, X } from 'lucide-react';
+import { Smartphone, Save, CheckCircle, AlertCircle, X, Gift } from 'lucide-react';
 import { firestore, auth } from '../../firebase/config';
 import {
   collection,
@@ -34,6 +34,8 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { PromotionService } from '../../services/PromotionService';
+import GlassModal from '../../shared/components/ui/GlassModal';
+import { ThemedSelect, SFGIcon } from '../../shared/components/ui';
 import { CampaignService } from '../../services/CampaignService';
 import { AutomationService } from '../../services/AutomationService';
 import { CampaignAutomationService } from '../../services/CampaignAutomationService';
@@ -44,6 +46,7 @@ interface CampaignManagerProps {
   currentPage?: string;
   setCurrentPage?: (page: string) => void;
   setSelectedCampaignId?: (id: string) => void;
+  setSelectedPromotionId?: (id: string) => void;
 }
 
 // 🎯 FIREBASE DATA INTERFACES (Exact as per App Team Specification)
@@ -99,7 +102,6 @@ interface PromotionForm {
   targetOutlets: string[] | 'ALL';
   smsMessage: string;
   sendSMS: boolean;
-  assignNow?: boolean;                     // NEW: Fan-out immediately to eligible customers
 }
 
 interface CampaignForm {
@@ -118,7 +120,7 @@ interface CampaignForm {
   targetOutlets: string[] | 'ALL';
 }
 
-const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack, currentPage, setCurrentPage, setSelectedCampaignId: propSetSelectedCampaignId }) => {
+const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack, currentPage, setCurrentPage, setSelectedCampaignId: propSetSelectedCampaignId, setSelectedPromotionId }) => {
   const [activeTab, setActiveTab] = useState<'campaigns' | 'promotions' | 'rewards'>('campaigns');
   const [showCreateCampaign, setShowCreateCampaign] = useState(false);
   const [showCreatePromotion, setShowCreatePromotion] = useState(false);
@@ -199,8 +201,7 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack, current
     hasExpiration: false,    // Default no expiration
     targetOutlets: [],
     smsMessage: '',
-    sendSMS: true,
-    assignNow: true
+    sendSMS: true
   });
 
   const [campaignForm, setCampaignForm] = useState<CampaignForm>({
@@ -295,7 +296,7 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack, current
     return user.uid;
   };
 
-  // 📱 SMS SERVICE INTEGRATION (Production-Ready with Multi-Account Support)
+  // ���� SMS SERVICE INTEGRATION (Production-Ready with Multi-Account Support)
   const sendSMSMessage = async (phoneNumber: string, message: string) => {
     try {
       console.log(`📱 SMS to ${phoneNumber}: ${message}`);
@@ -436,39 +437,47 @@ const CampaignManager: React.FC<CampaignManagerProps> = ({ user, onBack, current
         }
       }
       
-      // Fan-out to per-customer promotions if requested
-      if (promotionForm.assignNow) {
-        try {
-          const { CustomerPromotionService } = await import('../../services/CustomerPromotionService');
-          const expiresAtTs = promotionData.expiresAt
-            ? (promotionData.expiresAt.toDate ? promotionData.expiresAt : Timestamp.fromDate(promotionData.expiresAt))
-            : null;
+      // One-time assignment to customers on creation (flat collection, no nested subcollections)
+      try {
+        const expiresAtTs = promotionData.expiresAt
+          ? (promotionData.expiresAt.toDate ? promotionData.expiresAt : Timestamp.fromDate(promotionData.expiresAt))
+          : null;
 
-          let createdCount = 0;
-          for (const customer of analytics.eligibleCustomers) {
-            const customerId = customer.id;
-            const outletId = customer.outletId || customer.checkInOutletId || customer.preferredOutlet || customer.lastVisitOutlet || null;
-            const detId = `promo_manual_${promotionId}_${customerId}`;
-            await CustomerPromotionService.upsertBoth(customerId, detId, {
-              title: promotionData.title,
-              description: promotionData.description,
-              discountType: promotionData.discountType,
-              discountAmount: promotionData.discountAmount,
-              minimumPurchase: promotionData.minimumPurchase,
-              expiresAt: expiresAtTs,
-              isActive: true,
-              isUsed: false,
-              outletId,
-              campaignId: null,
-              source: 'manual'
-            });
-            createdCount++;
-          }
-          console.log(`✅ Assigned promotion to ${createdCount} eligible customers`);
-        } catch (err) {
-          console.error('❌ Fan-out error:', err);
-          alert('Fan-out to customers failed. The master promotion was created successfully.');
+        const batch = writeBatch(firestore);
+        let createdCount = 0;
+        for (const customer of analytics.eligibleCustomers) {
+          const customerId = customer.id;
+          const outletId = customer.outletId || (customer.outlet && customer.outlet.id) || null; // home outlet only
+          if (!outletId) { continue; }
+          const detId = `promo_manual_${promotionId}_${customerId}`; // deterministic id for dedupe
+
+          const docRef = doc(firestore, 'users', user.uid, 'customerPromotions', detId);
+          batch.set(docRef, {
+            title: promotionData.title,
+            description: promotionData.description || '',
+            discountType: promotionData.discountType,
+            discountAmount: promotionData.discountAmount,
+            minimumPurchase: promotionData.minimumPurchase,
+            source: 'manual',
+            campaignId: null,
+            masterPromotionId: promotionId,
+            customerId,
+            outletId,
+            isUsed: false,
+            isActive: true,
+            assignedAt: Timestamp.now(),
+            createdAt: Timestamp.now(),
+            validityDays: promotionForm.validityDays,
+            expiresAt: expiresAtTs,
+            targetOutlets: Array.isArray(promotionData.targetOutlets) ? promotionData.targetOutlets : []
+          });
+          createdCount++;
         }
+        await batch.commit();
+        console.log(`✅ Assigned promotion to ${createdCount} eligible customers (flat users/customerPromotions)`);
+      } catch (err) {
+        console.error('❌ Fan-out error:', err);
+        alert('Fan-out to customers failed. The master promotion was created successfully.');
       }
 
       // Show success message with analytics
@@ -528,7 +537,7 @@ ${expirationText}
     }
   };
 
-  // 🤖 CAMPAIGN AUTOMATION SYSTEM (As Per App Team Specification)
+  // ���� CAMPAIGN AUTOMATION SYSTEM (As Per App Team Specification)
   const assignCampaignToCustomers = async (businessId: string, campaign: Campaign) => {
     try {
       console.log('🎯 Processing campaign for customers:', campaign.name);
@@ -744,14 +753,28 @@ ${expirationText}
               }
             }
             break;
+          case 'welcome':
+            const welcomeWindowDays = 14;
+            const createdAt = customerData.createdAt?.toDate ? customerData.createdAt.toDate() : (customerData.createdAt ? new Date(customerData.createdAt) : null);
+            const noLastVisit = !customerData.lastVisit;
+            let withinWindow = true;
+            if (createdAt) {
+              const daysSinceSignup = Math.floor((today.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+              withinWindow = daysSinceSignup <= welcomeWindowDays;
+            }
+            if (noLastVisit && withinWindow) {
+              qualifies = true;
+              console.log(`👋 WELCOME MATCH for ${customerId}: no lastVisit and within ${welcomeWindowDays} days of signup`);
+            }
+            break;
         }
 
         if (qualifies) {
           // 🔍 ENHANCED DUPLICATE PREVENTION (Check for any unredeemed promotions from this campaign)
-          const duplicateCheckId = campaign.triggerType === 'birthday' 
+          const duplicateCheckId = campaign.triggerType === 'birthday'
             ? `promo_birthday_${customerId}_${new Date().getFullYear()}`
             : `promo_inactive_${customerId}_${campaign.id!}_${Date.now()}`;
-          
+
           try {
             // Check for ANY existing unredeemed promotions from this campaign for this customer
             const customerPromotionsRef = collection(firestore, 'users', user.uid, 'customerPromotions');
@@ -778,7 +801,7 @@ ${expirationText}
           // Create campaign-generated promotion for this customer
           const campaignPromotion = {
             title: `${campaign.name}`,
-            description: `Special ${campaign.triggerType === 'birthday' ? 'Birthday' : 'Welcome Back'} Offer!`,
+            description: `Special ${campaign.triggerType === 'birthday' ? 'Birthday' : campaign.triggerType === 'welcome' ? 'Welcome' : 'Welcome Back'} Offer!`,
             discountType: campaign.discountType,
             discountAmount: campaign.discountAmount,
             minimumPurchase: campaign.minimumPurchase,
@@ -820,7 +843,7 @@ ${expirationText}
             try {
               const smsMessage = `🎉 ${campaign.name}! Get ${campaign.discountAmount}${campaign.discountType === 'percentage' ? '%' : '$'} off your next visit. Valid for 7 days. Show this message in-store.`;
               await sendSMSMessage(customer.data.phoneNumber, smsMessage);
-              console.log(`📱 SMS sent to ${customer.data.name || customer.id}: ${customer.data.phoneNumber}`);
+              console.log(`�� SMS sent to ${customer.data.name || customer.id}: ${customer.data.phoneNumber}`);
             } catch (error) {
               console.error(`❌ Failed to send SMS to ${customer.id}:`, error);
             }
@@ -946,7 +969,7 @@ ${expirationText}
     console.log('✅ Auto-processing started');
   };
 
-  // ⏹️ STOP AUTO-PROCESSING
+  // ���️ STOP AUTO-PROCESSING
   const stopAutoProcessing = () => {
     // Stop the automation service
     CampaignAutomationService.stopAutomation();
@@ -1054,7 +1077,7 @@ The promotion is now available on your mobile app!`);
     }
   };
 
-  // 🎯 STEP 2: CUSTOMER ASSIGNMENT FUNCTION (Production-Ready with Graceful Field Handling)
+  // ��� STEP 2: CUSTOMER ASSIGNMENT FUNCTION (Production-Ready with Graceful Field Handling)
   const assignPromotionToCustomers = async (businessId: string, promotionId: string, promotion: Promotion) => {
     try {
       console.log('🔄 Assigning promotion to customers with flexible field requirements...');
@@ -1143,7 +1166,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
           }
           
           // DEBUG: Log the exact comparison for troubleshooting
-          console.log(`   🔍 DEBUG - Outlet matching details:`);
+          console.log(`   ���� DEBUG - Outlet matching details:`);
           console.log(`      Customer outletId: "${customer.outletId}"`);
           console.log(`      Promotion targetOutlets: [${promotion.targetOutlets.join(', ')}]`);
           console.log(`      Is customer outletId in targetOutlets? ${promotion.targetOutlets.includes(customer.outletId)}`);
@@ -1321,7 +1344,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       console.log('🏢 Business ID used for creation:', businessId);
       
       // Map campaign type to proper trigger type
-      let triggerType: 'birthday' | 'inactive_15' | 'inactive_30' | 'inactive_custom' = 'birthday';
+      let triggerType: 'birthday' | 'inactive_15' | 'inactive_30' | 'inactive_custom' | 'welcome' = 'birthday';
       let daysSinceLastVisit: number = 0; // Default to 0 instead of undefined
       
       switch (campaignForm.type) {
@@ -1334,10 +1357,9 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
           triggerType = 'birthday';
           daysSinceLastVisit = 0; // Not applicable for birthday campaigns
           break;
-        case 'spending':
-          // For now, map spending campaigns to inactive (you can adjust this later)
-          triggerType = 'inactive_15';
-          daysSinceLastVisit = 15; // Default for spending campaigns
+        case 'welcome':
+          triggerType = 'welcome';
+          daysSinceLastVisit = 0;
           break;
         default:
           triggerType = 'birthday';
@@ -1532,7 +1554,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
     }
   };
 
-  // 🗑️ HANDLE CAMPAIGN DELETE CLICK
+  // ��️ HANDLE CAMPAIGN DELETE CLICK
   const handleCampaignDeleteClick = (campaign: Campaign) => {
     setCampaignToDelete(campaign);
     setShowCampaignDeleteConfirmation(true);
@@ -1729,7 +1751,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
       // Execute all deletions
       await batch.commit();
       
-      console.log(`✅ Campaign deleted and ${cleanupCount} customer promotions cleaned up`);
+      console.log(`��� Campaign deleted and ${cleanupCount} customer promotions cleaned up`);
       
       loadCampaigns();
       alert(`✅ Campaign deleted successfully!\n🧹 Cleaned up ${cleanupCount} customer promotions`);
@@ -2091,7 +2113,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
     }
   };
 
-  // 🕐 EXPIRATION HELPER FUNCTIONS (As Per App Team Specification)
+  // �� EXPIRATION HELPER FUNCTIONS (As Per App Team Specification)
   const getPromotionExpirationInfo = (promotion: Promotion) => {
     if (!promotion.expiresAt) {
       return { isExpired: false, daysRemaining: null, formattedText: '' };
@@ -2480,7 +2502,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               lineHeight: '1.5',
               color: 'rgba(255,255,255,0.9)'
             }}>
-              Existing loyalty system (unchanged)
+              Existing loyalty system
             </p>
             <div style={{ 
               fontSize: '1.5rem', 
@@ -2706,7 +2728,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
           <div>
             <div style={{ marginBottom: '1.5rem' }}>
               <h2 style={{ color: 'white', margin: 0 }}>
-                🟢 Campaigns ({campaigns.length})
+                Campaigns ({campaigns.length})
               </h2>
             </div>
             {campaigns.length === 0 ? (
@@ -3060,11 +3082,9 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               🔵 Promotions ({promotions.length})
             </h2>
             <div style={{
-              background: 'rgba(255,255,255,0.1)',
-              borderRadius: '15px',
-              padding: '2rem',
-              backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255,255,255,0.2)'
+              background: 'transparent',
+              padding: 0,
+              border: 'none'
             }}>
               {promotions.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '2rem' }}>
@@ -3082,7 +3102,24 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                   marginTop: '1rem'
                 }}>
                   {promotions.map((promotion) => (
-                    <div key={promotion.id} style={{
+                    <div key={promotion.id}
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          if (setCurrentPage && promotion.id && typeof setSelectedPromotionId === 'function') {
+                            setSelectedPromotionId(promotion.id);
+                            setCurrentPage('promotionDetails');
+                          }
+                        }
+                      }}
+                      onClick={() => {
+                        if (setCurrentPage && promotion.id && typeof setSelectedPromotionId === 'function') {
+                          setSelectedPromotionId(promotion.id);
+                          setCurrentPage('promotionDetails');
+                        }
+                      }}
+                      style={{
                       backgroundColor: 'rgba(255, 255, 255, 0.08)',
                       borderRadius: '20px',
                       padding: '2rem',
@@ -3090,7 +3127,8 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                       backdropFilter: 'blur(15px)',
                       boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
                       position: 'relative',
-                      overflow: 'hidden'
+                      overflow: 'hidden',
+                      cursor: 'pointer'
                     }}>
                       {/* STATUS BADGE */}
                       <div style={{
@@ -3205,7 +3243,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                         gap: '0.75rem'
                       }}>
                         <button
-                          onClick={() => togglePromotionStatus(promotion.id!, promotion.isActive)}
+                          onClick={(e) => { e.stopPropagation(); togglePromotionStatus(promotion.id!, promotion.isActive); }}
                           disabled={loading}
                           style={{
                             flex: 1,
@@ -3234,7 +3272,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                           {promotion.isActive ? 'Deactivate' : 'Activate'}
                         </button>
                         <button
-                          onClick={() => handleDeleteClick(promotion)}
+                          onClick={(e) => { e.stopPropagation(); handleDeleteClick(promotion); }}
                           disabled={loading}
                           style={{
                             flex: 1,
@@ -3639,94 +3677,43 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
         </div>
       )}
 
-      {/* 🚀 MODERN PROMOTION CREATION MODAL */}
+      {/* 🚀 UNIFIED GLASS MODAL - CREATE PROMOTION */}
       {showCreatePromotion && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          background: 'rgba(0, 0, 0, 0.75)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '2rem',
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: 'linear-gradient(145deg, #ffffff, #f8fafc)',
-            border: 'none',
-            boxShadow: '0 25px 50px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.8)',
-            borderRadius: '24px',
-            padding: '3rem',
-            width: 'min(700px, 95vw)',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            color: '#1e293b',
-            position: 'relative'
-          }}>
-            {/* Header */}
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'space-between', 
-              marginBottom: '2.5rem',
-              paddingBottom: '1.5rem',
-              borderBottom: '2px solid #e2e8f0'
-            }}>
-              <div>
-                <h2 style={{ 
-                  margin: 0, 
-                  color: '#0f172a', 
-                  fontSize: '2rem', 
-                  fontWeight: 800,
-                  background: 'linear-gradient(135deg, #10b981, #059669)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text'
-                }}>
-                  Create New Promotion
-              </h2>
-                <p style={{ 
-                  margin: '0.5rem 0 0 0', 
-                  color: '#64748b', 
-                  fontSize: '1rem',
-                  fontWeight: 400
-                }}>
-                  Set up instant promotions for your customers
-                </p>
-              </div>
+        <GlassModal
+          title="Create New Promotion"
+          subtitle="Set up instant promotions for your customers"
+          accent="green"
+          onClose={() => setShowCreatePromotion(false)}
+          footer={(
+            <div style={{ display: 'flex', gap: '1.5rem', justifyContent: 'center' }}>
               <button
                 onClick={() => setShowCreatePromotion(false)}
+                disabled={loading}
                 style={{
-                  background: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
-                  border: 'none',
-                  color: '#64748b',
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '16px',
-                  cursor: 'pointer',
-                  fontSize: '1.25rem',
-                  fontWeight: 'bold',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
-                  e.currentTarget.style.color = 'white';
-                  e.currentTarget.style.transform = 'scale(1.05)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #f1f5f9, #e2e8f0)';
-                  e.currentTarget.style.color = '#64748b';
-                  e.currentTarget.style.transform = 'scale(1)';
+                  padding: '1rem 2rem', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 14,
+                  background: 'rgba(255,255,255,0.06)', color: 'white', cursor: loading ? 'not-allowed' : 'pointer',
+                  opacity: loading ? 0.5 : 1, fontSize: '1rem', fontWeight: 600
                 }}
               >
-                ✕
+                Cancel
+              </button>
+              <button
+                onClick={createPromotion}
+                disabled={loading || !promotionForm.title || !promotionForm.discountAmount}
+                style={{
+                  padding: '1rem 2rem', border: 'none', borderRadius: 14,
+                  background: (loading || !promotionForm.title || !promotionForm.discountAmount)
+                    ? 'linear-gradient(135deg, #6b7280, #4b5563)'
+                    : 'linear-gradient(135deg, #10b981, #059669)',
+                  color: 'white', cursor: (loading || !promotionForm.title || !promotionForm.discountAmount) ? 'not-allowed' : 'pointer',
+                  fontWeight: 700, fontSize: '1rem', boxShadow: '0 6px 22px rgba(16,185,129,0.35)'
+                }}
+              >
+                {loading ? '⏳ Creating...' : (<span style={{display:'inline-flex',alignItems:'center',gap:8}}><SFGIcon size={18}/> Create Promotion</span>)}
               </button>
             </div>
+          )}
+        >
 
             {/* Title */}
             <div style={{ marginBottom: '2rem' }}>
@@ -3810,79 +3797,30 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               />
             </div>
 
-            {/* Discount Type Selection */}
-            <div style={{ 
-              marginBottom: '2rem',
-              padding: '1.5rem',
-              background: 'linear-gradient(135deg, #f0f9ff, #e0f2fe)',
-              borderRadius: '16px',
-              border: '2px solid #0ea5e9'
-            }}>
-              <label style={{ 
-                display: 'block', 
-                marginBottom: '1rem', 
-                fontWeight: 600,
-                fontSize: '1.1rem',
-                color: '#0c4a6e'
-              }}>
-                Discount Type *
-              </label>
-              <div style={{ display: 'flex', gap: '2rem', marginBottom: '1rem' }}>
-                <label style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  cursor: 'pointer',
-                  padding: '0.75rem 1rem',
-                  borderRadius: '12px',
-                  background: promotionForm.discountType === 'dollar' ? '#dcfce7' : '#ffffff',
-                  border: `2px solid ${promotionForm.discountType === 'dollar' ? '#10b981' : '#e5e7eb'}`,
-                  transition: 'all 0.2s ease'
-                }}>
-                  <input
-                    type="radio"
-                    name="discountType"
-                    value="dollar"
-                    checked={promotionForm.discountType === 'dollar'}
-                    onChange={(e) => setPromotionForm(prev => ({ ...prev, discountType: e.target.value as 'dollar' | 'percentage' }))}
-                    style={{ marginRight: '0.75rem', transform: 'scale(1.3)' }}
-                  />
-                  <span style={{ color: '#047857', fontWeight: 600 }}>💰 Dollar Amount ($)</span>
-                </label>
-                <label style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  cursor: 'pointer',
-                  padding: '0.75rem 1rem',
-                  borderRadius: '12px',
-                  background: promotionForm.discountType === 'percentage' ? '#fef3c7' : '#ffffff',
-                  border: `2px solid ${promotionForm.discountType === 'percentage' ? '#f59e0b' : '#e5e7eb'}`,
-                  transition: 'all 0.2s ease'
-                }}>
-                  <input
-                    type="radio"
-                    name="discountType"
-                    value="percentage"
-                    checked={promotionForm.discountType === 'percentage'}
-                    onChange={(e) => setPromotionForm(prev => ({ ...prev, discountType: e.target.value as 'dollar' | 'percentage' }))}
-                    style={{ marginRight: '0.75rem', transform: 'scale(1.3)' }}
-                  />
-                  <span style={{ color: '#92400e', fontWeight: 600 }}>📊 Percentage (%)</span>
-                </label>
+            {/* Discount Type */}
+            <div className="toggle-centered">
+              <label className="field-label">Discount Type *</label>
+              <div className="toggle-row">
+                <button
+                  type="button"
+                  className={`toggle-btn ${promotionForm.discountType === 'dollar' ? 'active-dollar' : ''}`}
+                  onClick={() => setPromotionForm(prev => ({ ...prev, discountType: 'dollar' }))}
+                >
+                  Dollar ($)
+                </button>
+                <button
+                  type="button"
+                  className={`toggle-btn ${promotionForm.discountType === 'percentage' ? 'active-percent' : ''}`}
+                  onClick={() => setPromotionForm(prev => ({ ...prev, discountType: 'percentage' }))}
+                >
+                  Percentage (%)
+                </button>
               </div>
-              {/* Dynamic Preview Text */}
-              <div style={{ 
-                fontSize: '0.9rem', 
-                color: '#0c4a6e', 
-                background: '#ffffff',
-                padding: '0.75rem',
-                borderRadius: '8px',
-                border: '1px solid #0ea5e9'
-              }}>
-                {promotionForm.discountType === 'dollar' 
-                  ? `💡 Example: Create $${promotionForm.discountAmount || 5} off $${promotionForm.minimumPurchase || 10} or more deal`
-                  : `💡 Example: Create ${promotionForm.discountAmount || 40}% off $${promotionForm.minimumPurchase || 60} or more deal`
-                }
-              </div>
+              <p className="field-hint">
+                {promotionForm.discountType === 'dollar'
+                  ? `Example: Create $${promotionForm.discountAmount || 5} off $${promotionForm.minimumPurchase || 10} or more deal`
+                  : `Example: Create ${promotionForm.discountAmount || 40}% off $${promotionForm.minimumPurchase || 60} or more deal`}
+              </p>
             </div>
 
             {/* Amount & Minimum Purchase */}
@@ -3965,187 +3903,57 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               </div>
             </div>
 
-            {/* Valid for (Days) */}
-            <div style={{ marginBottom: '2rem' }}>
-              <label style={{ 
-                display: 'block', 
-                marginBottom: '0.75rem', 
-                fontWeight: 600,
-                fontSize: '1.1rem',
-                color: '#374151'
-              }}>
-                Valid for (Days)
-              </label>
-              <input
-                type="number"
-                value={promotionForm.validityDays}
-                onChange={(e) => setPromotionForm(prev => ({ ...prev, validityDays: Number(e.target.value) }))}
-                placeholder="30"
-                style={{
-                  width: '100%',
-                  padding: '1rem 1.25rem',
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '16px',
-                  background: '#ffffff',
-                  color: '#1f2937',
-                  fontSize: '1rem',
-                  fontWeight: 500,
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                  outline: 'none'
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = '#10b981';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(16,185,129,0.1), 0 4px 12px rgba(0,0,0,0.1)';
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = '#e5e7eb';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
-                }}
-              />
-            </div>
 
             {/* Expiration Settings */}
-            <div style={{ 
-              marginBottom: '2rem',
-              padding: '1.5rem',
-              background: 'linear-gradient(135deg, #fef3c7, #fde68a)',
-              borderRadius: '16px',
-              border: '2px solid #f59e0b'
-            }}>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  cursor: 'pointer', 
-                  fontWeight: 600,
-                  fontSize: '1.1rem',
-                  color: '#92400e'
-                }}>
+            <div className="panel-navy field-block">
+              <div style={{ marginBottom: '0.75rem' }}>
+                <label className="checkbox-row" style={{ cursor:'pointer' }}>
                   <input
                     type="checkbox"
                     checked={promotionForm.hasExpiration}
                     onChange={(e) => setPromotionForm(prev => ({ ...prev, hasExpiration: e.target.checked }))}
-                    style={{ marginRight: '0.75rem', transform: 'scale(1.3)' }}
+                    style={{ marginRight: '0.75rem', transform: 'scale(1.1)' }}
                   />
                   <span>⏰ Set Expiration Date</span>
                 </label>
-                <div style={{ 
-                  fontSize: '0.9rem', 
-                  color: '#92400e', 
-                  marginTop: '0.5rem',
-                  marginLeft: '2rem'
-                }}>
-                  Add countdown timer and automatic expiration to this promotion
-                </div>
+                <div className="panel-note">Add countdown timer and automatic expiration to this promotion</div>
               </div>
 
               {promotionForm.hasExpiration && (
                 <>
-                  <div style={{ marginBottom: '1rem' }}>
-                    <label style={{ 
-                      display: 'block', 
-                      marginBottom: '0.75rem', 
-                      fontWeight: 600,
-                      fontSize: '1rem',
-                      color: '#92400e'
-                    }}>
-                      Expires After (Days) *
-                    </label>
+                  <div className="field-block" style={{ marginBottom: '0.75rem' }}>
+                    <label className="field-label" style={{ fontSize: '1rem' }}>Expires After (Days) *</label>
                     <input
+                      className="input-compact"
                       type="number"
                       min="1"
                       max="365"
                       value={promotionForm.expirationDays}
                       onChange={(e) => setPromotionForm(prev => ({ ...prev, expirationDays: Number(e.target.value) }))}
                       placeholder="7"
-                      style={{
-                        width: '100%',
-                        padding: '1rem 1.25rem',
-                        border: '2px solid #f59e0b',
-                        borderRadius: '12px',
-                        background: '#ffffff',
-                        color: '#1f2937',
-                        fontSize: '1rem',
-                        fontWeight: 500,
-                        outline: 'none'
-                      }}
                     />
                   </div>
-                  
-                  {/* Preview Text */}
-                  <div style={{ 
-                    fontSize: '0.9rem', 
-                    color: '#047857', 
-                    background: '#dcfce7',
-                    padding: '0.75rem',
-                    borderRadius: '8px',
-                    border: '1px solid #10b981'
-                  }}>
-                    💡 <strong>Preview:</strong> Customers will see "{
-                      promotionForm.discountType === 'dollar' 
+                  <div className="preview-muted">
+                    Preview: {
+                      promotionForm.discountType === 'dollar'
                         ? `$${promotionForm.discountAmount || 5} off $${promotionForm.minimumPurchase || 10}+ (${promotionForm.expirationDays} days left)`
                         : `${promotionForm.discountAmount || 40}% off $${promotionForm.minimumPurchase || 60}+ (${promotionForm.expirationDays} days left)`
-                    }"
+                    }
                   </div>
                 </>
               )}
             </div>
 
             {/* Target Outlets */}
-            <div style={{ marginBottom: '2rem' }}>
-              <label style={{ 
-                display: 'block', 
-                marginBottom: '0.75rem', 
-                fontWeight: 600,
-                fontSize: '1.1rem',
-                color: '#374151'
-              }}>
-                Target Outlets
-              </label>
-              <select
-                multiple
-                value={promotionForm.targetOutlets === 'ALL' ? ['ALL'] : promotionForm.targetOutlets}
-                onChange={(e) => {
-                  const selected = Array.from(e.target.selectedOptions, option => option.value);
-                  // If "ALL" is selected, set to 'ALL' string (meaning all outlets)
-                  const targetOutlets = selected.includes('ALL') ? 'ALL' : selected;
-                  setPromotionForm(prev => ({ ...prev, targetOutlets }));
-                }}
-                style={{
-                  width: '100%',
-                  padding: '1rem 1.25rem',
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '16px',
-                  background: '#ffffff',
-                  color: '#1f2937',
-                  fontSize: '1rem',
-                  fontWeight: 500,
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                  outline: 'none',
-                  minHeight: '120px',
-                  cursor: 'pointer'
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = '#10b981';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(16,185,129,0.1), 0 4px 12px rgba(0,0,0,0.1)';
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = '#e5e7eb';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
-                }}
-              >
-                <option value="ALL">🏪 All Outlets</option>
-                {outlets.map(outlet => (
-                  <option key={outlet.id} value={outlet.id}>
-                    📍 {outlet.name || `Outlet ${outlet.id}`}
-                  </option>
-                ))}
-              </select>
-              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem', color: '#6b7280' }}>
-                Hold Ctrl/Cmd to select multiple outlets
-              </p>
+            <div className="field-block">
+              <label className="field-label">Target Outlets</label>
+              <ThemedSelect
+                ariaLabel="Target Outlets"
+                value={promotionForm.targetOutlets === 'ALL' ? 'ALL' : (Array.isArray(promotionForm.targetOutlets) && promotionForm.targetOutlets[0]) || 'ALL'}
+                onChange={(val) => setPromotionForm(prev => ({ ...prev, targetOutlets: val === 'ALL' ? 'ALL' : [val] }))}
+                options={[{ value: 'ALL', label: 'All Outlets' }, ...outlets.map((o:any) => ({ value: o.id, label: o.name || `Outlet ${o.id}` }))]}
+              />
+              <p className="field-hint">Choose a single outlet or All Outlets</p>
             </div>
 
             {/* SMS Message */}
@@ -4191,220 +3999,59 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             </div>
 
             {/* Options */}
-            <div style={{ 
-              marginBottom: '3rem',
-              padding: '1.5rem',
-              background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)',
-              borderRadius: '16px',
-              border: '2px solid #10b981'
-            }}>
-              <label style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                cursor: 'pointer',
-                marginBottom: '1rem',
-                fontSize: '1rem',
-                fontWeight: 600,
-                color: '#047857'
-              }}>
+            <div className="panel-navy" style={{ marginBottom: '3rem' }}>
+              <label className="checkbox-row" style={{ marginBottom: '0.75rem' }}>
                 <input
                   type="checkbox"
                   checked={promotionForm.sendSMS}
                   onChange={(e) => setPromotionForm(prev => ({ ...prev, sendSMS: e.target.checked }))}
-                  style={{ marginRight: '0.75rem', transform: 'scale(1.2)' }}
+                  style={{ marginRight: '0.6rem', transform: 'scale(1.05)' }}
                 />
-                📱 Send SMS to customers
+                <span>📱 Send SMS to customers</span>
               </label>
-              <label style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                cursor: 'pointer',
-                fontSize: '1rem',
-                fontWeight: 600,
-                color: '#047857'
-              }}>
-                  <input
-                    type="checkbox"
-                    checked={!!promotionForm.assignNow}
-                    onChange={(e) => setPromotionForm(prev => ({ ...prev, assignNow: e.target.checked }))}
-                  style={{ marginRight: '0.75rem', transform: 'scale(1.2)' }}
-                  />
-                🎯 Assign to eligible customers now
-                </label>
             </div>
 
-            {/* Action Buttons */}
-            <div style={{ 
-              display: 'flex', 
-              gap: '1.5rem', 
-              justifyContent: 'center',
-              paddingTop: '2rem',
-              borderTop: '2px solid #e2e8f0'
-            }}>
+            {/* Action Buttons now provided by GlassModal footer */}
+        </GlassModal>
+      )}
+
+      {/* 🚀 UNIFIED GLASS MODAL - CREATE CAMPAIGN */}
+      {showCreateCampaign && (
+        <GlassModal
+          title="Create New Campaign"
+          subtitle="Set up automated marketing campaigns for your customers"
+          accent="blue"
+          onClose={() => setShowCreateCampaign(false)}
+          footer={(
+            <div style={{ display: 'flex', gap: '1.5rem', justifyContent: 'center' }}>
               <button
-                onClick={() => setShowCreatePromotion(false)}
+                onClick={() => setShowCreateCampaign(false)}
                 disabled={loading}
                 style={{
-                  padding: '1rem 2rem',
-                  border: '2px solid #d1d5db',
-                  borderRadius: '16px',
-                  background: '#ffffff',
-                  color: '#374151',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  opacity: loading ? 0.5 : 1,
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                  minWidth: '120px'
-                }}
-                onMouseOver={(e) => {
-                  if (!loading) {
-                    e.currentTarget.style.background = '#f3f4f6';
-                    e.currentTarget.style.borderColor = '#9ca3af';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (!loading) {
-                    e.currentTarget.style.background = '#ffffff';
-                    e.currentTarget.style.borderColor = '#d1d5db';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-                  }
+                  padding: '1rem 2rem', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 14,
+                  background: 'rgba(255,255,255,0.06)', color: 'white', cursor: loading ? 'not-allowed' : 'pointer',
+                  opacity: loading ? 0.5 : 1, fontSize: '1rem', fontWeight: 600
                 }}
               >
                 Cancel
               </button>
               <button
-                onClick={createPromotion}
-                disabled={loading || !promotionForm.title || !promotionForm.discountAmount}
+                onClick={createCampaign}
+                disabled={loading || !campaignForm.name || !campaignForm.type || !campaignForm.discountAmount}
                 style={{
-                  padding: '1rem 2rem',
-                  border: 'none',
-                  borderRadius: '16px',
-                  background: (loading || !promotionForm.title || !promotionForm.discountAmount) 
-                    ? 'linear-gradient(135deg, #9ca3af, #6b7280)' 
-                    : 'linear-gradient(135deg, #10b981, #059669)',
-                  color: 'white',
-                  cursor: (loading || !promotionForm.title || !promotionForm.discountAmount) ? 'not-allowed' : 'pointer',
-                  fontWeight: 700,
-                  fontSize: '1rem',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 12px rgba(16,185,129,0.3)',
-                  minWidth: '180px'
-                }}
-                onMouseOver={(e) => {
-                  if (!loading && promotionForm.title && promotionForm.discountAmount) {
-                    e.currentTarget.style.background = 'linear-gradient(135deg, #059669, #047857)';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(16,185,129,0.4)';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (!loading && promotionForm.title && promotionForm.discountAmount) {
-                    e.currentTarget.style.background = 'linear-gradient(135deg, #10b981, #059669)';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(16,185,129,0.3)';
-                  }
+                  padding: '1rem 2rem', border: 'none', borderRadius: 14,
+                  background: (loading || !campaignForm.name || !campaignForm.type || !campaignForm.discountAmount)
+                    ? 'linear-gradient(135deg, #6b7280, #4b5563)'
+                    : 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                  color: 'white', cursor: (loading || !campaignForm.name || !campaignForm.type || !campaignForm.discountAmount) ? 'not-allowed' : 'pointer',
+                  fontWeight: 700, fontSize: '1rem', boxShadow: '0 6px 22px rgba(59,130,246,0.35)'
                 }}
               >
-                {loading ? '⏳ Creating...' : '🎉 Create Promotion'}
+                {loading ? '⏳ Creating...' : (<span style={{display:'inline-flex',alignItems:'center',gap:8}}><SFGIcon size={18}/> Create Campaign</span>)}
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* 🚀 MODERN CAMPAIGN CREATION MODAL */}
-      {showCreateCampaign && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          background: 'rgba(0, 0, 0, 0.75)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '2rem',
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: 'linear-gradient(145deg, #ffffff, #f8fafc)',
-            border: 'none',
-            boxShadow: '0 25px 50px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.8)',
-            borderRadius: '24px',
-            padding: '3rem',
-            width: 'min(700px, 95vw)',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            color: '#1e293b',
-            position: 'relative'
-          }}>
-            {/* Header */}
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'space-between', 
-              marginBottom: '2.5rem',
-              paddingBottom: '1.5rem',
-              borderBottom: '2px solid #e2e8f0'
-            }}>
-              <div>
-                <h2 style={{ 
-                  margin: 0, 
-                  color: '#0f172a', 
-                  fontSize: '2rem', 
-                  fontWeight: 800,
-                  background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text'
-                }}>
-                  Create New Campaign
-              </h2>
-                <p style={{ 
-                  margin: '0.5rem 0 0 0', 
-                  color: '#64748b', 
-                  fontSize: '1rem',
-                  fontWeight: 400
-                }}>
-                  Set up automated marketing campaigns for your customers
-                </p>
-              </div>
-              <button
-                onClick={() => setShowCreateCampaign(false)}
-                style={{
-                  background: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
-                  border: 'none',
-                  color: '#64748b',
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '16px',
-                  cursor: 'pointer',
-                  fontSize: '1.25rem',
-                  fontWeight: 'bold',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
-                  e.currentTarget.style.color = 'white';
-                  e.currentTarget.style.transform = 'scale(1.05)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #f1f5f9, #e2e8f0)';
-                  e.currentTarget.style.color = '#64748b';
-                  e.currentTarget.style.transform = 'scale(1)';
-                }}
-              >
-                ✕
-              </button>
-            </div>
+          )}
+        >
 
             {/* Campaign Name */}
             <div style={{ marginBottom: '2rem' }}>
@@ -4447,47 +4094,19 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             </div>
 
             {/* Campaign Type */}
-            <div style={{ marginBottom: '2rem' }}>
-              <label style={{ 
-                display: 'block', 
-                marginBottom: '0.75rem', 
-                fontWeight: 600,
-                fontSize: '1.1rem',
-                color: '#374151'
-              }}>
-                Campaign Type *
-              </label>
-              <select
-                value={campaignForm.type}
-                onChange={(e) => setCampaignForm(prev => ({ ...prev, type: e.target.value as any }))}
-                style={{
-                  width: '100%',
-                  padding: '1rem 1.25rem',
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '16px',
-                  background: '#ffffff',
-                  color: '#1f2937',
-                  fontSize: '1rem',
-                  fontWeight: 500,
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                  outline: 'none',
-                  cursor: 'pointer'
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = '#3b82f6';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1), 0 4px 12px rgba(0,0,0,0.1)';
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = '#e5e7eb';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
-                }}
-              >
-                <option value="" style={{ color: '#9ca3af' }}>Select Type</option>
-                <option value="inactive">🛌 Inactive Customers</option>
-                <option value="birthday">🎂 Birthday Campaign</option>
-                <option value="spending">💰 Low Spending Campaign</option>
-              </select>
+            <div className="field-block">
+              <label className="field-label">Campaign Type *</label>
+              <ThemedSelect
+                ariaLabel="Campaign Type"
+                value={campaignForm.type || ''}
+                onChange={(val) => setCampaignForm(prev => ({ ...prev, type: val as any }))}
+                options={[
+                  { value: '', label: 'Select Type' },
+                  { value: 'welcome', label: 'Welcome Campaign' },
+                  { value: 'inactive', label: 'Inactive Customers' },
+                  { value: 'birthday', label: 'Birthday Campaign' }
+                ]}
+              />
             </div>
 
             {/* Conditional trigger fields */}
@@ -4651,23 +4270,44 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
               />
             </div>
 
+            {/* Discount Type */}
+            <div className="toggle-centered">
+              <label className="field-label">Discount Type *</label>
+              <div className="toggle-row">
+                <button
+                  type="button"
+                  className={`toggle-btn ${campaignForm.discountType === 'dollar' ? 'active-dollar' : ''}`}
+                  onClick={() => setCampaignForm(prev => ({ ...prev, discountType: 'dollar' }))}
+                >
+                  Dollar ($)
+                </button>
+                <button
+                  type="button"
+                  className={`toggle-btn ${campaignForm.discountType === 'percentage' ? 'active-percent' : ''}`}
+                  onClick={() => setCampaignForm(prev => ({ ...prev, discountType: 'percentage' }))}
+                >
+                  Percentage (%)
+                </button>
+              </div>
+            </div>
+
             {/* Discount Amount & Minimum Purchase */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
               <div>
-                <label style={{ 
-                  display: 'block', 
-                  marginBottom: '0.75rem', 
+                <label style={{
+                  display: 'block',
+                  marginBottom: '0.75rem',
                   fontWeight: 600,
                   fontSize: '1.1rem',
                   color: '#374151'
                 }}>
-                  Discount Amount ($) *
+                  {campaignForm.discountType === 'dollar' ? 'Amount ($) *' : 'Percentage (%) *'}
                 </label>
                 <input
                   type="number"
                   value={campaignForm.discountAmount}
                   onChange={(e) => setCampaignForm(prev => ({ ...prev, discountAmount: Number(e.target.value) }))}
-                  placeholder="10"
+                  placeholder={campaignForm.discountType === 'dollar' ? '10' : '20'}
                   style={{
                     width: '100%',
                     padding: '1rem 1.25rem',
@@ -4774,143 +4414,19 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
             </div>
 
             {/* Target Outlets */}
-            <div style={{ marginBottom: '3rem' }}>
-              <label style={{ 
-                display: 'block', 
-                marginBottom: '0.75rem', 
-                fontWeight: 600,
-                fontSize: '1.1rem',
-                color: '#374151'
-              }}>
-                Target Outlets
-              </label>
-              <select
-                multiple
-                value={Array.isArray(campaignForm.targetOutlets) ? campaignForm.targetOutlets : ['ALL']}
-                onChange={(e) => {
-                  const selected = Array.from(e.target.selectedOptions, option => option.value);
-                  // If "ALL" is selected, set to 'ALL' string (meaning all outlets)
-                  const targetOutlets = selected.includes('ALL') ? 'ALL' : selected;
-                  setCampaignForm(prev => ({ ...prev, targetOutlets }));
-                }}
-                style={{
-                  width: '100%',
-                  padding: '1rem 1.25rem',
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '16px',
-                  background: '#ffffff',
-                  color: '#1f2937',
-                  fontSize: '1rem',
-                  fontWeight: 500,
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                  outline: 'none',
-                  minHeight: '140px',
-                  cursor: 'pointer'
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = '#3b82f6';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1), 0 4px 12px rgba(0,0,0,0.1)';
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = '#e5e7eb';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
-                }}
-              >
-                <option value="ALL">🏪 All Outlets</option>
-                {outlets.map(outlet => (
-                  <option key={outlet.id} value={outlet.id}>
-                    📍 {outlet.name || `Outlet ${outlet.id}`}
-                  </option>
-                ))}
-              </select>
-              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem', color: '#6b7280' }}>
-                Hold Ctrl/Cmd to select multiple outlets
-              </p>
+            <div className="field-block field-block-lg">
+              <label className="field-label">Target Outlets</label>
+              <ThemedSelect
+                ariaLabel="Target Outlets"
+                value={campaignForm.targetOutlets === 'ALL' ? 'ALL' : (Array.isArray(campaignForm.targetOutlets) && campaignForm.targetOutlets[0]) || 'ALL'}
+                onChange={(val) => setCampaignForm(prev => ({ ...prev, targetOutlets: val === 'ALL' ? 'ALL' : [val] }))}
+                options={[{ value: 'ALL', label: 'All Outlets' }, ...outlets.map((o:any) => ({ value: o.id, label: o.name || `Outlet ${o.id}` }))]}
+              />
+              <p className="field-hint">Choose a single outlet or All Outlets</p>
             </div>
 
-            {/* Action Buttons */}
-            <div style={{ 
-              display: 'flex', 
-              gap: '1.5rem', 
-              justifyContent: 'center',
-              paddingTop: '2rem',
-              borderTop: '2px solid #e5e7eb'
-            }}>
-              <button
-                onClick={() => setShowCreateCampaign(false)}
-                disabled={loading}
-                style={{
-                  padding: '1rem 2rem',
-                  border: '2px solid #d1d5db',
-                  borderRadius: '16px',
-                  background: '#ffffff',
-                  color: '#374151',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  opacity: loading ? 0.5 : 1,
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                  minWidth: '120px'
-                }}
-                onMouseOver={(e) => {
-                  if (!loading) {
-                    e.currentTarget.style.background = '#f3f4f6';
-                    e.currentTarget.style.borderColor = '#9ca3af';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (!loading) {
-                    e.currentTarget.style.background = '#ffffff';
-                    e.currentTarget.style.borderColor = '#d1d5db';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-                  }
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={createCampaign}
-                disabled={loading || !campaignForm.name || !campaignForm.type || !campaignForm.discountAmount}
-                style={{
-                  padding: '1rem 2rem',
-                  border: 'none',
-                  borderRadius: '16px',
-                  background: (loading || !campaignForm.name || !campaignForm.type || !campaignForm.discountAmount) 
-                    ? 'linear-gradient(135deg, #9ca3af, #6b7280)' 
-                    : 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
-                  color: 'white',
-                  cursor: (loading || !campaignForm.name || !campaignForm.type || !campaignForm.discountAmount) ? 'not-allowed' : 'pointer',
-                  fontWeight: 700,
-                  fontSize: '1rem',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 12px rgba(59,130,246,0.3)',
-                  minWidth: '180px'
-                }}
-                onMouseOver={(e) => {
-                  if (!loading && campaignForm.name && campaignForm.type && campaignForm.discountAmount) {
-                    e.currentTarget.style.background = 'linear-gradient(135deg, #2563eb, #1e40af)';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(59,130,246,0.4)';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (!loading && campaignForm.name && campaignForm.type && campaignForm.discountAmount) {
-                    e.currentTarget.style.background = 'linear-gradient(135deg, #3b82f6, #1d4ed8)';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(59,130,246,0.3)';
-                  }
-                }}
-              >
-                {loading ? '⏳ Creating...' : '🚀 Create Campaign'}
-              </button>
-            </div>
-          </div>
-        </div>
+            {/* Action Buttons now provided by GlassModal footer */}
+        </GlassModal>
       )}
 
       {/* 🗑️ DELETE CONFIRMATION POPUP */}
@@ -5543,7 +5059,7 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
                 <h4 style={{ color: '#3b82f6', margin: '0 0 0.5rem 0' }}>📊 Campaign Details</h4>
                 <div style={{ color: '#d1d5db', fontSize: '0.9rem' }}>
                   <div><strong>Name:</strong> {campaignToDelete.name}</div>
-                  <div><strong>Type:</strong> {campaignToDelete.triggerType === 'birthday' ? 'Birthday' : 'Inactive Customer'}</div>
+                  <div><strong>Type:</strong> {campaignToDelete.triggerType === 'birthday' ? 'Birthday' : campaignToDelete.triggerType === 'welcome' ? 'Welcome' : 'Inactive Customer'}</div>
                   <div><strong>Discount:</strong> ${campaignToDelete.discountAmount} {campaignToDelete.discountType === 'percentage' ? '%' : ''}</div>
                   <div><strong>Status:</strong> {campaignToDelete.isActive ? '🟢 Active' : '🔴 Inactive'}</div>
                 </div>
@@ -5715,4 +5231,4 @@ The promotion "${promotion.title}" was created but needs customers to assign to.
   );
 };
 
-export default CampaignManager; 
+export default CampaignManager;
